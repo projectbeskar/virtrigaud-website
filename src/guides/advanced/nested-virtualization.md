@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Nested Virtualization Support
 
 This document describes how to enable and configure nested virtualization in VirtRigaud virtual machines across different hypervisor providers.

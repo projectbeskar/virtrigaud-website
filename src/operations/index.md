@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Operations Guide
 
 This section covers operational aspects of running VirtRigaud in production environments.

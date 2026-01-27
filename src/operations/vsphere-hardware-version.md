@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # vSphere Hardware Version Management
 
 This document describes how to configure and upgrade VM hardware compatibility versions in VMware vSphere environments using virtrigaud.

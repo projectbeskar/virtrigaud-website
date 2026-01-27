@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 # VM Migration with S3 Storage
 # Uses AWS S3 for intermediate disk storage during migration
 

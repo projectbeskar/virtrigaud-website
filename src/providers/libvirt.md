@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # LibVirt/KVM Provider
 
 The LibVirt provider enables VirtRigaud to manage virtual machines on KVM/QEMU hypervisors using the LibVirt API. This provider runs as a dedicated pod that communicates with LibVirt daemons locally or remotely, making it ideal for development, on-premises deployments, and cloud environments.

@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # VM Migration Guide
 
 This guide explains how to migrate VMs between providers using VirtRigaud's VM migration feature.

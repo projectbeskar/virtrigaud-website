@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # CLI Reference
 
 VirtRigaud provides several command-line tools for managing virtual machines, testing providers, and developing new providers. All tools are available as part of VirtRigaud v0.2.0.

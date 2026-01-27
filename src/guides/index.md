@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # VirtRigaud Provider Guides
 
 This section provides step-by-step guides for working with VirtRigaud providers.

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 .PHONY: help install install-crd-tools clone-virtrigaud generate-crds build serve clean lint
 
 # Variables

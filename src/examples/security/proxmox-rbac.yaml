@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 # Minimal RBAC for Proxmox VE Provider
 # These are the minimum Kubernetes permissions required
 apiVersion: v1

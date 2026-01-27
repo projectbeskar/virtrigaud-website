@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # VirtRigaud Resilience Guide
 
 This document describes the resilience patterns and error handling mechanisms in VirtRigaud.

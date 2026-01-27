@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Contributing to VirtRigaud
 
 Thank you for your interest in contributing to VirtRigaud! This document provides guidelines and information for contributors.

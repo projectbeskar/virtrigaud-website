@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Advanced VM Lifecycle Management
 
 This document describes the advanced VM lifecycle features in VirtRigaud, including reconfiguration, snapshots, cloning, multi-VM sets, and placement policies.

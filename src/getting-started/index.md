@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # 15-Minute Quickstart
 
 This guide will get you up and running with VirtRigaud in 15 minutes using both vSphere and Libvirt providers.

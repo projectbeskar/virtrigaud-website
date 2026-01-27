@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Bearer Token Authentication
 
 This guide covers how to configure bearer token authentication for VirtRigaud providers using JWT tokens and RBAC.

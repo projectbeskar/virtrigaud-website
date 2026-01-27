@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Advanced VirtRigaud Examples
 
 This directory contains advanced examples demonstrating complex scenarios and v0.2.3+ features.

@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Development Guide
 
 Welcome to the VirtRigaud development guide! This section provides information for developers who want to contribute to VirtRigaud or build custom providers.

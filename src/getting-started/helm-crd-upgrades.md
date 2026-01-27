@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Automatic CRD Upgrades in VirtRigaud Helm Chart
 
 ## Overview

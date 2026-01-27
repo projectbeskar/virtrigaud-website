@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Creating Your First Virtual Machine
 
 This guide walks you through creating a complete, working virtual machine from start to finish using VirtRigaud.

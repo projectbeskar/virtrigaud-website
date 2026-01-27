@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 # vSphere Async Task Tracking Example
 # Demonstrates TaskStatus RPC for monitoring long-running operations in v0.2.3+
 #

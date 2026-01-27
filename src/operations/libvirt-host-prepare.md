@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Libvirt Host Preparation Guide
 
 This guide provides detailed instructions on preparing a Libvirt/KVM host to work with VirtRigaud.

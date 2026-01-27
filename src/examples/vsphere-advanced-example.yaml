@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 # Advanced vSphere Provider Example (v0.2.1+)
 # This demonstrates running the vSphere provider with all v0.2.1 features:
 # - OffGraceful shutdown support

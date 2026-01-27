@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # VirtRigaud Upgrade Guide
 
 This guide covers upgrading VirtRigaud installations, including CRD updates and breaking changes.

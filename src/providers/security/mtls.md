@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # mTLS Security Configuration
 
 This guide covers how to configure mutual TLS (mTLS) authentication between VirtRigaud managers and providers.

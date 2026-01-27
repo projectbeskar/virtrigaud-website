@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 # Snapshot Lifecycle Management Example
 # This demonstrates the complete snapshot lifecycle:
 # 1. Create snapshots for backup/rollback
