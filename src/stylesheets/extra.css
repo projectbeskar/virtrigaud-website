@@ -1,0 +1,35 @@
+/* VirtRigaud Documentation - Custom Styles */
+
+/* ============================================
+   Mermaid Diagram Zoom and Pan
+   ============================================ */
+
+/* Enable zoom/pan for Mermaid diagrams */
+pre.mermaid {
+    overflow: visible !important;
+    position: relative;
+}
+
+pre.mermaid svg {
+    max-width: none !important;
+    overflow: visible !important;
+}
+
+/* ============================================
+   Additional customizations
+   ============================================ */
+
+/* Improve code block readability */
+.highlight {
+    border-radius: 0.2rem;
+}
+
+/* Enhance table styling */
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+table th {
+    font-weight: 600;
+}

@@ -1,0 +1,178 @@
+site_name: VirtRigaud Documentation
+site_description: Kubernetes operator for managing virtual machines across multiple hypervisors
+site_author: William Rizzo, Erick Bourgeois, VirtRigaud Contributors
+site_url: https://projectbeskar.github.io/virtrigaud/
+
+repo_name: projectbeskar/virtrigaud
+repo_url: https://github.com/projectbeskar/virtrigaud
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+extra:
+  # version:
+  #   provider: mike
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/projectbeskar/virtrigaud
+    - icon: fontawesome/brands/slack
+      link: https://kubernetes.slack.com/messages/virtrigaud
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_div_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+plugins:
+  - search:
+      lang: en
+  - minify:
+      minify_html: true
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: timeago
+      fallback_to_build_date: true
+      enable_git_follow: false
+      strict: false
+
+# Site directory structure
+docs_dir: src
+site_dir: site
+
+# Validation settings
+validation:
+  nav:
+    omitted_files: info
+    not_found: warn
+    absolute_links: info
+  links:
+    not_found: warn
+    absolute_links: info
+    unrecognized_links: info
+
+# Navigation structure
+nav:
+  - Home: index.md
+  - Getting Started:
+      - 15-Minute Quickstart: getting-started/index.md
+      - Installation Guide: getting-started/install-helm-only.md
+      - Basic VM Example: getting-started/basic-vm-example.md
+      - Helm CRD Upgrades: getting-started/helm-crd-upgrades.md
+      - Examples:
+          - Basic Examples: examples/index.md
+          - Advanced Examples: examples/advanced/index.md
+  - Guides:
+      - Overview: guides/index.md
+      - Provider Guides:
+          - vSphere Provider: providers/vsphere.md
+          - Libvirt Provider: providers/libvirt.md
+          - Proxmox VE Provider: providers/proxmox.md
+          - Provider Capabilities Matrix: providers/providers-capabilities.md
+          - Provider Tutorial: providers/tutorial.md
+          - Provider Versioning: providers/versioning.md
+      - Advanced Topics:
+          - VM Lifecycle Management: guides/advanced/advanced-lifecycle.md
+          - Nested Virtualization: guides/advanced/nested-virtualization.md
+          - Graceful Shutdown: guides/advanced/graceful-shutdown.md
+          - Remote Providers: guides/advanced/remote-providers.md
+  - VM Migration:
+      - User Guide: migration/user-guide.md
+      - Migration Guide: migration/vm-migration-guide.md
+      - API Reference: migration/api-reference.md
+  - Operations:
+      - Overview: operations/index.md
+      - Observability: operations/observability.md
+      - Resilience: operations/resilience.md
+      - Upgrade Guide: operations/upgrade.md
+      - vSphere Hardware Versions: operations/vsphere-hardware-version.md
+      - Libvirt Host Preparation: operations/libvirt-host-prepare.md
+      - Security:
+          - Overview: operations/security.md
+          - Bearer Token Authentication: providers/security/bearer-token.md
+          - mTLS Configuration: providers/security/mtls.md
+          - External Secrets: providers/security/external-secrets.md
+          - Network Policies: providers/security/network-policies.md
+  - References:
+      - Custom Resource Definitions: references/crds.md
+      - CLI Tools Reference: references/cli-tools.md
+      - CLI API Reference: api-reference/cli.md
+      - Metrics Catalog: api-reference/metrics.md
+      - Provider Catalog: references/catalog.md
+      - Full CRD Reference: references/generated-crd-docs.md
+  - Development:
+      - Overview: development/index.md
+      - Building Locally: development/building-locally.md
+      - Contributing Guide: development/contributing.md
+      - Testing Locally: development/testing-locally.md
+
+# Extra configuration
+extra_css:
+  - stylesheets/extra.css
+
+# Copyright
+copyright: Copyright &copy; 2024-2026 VirtRigaud Contributors
