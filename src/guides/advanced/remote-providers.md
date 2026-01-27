@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Provider Architecture
 
 This document describes the provider architecture in VirtRigaud.

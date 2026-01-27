@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 # vSphere VM Cloning Example
 # Demonstrates full and linked clone capabilities in v0.2.3+
 #

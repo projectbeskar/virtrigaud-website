@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Provider Capabilities Matrix
 
 This document provides a comprehensive overview of VirtRigaud provider capabilities as of v0.2.3.

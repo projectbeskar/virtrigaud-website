@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Building VirtRigaud Locally
 
 This guide covers building VirtRigaud from source and building the documentation.

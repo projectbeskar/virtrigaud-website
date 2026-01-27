@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 # VM Migration with NFS Storage
 # Uses NFS shared storage for on-premises migrations
 

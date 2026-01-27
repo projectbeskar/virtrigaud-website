@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Provider Developer Tutorial
 
 This comprehensive tutorial walks you through creating a complete VirtRigaud provider from scratch. By the end, you'll have a fully functional provider that can create, manage, and delete virtual machines.

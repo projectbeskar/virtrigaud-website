@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Testing GitHub Actions Workflows Locally
 
 This guide explains how to test VirtRigaud's GitHub Actions workflows locally before pushing to save on GitHub Actions costs and catch issues early.

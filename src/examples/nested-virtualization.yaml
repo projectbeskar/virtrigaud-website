@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 # Nested Virtualization Example
 # This example demonstrates how to create VMs with nested virtualization support
 # across different providers using VirtRigaud.

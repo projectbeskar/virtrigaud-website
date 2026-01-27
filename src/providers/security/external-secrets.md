@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # External Secrets Management
 
 This guide covers integrating VirtRigaud providers with external secret management systems using ExternalSecrets operators and best practices for credential security.

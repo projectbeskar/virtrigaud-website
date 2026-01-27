@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Versioning & Breaking Changes
 
 This document outlines VirtRigaud's approach to versioning, compatibility, and managing breaking changes across the provider ecosystem.

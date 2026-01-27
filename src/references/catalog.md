@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Provider Catalog
 
 *Last updated: 2025-08-26T14:30:00Z*

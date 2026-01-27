@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 ## Development Note
 
 This project requires Go 1.23+ but your system has Go 1.22.2.

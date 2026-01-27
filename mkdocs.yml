@@ -1,7 +1,11 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 site_name: VirtRigaud Documentation
 site_description: Kubernetes operator for managing virtual machines across multiple hypervisors
 site_author: William Rizzo, Erick Bourgeois, VirtRigaud Contributors
 site_url: https://projectbeskar.github.io/virtrigaud/
+copyright: Copyright &copy; 2026 VirtRigaud Creators
 
 repo_name: projectbeskar/virtrigaud
 repo_url: https://github.com/projectbeskar/virtrigaud

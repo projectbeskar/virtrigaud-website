@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # VirtRigaud Observability Guide
 
 This document describes the comprehensive observability features of VirtRigaud, including structured logging, metrics, tracing, and monitoring.

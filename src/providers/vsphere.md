@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # vSphere Provider
 
 The vSphere provider enables VirtRigaud to manage virtual machines on VMware vSphere environments, including vCenter Server and standalone ESXi hosts. This provider is designed for enterprise production environments with comprehensive support for vSphere features.

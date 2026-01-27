@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # CLI Tools Reference
 
 VirtRigaud provides a comprehensive set of command-line tools for managing virtual machines, developing providers, running conformance tests, and performing load testing. This guide covers all available CLI tools and their usage.

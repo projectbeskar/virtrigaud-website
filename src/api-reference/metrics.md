@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Metrics Catalog
 
 VirtRigaud exposes comprehensive metrics for monitoring and observability. All metrics are available at the `/metrics` endpoint on port 8080.

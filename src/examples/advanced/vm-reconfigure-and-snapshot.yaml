@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 # Advanced VM Lifecycle Example: Reconfiguration and Snapshots
 # This example demonstrates:
 # 1. Creating a VM with initial configuration

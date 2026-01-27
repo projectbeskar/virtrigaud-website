@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Network Policies for Provider Security
 
 This guide covers Kubernetes NetworkPolicy configurations to secure communication between VirtRigaud components and provider services.

@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Helm-only Installation & Verify Conversion
 
 This guide covers installing virtrigaud using only Helm (without pre-applying CRDs via Kustomize) and verifying that API conversion is working correctly.

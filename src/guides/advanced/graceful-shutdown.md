@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2026 VirtRigaud Creators
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Graceful Shutdown Feature
 
 The virtrigaud VM management platform now supports graceful shutdown of virtual machines to prevent data corruption and ensure proper cleanup of running processes.

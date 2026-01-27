@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 # VM Reconfiguration Example
 # This patch demonstrates how to modify a VM's resources after creation
 # Apply this after the initial VM is running to trigger reconfiguration

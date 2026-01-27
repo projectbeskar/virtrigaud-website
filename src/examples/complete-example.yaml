@@ -1,3 +1,6 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
 # Complete example showing how to create a VM with vSphere provider (v0.2.1+)
 # Demonstrates all major v0.2.1 features:
 # - OffGraceful shutdown support

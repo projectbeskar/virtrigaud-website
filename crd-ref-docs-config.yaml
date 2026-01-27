@@ -1,3 +1,5 @@
+# Copyright VirtRigaud Creators
+
 processor:
   # Ignore fields inherited from TypeMeta and ObjectMeta
   ignoreFields:
