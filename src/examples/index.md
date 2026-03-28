@@ -46,8 +46,9 @@ This directory contains comprehensive examples for VirtRigaud v0.2.3+, showcasin
 # Online resource changes (vSphere, Proxmox)
 # Offline changes (Libvirt - requires restart)
 spec:
-  vmClassRef: medium  # Change from small to medium
-  powerState: "On"
+  classRef:
+    name: medium    # Change from small to medium
+  powerState: On
 ```
 
 ### 📋 Async Task Tracking (vSphere, Proxmox)
@@ -69,7 +70,7 @@ status:
 ```yaml
 # Accurate IP detection via QEMU guest agent
 status:
-  ipAddresses:
+  ips:
     - 192.168.1.100
     - fd00::1234:5678:9abc:def0
 ```
@@ -77,9 +78,17 @@ status:
 ### 📦 VM Cloning (vSphere)
 ```yaml
 # Full and linked clones with automatic snapshot handling
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClone
+metadata:
+  name: web-server-clone
 spec:
-  vmImageRef: source-vm
-  cloneType: linked  # or "full"
+  source:
+    vmRef:
+      name: source-vm
+  options:
+    type: LinkedClone   # or FullClone
+    powerOn: true
 ```
 
 ### 🔄 Previous Features (v0.2.1)
@@ -97,8 +106,8 @@ spec:
    ```bash
    # Change VM class to trigger reconfiguration
    kubectl patch virtualmachine my-vm --type='merge' \
-     -p='{"spec":{"vmClassRef":"medium"}}'
-   
+     -p='{"spec":{"classRef":{"name":"medium"}}}'
+
    # Watch the reconfiguration process
    kubectl get vm my-vm -w
    ```
@@ -107,7 +116,7 @@ spec:
    ```bash
    # Get console URL from VM status
    kubectl get vm my-vm -o jsonpath='{.status.consoleURL}'
-   
+
    # For VNC (Libvirt): Use any VNC client
    vncviewer $(kubectl get vm my-vm -o jsonpath='{.status.consoleURL}' | sed 's/vnc:\/\///')
    ```
@@ -118,10 +127,10 @@ spec:
    kubectl logs -f deployment/virtrigaud-provider-vsphere
    ```
 
-4. **Verify guest agent** (Proxmox):
+4. **Verify guest agent IPs** (Proxmox):
    ```bash
    # Check IP addresses from guest agent
-   kubectl get vm my-vm -o jsonpath='{.status.ipAddresses}'
+   kubectl get vm my-vm -o jsonpath='{.status.ips}'
    ```
 
 5. **Test VM cloning** (vSphere):
@@ -129,13 +138,20 @@ spec:
    # Create a clone of existing VM
    kubectl apply -f - <<EOF
    apiVersion: infra.virtrigaud.io/v1beta1
-   kind: VirtualMachine
+   kind: VMClone
    metadata:
      name: web-server-clone
    spec:
-     vmClassRef: small
-     vmImageRef: web-server-01
-     cloneType: linked
+     source:
+       vmRef:
+         name: web-server-01
+     target:
+       name: web-server-clone
+       classRef:
+         name: small
+     options:
+       type: LinkedClone
+       powerOn: true
    EOF
    ```
 

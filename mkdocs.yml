@@ -17,16 +17,16 @@ theme:
     # Light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     # Dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
@@ -168,6 +168,7 @@ nav:
       - Metrics Catalog: api-reference/metrics.md
       - Provider Catalog: references/catalog.md
       - Full CRD Reference: references/generated-crd-docs.md
+      - Provider gRPC API: references/grpc-api.md
   - Development:
       - Overview: development/index.md
       - Building Locally: development/building-locally.md

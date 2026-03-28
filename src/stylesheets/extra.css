@@ -16,6 +16,32 @@ pre.mermaid svg {
 }
 
 /* ============================================
+   Mountain Theme — Rigaud, Quebec
+   Primary: maple/oak leaf forest green
+   Accent:  mountain granite grey
+   ============================================ */
+
+:root {
+  --md-primary-fg-color:              #4a7c59;  /* forest green */
+  --md-primary-fg-color--light:       #6a9c79;
+  --md-primary-fg-color--dark:        #2d5c3a;
+  --md-primary-bg-color:              #ffffff;
+  --md-primary-bg-color--light:       #ffffffb3;
+  --md-accent-fg-color:               #78909c;  /* granite grey-blue */
+  --md-accent-fg-color--transparent:  #78909c1a;
+  --md-accent-bg-color:               #ffffff;
+  --md-accent-bg-color--light:        #ffffffb3;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color:              #4a7c59;
+  --md-primary-fg-color--light:       #6a9c79;
+  --md-primary-fg-color--dark:        #2d5c3a;
+  --md-accent-fg-color:               #90a4ae;  /* lighter granite for dark bg */
+  --md-accent-fg-color--transparent:  #90a4ae1a;
+}
+
+/* ============================================
    Additional customizations
    ============================================ */
 

@@ -1,7 +1,7 @@
 # Copyright (c) 2026 VirtRigaud Creators
 # SPDX-License-Identifier: Apache-2.0
 
-name: Deploy Documentation
+name: Build and Deploy Documentation
 
 on:
   push:
@@ -11,6 +11,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'VirtRigaud release tag to document (e.g. v1.2.3). Defaults to latest main.'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -27,25 +32,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout documentation repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Checkout VirtRigaud repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: projectbeskar/virtrigaud
           path: virtrigaud
+          # Pin to the release tag when triggered by the release workflow;
+          # otherwise use the default branch (HEAD).
+          ref: ${{ inputs.version || '' }}
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.23'
+          go-version: '1.25'
 
-      - name: Install crd-ref-docs
+      - name: Install Go documentation tools
         run: |
           go install github.com/elastic/crd-ref-docs@latest
+          go install github.com/bufbuild/buf/cmd/buf@latest
+          go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
       - name: Generate CRD documentation
@@ -53,45 +63,52 @@ jobs:
           cd virtrigaud
           crd-ref-docs \
             --source-path=api \
-            --config=../crd-ref-docs-config.yaml \
+            --config=../tools/crd-ref-docs-config.yaml \
             --renderer=markdown \
             --output-path=../src/generated-crd-docs.md
           cd ..
           echo "CRD documentation generated at src/generated-crd-docs.md"
 
+      - name: Generate proto/gRPC API documentation
+        run: |
+          cd virtrigaud
+          buf generate proto --template ../tools/buf.gen.docs.yaml
+          cd ..
+          echo "Proto documentation generated at src/references/grpc-api.md"
+
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.7.1
+          version: 1.8.5
           virtualenvs-create: true
           virtualenvs-in-project: true
 
       - name: Load cached venv
         id: cached-poetry-dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root
+        run: poetry install --no-interaction
 
       - name: Build documentation
-        run: make build
+        run: poetry run mkdocs build
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ./site
 
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -100,4 +117,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
