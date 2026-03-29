@@ -115,7 +115,8 @@ This ensures the documentation always reflects the current CRD structure.
 ## Structure
 
 - `mkdocs.yml` - MkDocs configuration
-- `crd-ref-docs-config.yaml` - CRD documentation generation config
+- `tools/crd-ref-docs-config.yaml` - CRD documentation generation config
+- `tools/buf.gen.docs.yaml` - buf template for gRPC API doc generation
 - `pyproject.toml` - Python dependencies (Poetry)
 - `Makefile` - Build automation
 - `src/` - All documentation markdown files

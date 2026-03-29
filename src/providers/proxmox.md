@@ -68,9 +68,9 @@ API tokens provide secure, scope-limited access without exposing user passwords.
        name: pve-credentials
      runtime:
        mode: Remote
-       image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.2.3"
+       image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.3"
        service:
-         port: 9090
+         port: 9443
    ```
 
 3. **Create Credentials Secret**:
@@ -108,17 +108,20 @@ stringData:
 
 The Proxmox provider **requires** environment variables to connect to your Proxmox VE server. Configure these variables in your Helm values file:
 
-| Variable | Required | Description | Example |
-|----------|----------|-------------|---------|
-| `PVE_ENDPOINT` | ✅ **Yes** | Proxmox VE API endpoint URL | `https://pve.example.com:8006` |
-| `PVE_USERNAME` | ✅ **Yes**\* | Username for password auth | `root@pam` or `user@realm` |
-| `PVE_PASSWORD` | ✅ **Yes**\* | Password for username | `secure-password` |
-| `PVE_TOKEN_ID` | ✅ **Yes**\*\* | API token ID (alternative) | `user@realm!tokenid` |
-| `PVE_TOKEN_SECRET` | ✅ **Yes**\*\* | API token secret (alternative) | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
-| `PVE_INSECURE_SKIP_VERIFY` | 🔵 Optional | Skip TLS verification | `true` (dev only) |
+| Variable | Fallback | Required | Description | Example |
+|----------|----------|----------|-------------|---------|
+| `PROVIDER_ENDPOINT` | `PVE_ENDPOINT` | ✅ **Yes** | Proxmox VE API endpoint URL | `https://pve.example.com:8006` |
+| `PROVIDER_USERNAME` | `PVE_USERNAME` | ✅ **Yes**\* | Username for password auth | `root@pam` or `user@realm` |
+| `PROVIDER_PASSWORD` | `PVE_PASSWORD` | ✅ **Yes**\* | Password for username | `secure-password` |
+| `PROVIDER_TOKEN_ID` | `PVE_TOKEN_ID` | ✅ **Yes**\*\* | API token ID (alternative) | `user@realm!tokenid` |
+| `PROVIDER_TOKEN_SECRET` | `PVE_TOKEN_SECRET` | ✅ **Yes**\*\* | API token secret (alternative) | `xxxxxxxx-xxxx-xxxx-xxxxxxxxxxxx` |
+| `PROVIDER_NODE_SELECTOR` | `PVE_NODE_SELECTOR` | 🔵 Optional | Preferred nodes (comma-separated) | `pve-node-1,pve-node-2` |
+| `PROVIDER_CA_BUNDLE` | `PVE_CA_BUNDLE` | 🔵 Optional | Custom CA certificate (PEM) | `-----BEGIN CERTIFICATE-----...` |
+| `TLS_INSECURE_SKIP_VERIFY` | `PVE_INSECURE_SKIP_VERIFY` | 🔵 Optional | Skip TLS verification | `true` (dev only) |
 
-> **\*** Either username/password OR token authentication is required  
+> **\*** Either username/password OR token authentication is required
 > **\*\*** API token authentication is recommended for production
+> The `PROVIDER_*` names take precedence; `PVE_*` names are accepted for backwards compatibility.
 
 ### Helm Configuration Examples
 
@@ -281,23 +284,23 @@ The Proxmox provider supports online (hot-plug) reconfiguration for:
 ### Example Reconfiguration
 
 ```yaml
-# Scale up VM resources
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
-metadata:
-  name: web-server
-spec:
-  # ... existing spec ...
-  classRef:
-    name: large  # Changed from 'small'
----
+# Scale up VM resources by pointing to a larger class
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMClass
 metadata:
   name: large
 spec:
-  cpus: 8        # Increased from 2
-  memory: "16Gi" # Increased from 4Gi
+  cpu: 8
+  memory: "16Gi"
+
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VirtualMachine
+metadata:
+  name: web-server
+spec:
+  classRef:
+    name: large    # Changed from 'small' — triggers reconfiguration
 ```
 
 ## Snapshot Management
@@ -346,6 +349,51 @@ The provider supports multiple network interfaces with:
 ### Example Multi-NIC VM
 
 ```yaml
+# Define network attachments
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: lan-net
+spec:
+  network:
+    proxmox:
+      bridge: vmbr0
+      model: virtio
+  ipAllocation:
+    type: Static
+    address: "192.168.1.100/24"
+    gateway: "192.168.1.1"
+    dns: ["8.8.8.8", "1.1.1.1"]
+
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: dmz-net
+spec:
+  network:
+    proxmox:
+      bridge: vmbr1
+      vlanTag: 100
+      model: virtio
+  ipAllocation:
+    type: Static
+    address: "10.0.100.50/24"
+
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: mgmt-net
+spec:
+  network:
+    proxmox:
+      bridge: vmbr2
+      model: virtio
+  ipAllocation:
+    type: DHCP
+
+---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
 metadata:
@@ -358,25 +406,16 @@ spec:
   imageRef:
     name: ubuntu-22
   networks:
-    # Primary LAN interface
     - name: lan
-      bridge: vmbr0
-      staticIP:
-        address: "192.168.1.100/24"
-        gateway: "192.168.1.1"
-        dns: ["8.8.8.8", "1.1.1.1"]
-    
-    # DMZ interface with VLAN
+      networkRef:
+        name: lan-net
     - name: dmz
-      bridge: vmbr1
-      vlan: 100
-      staticIP:
-        address: "10.0.100.50/24"
-    
-    # Management interface
+      networkRef:
+        name: dmz-net
     - name: mgmt
-      bridge: vmbr2
-      mac: "02:00:00:aa:bb:cc"
+      networkRef:
+        name: mgmt-net
+      macAddress: "02:00:00:aa:bb:cc"    # optional static MAC
 ```
 
 ### Network Bridge Mapping
@@ -394,18 +433,20 @@ spec:
 
 **⚠️ The provider requires environment variables to connect to Proxmox VE:**
 
-| Variable | Description | Required | Default | Example |
-|----------|-------------|----------|---------|---------|
-| `PVE_ENDPOINT` | Proxmox API endpoint URL | **Yes** | - | `https://pve.example.com:8006/api2` |
-| `PVE_TOKEN_ID` | API token identifier | Yes* | - | `virtrigaud@pve!vrtg-token` |
-| `PVE_TOKEN_SECRET` | API token secret | Yes* | - | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
-| `PVE_USERNAME` | Username for session auth | Yes* | - | `virtrigaud@pve` |
-| `PVE_PASSWORD` | Password for session auth | Yes* | - | `secure-password` |
-| `PVE_NODE_SELECTOR` | Preferred nodes (comma-separated) | No | Auto-detect | `pve-node-1,pve-node-2` |
-| `PVE_INSECURE_SKIP_VERIFY` | Skip TLS verification | No | `false` | `true` |
-| `PVE_CA_BUNDLE` | Custom CA certificate | No | - | `-----BEGIN CERTIFICATE-----...` |
+| Variable | Fallback | Required | Default | Example |
+|----------|----------|----------|---------|---------|
+| `PROVIDER_ENDPOINT` | `PVE_ENDPOINT` | **Yes** | — | `https://pve.example.com:8006` |
+| `PROVIDER_TOKEN_ID` | `PVE_TOKEN_ID` | Yes\* | — | `virtrigaud@pve!vrtg-token` |
+| `PROVIDER_TOKEN_SECRET` | `PVE_TOKEN_SECRET` | Yes\* | — | `xxxxxxxx-xxxx-xxxx-xxxxxxxxxxxx` |
+| `PROVIDER_USERNAME` | `PVE_USERNAME` | Yes\* | — | `virtrigaud@pve` |
+| `PROVIDER_PASSWORD` | `PVE_PASSWORD` | Yes\* | — | `secure-password` |
+| `PROVIDER_NODE_SELECTOR` | `PVE_NODE_SELECTOR` | No | Auto-detect | `pve-node-1,pve-node-2` |
+| `PROVIDER_CA_BUNDLE` | `PVE_CA_BUNDLE` | No | — | `-----BEGIN CERTIFICATE-----...` |
+| `TLS_INSECURE_SKIP_VERIFY` | `PVE_INSECURE_SKIP_VERIFY` | No | `false` | `true` |
+| `LOG_LEVEL` | — | No | `info` | `debug`, `info`, `warn`, `error` |
+| `LOG_FORMAT` | — | No | `text` | `text`, `json` |
 
-\* Either token (`PVE_TOKEN_ID` + `PVE_TOKEN_SECRET`) or username/password (`PVE_USERNAME` + `PVE_PASSWORD`) is required
+\* Either token (`PROVIDER_TOKEN_ID` + `PROVIDER_TOKEN_SECRET`) or username/password (`PROVIDER_USERNAME` + `PROVIDER_PASSWORD`) is required
 
 ### Deployment Configuration
 
@@ -458,7 +499,7 @@ spec:
     spec:
       containers:
       - name: provider-proxmox
-        image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.2.3
+        image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.3
         envFrom:
         - secretRef:
             name: proxmox-credentials
@@ -506,12 +547,15 @@ kind: VMClass
 metadata:
   name: small
 spec:
-  cpus: 2
+  cpu: 2
   memory: "4Gi"
-  # Proxmox-specific settings
-  spec:
-    machine: "q35"
-    bios: "uefi"
+  firmware: UEFI
+  diskDefaults:
+    type: thin
+    size: "20Gi"
+  # Proxmox-specific settings via extraConfig
+  extraConfig:
+    "machine": "q35"
 ```
 
 ### VMImage Specification
@@ -524,14 +568,32 @@ kind: VMImage
 metadata:
   name: ubuntu-22
 spec:
-  source: "ubuntu-22-template"  # Template name in Proxmox
-  # Or clone from existing VM:
-  # source: "9000"  # VMID to clone from
+  source:
+    proxmox:
+      templateName: "ubuntu-22-template"
+      storage: "local-lvm"
+      # Or clone from a VMID:
+      # templateID: 9000
+      fullClone: true
 ```
 
 ### VirtualMachine Example
 
 ```yaml
+# Define the network attachment first
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: lan-network
+spec:
+  network:
+    proxmox:
+      bridge: vmbr0
+      model: virtio
+  ipAllocation:
+    type: DHCP
+
+---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
 metadata:
@@ -546,10 +608,12 @@ spec:
   powerState: On
   networks:
     - name: lan
-      # Maps to Proxmox bridge or VLAN configuration
+      networkRef:
+        name: lan-network
   disks:
-    - name: root
-      size: "40Gi"
+    - name: data
+      sizeGiB: 40
+      type: thin
   userData:
     cloudInit:
       inline: |
@@ -913,23 +977,26 @@ kind: VMClass
 metadata:
   name: high-performance
 spec:
-  cpus: 8
+  cpu: 8
   memory: "32Gi"
-  storage:
-    class: "nvme-storage"  # Maps to PVE storage
-    type: "thin"           # Thin provisioning
-    
+  diskDefaults:
+    type: thin
+    size: "50Gi"
+    storageClass: "nvme-storage"   # Maps to PVE storage pool
+
+---
 # Standard storage
-apiVersion: infra.virtrigaud.io/v1beta1  
+apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMClass
 metadata:
   name: standard
 spec:
-  cpus: 4
+  cpu: 4
   memory: "8Gi"
-  storage:
-    class: "ssd-storage"
-    type: "thick"          # Thick provisioning
+  diskDefaults:
+    type: thick
+    size: "40Gi"
+    storageClass: "ssd-storage"
 ```
 
 ### Placement Policies

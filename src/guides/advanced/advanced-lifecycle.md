@@ -17,6 +17,125 @@ VirtRigaud Stage E introduces comprehensive VM lifecycle management capabilities
 - **Multi-VM Sets**: Manage groups of VMs with rolling updates
 - **Placement Policies**: Advanced placement rules and anti-affinity constraints
 - **Image Preparation**: Automated image import and preparation workflows
+- **Lifecycle Hooks**: Run actions before power-off (`preStop`) or after power-on (`postStart`)
+
+## Lifecycle Hooks
+
+VirtRigaud supports running actions at key points in a VM's power-state transitions. Hooks execute synchronously as part of the power operation — the controller waits for them to complete before continuing.
+
+### Supported Hooks
+
+| Hook | When It Runs |
+|------|-------------|
+| `preStop` | Before the VM is powered off (after `OffGraceful` or `Off` is set) |
+| `postStart` | After the VM has been powered on |
+
+The graceful shutdown timeout is configured alongside hooks:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `gracefulShutdownTimeout` | Duration | `60s` | How long to wait for a graceful shutdown before forcing power-off |
+
+### Action Types
+
+Each hook (`preStop`, `postStart`) can use one of three action types:
+
+#### `exec` — Run a Command
+
+Executes a command inside the guest via the provider's guest-agent integration.
+
+```yaml
+lifecycle:
+  postStart:
+    exec:
+      command: ["/usr/local/bin/register-vm.sh", "--env", "production"]
+```
+
+#### `httpGet` — HTTP Health/Notification Endpoint
+
+Makes an HTTP GET request to an endpoint reachable from the controller.
+
+```yaml
+lifecycle:
+  postStart:
+    httpGet:
+      scheme: HTTPS          # HTTP or HTTPS (default: HTTP)
+      host: "monitoring.internal"
+      port: 8443
+      path: "/api/vm/registered"
+
+  preStop:
+    httpGet:
+      host: "monitoring.internal"
+      port: 8080
+      path: "/api/vm/deregistered"
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `scheme` | string | `HTTP` or `HTTPS` |
+| `host` | string | Hostname or IP to call |
+| `port` | int | Port number |
+| `path` | string | URL path |
+
+#### `snapshot` — Create a Snapshot
+
+Creates a VM snapshot at the hook point (most useful in `preStop`).
+
+```yaml
+lifecycle:
+  preStop:
+    snapshot:
+      name: "pre-shutdown-backup"
+      includeMemory: false
+      description: "Automatic pre-shutdown snapshot"
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Snapshot name |
+| `includeMemory` | bool | Include memory state in snapshot |
+| `description` | string | Human-readable description |
+
+### Full Example
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VirtualMachine
+metadata:
+  name: web-server
+spec:
+  providerRef:
+    name: vsphere-prod
+  classRef:
+    name: standard-vm
+  imageRef:
+    name: ubuntu-22-04-template
+  powerState: On
+
+  lifecycle:
+    gracefulShutdownTimeout: "120s"
+
+    postStart:
+      httpGet:
+        host: "cmdb.internal"
+        port: 8080
+        path: "/api/vm/register"
+
+    preStop:
+      snapshot:
+        name: "pre-shutdown"
+        includeMemory: false
+        description: "Automatic snapshot before shutdown"
+```
+
+### Best Practices
+
+- **`preStop` snapshot**: Useful for stateful VMs where a pre-shutdown backup is always desirable.
+- **`postStart` httpGet**: Good for notifying external systems (CMDB, monitoring) when a VM comes online.
+- **`gracefulShutdownTimeout`**: Increase beyond 60 s for VMs with slow guest shutdown sequences.
+
+---
 
 ## VM Reconfiguration
 

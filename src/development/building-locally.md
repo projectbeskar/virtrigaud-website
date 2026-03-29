@@ -230,7 +230,9 @@ virtrigaud/
 ```
 virtrigaud-website/
 ├── mkdocs.yml                   # MkDocs configuration
-├── crd-ref-docs-config.yaml    # CRD doc generation config
+├── tools/
+│   ├── crd-ref-docs-config.yaml    # CRD doc generation config
+│   └── buf.gen.docs.yaml           # buf template for gRPC API docs
 ├── pyproject.toml               # Python dependencies
 ├── Makefile                     # Build automation
 ├── src/                         # Documentation markdown
@@ -331,7 +333,7 @@ git clone https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
 crd-ref-docs \
   --source-path=api \
-  --config=../crd-ref-docs-config.yaml \
+  --config=../tools/crd-ref-docs-config.yaml \
   --renderer=markdown \
   --output-path=../src/generated-crd-docs.md
 ```

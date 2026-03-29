@@ -68,9 +68,9 @@ spec:
   insecureSkipVerify: false
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.2.3"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.3"
     service:
-      port: 9090
+      port: 9443
 ```
 
 Create credentials secret:
@@ -260,43 +260,27 @@ kind: VMClass
 metadata:
   name: standard-vm
 spec:
-  cpus: 4
+  cpu: 4
   memory: "8Gi"
-  # vSphere-specific configuration
-  spec:
-    # VM hardware settings
-    hardware:
-      version: "vmx-19"              # Hardware version
-      firmware: "efi"                # BIOS or EFI
-      secureBoot: true               # Secure boot (EFI only)
-      enableCpuHotAdd: true          # Hot-add CPU
-      enableMemoryHotAdd: true       # Hot-add memory
-    
-    # CPU configuration
-    cpu:
-      coresPerSocket: 2              # CPU topology
-      enableVirtualization: false    # Nested virtualization
-      reservationMHz: 1000           # CPU reservation
-      limitMHz: 4000                 # CPU limit
-    
-    # Memory configuration  
-    memory:
-      reservationMB: 2048            # Memory reservation
-      limitMB: 8192                  # Memory limit
-      shareLevel: "normal"           # Memory shares (low/normal/high)
-    
-    # Storage configuration
-    storage:
-      diskFormat: "thin"             # thick/thin/eagerZeroedThick
-      storagePolicy: "VM Storage Policy - SSD"  # vSAN storage policy
-    
-    # vSphere placement
-    placement:
-      datacenter: "Production"       # Target datacenter
-      cluster: "Compute-Cluster"     # Target cluster  
-      resourcePool: "Production"     # Target resource pool
-      datastore: "datastore-ssd"     # Preferred datastore
-      folder: "/vm/virtrigaud"       # VM folder
+  firmware: UEFI
+  diskDefaults:
+    type: thin
+    size: "40Gi"
+  guestToolsPolicy: install
+  performanceProfile:
+    cpuHotAddEnabled: true
+    memoryHotAddEnabled: true
+    latencySensitivity: normal
+  securityProfile:
+    secureBoot: true
+    tpmEnabled: true
+  resourceLimits:
+    cpuReservation: 1000             # MHz
+    cpuLimit: 4000                   # MHz
+    memoryReservation: "2Gi"
+  # vSphere-specific extra config
+  extraConfig:
+    "numvcpus.coresPerSocket": "2"   # CPU topology hint
 ```
 
 ### VMImage Specification
@@ -336,6 +320,34 @@ spec:
 ### Complete VM Example
 
 ```yaml
+# First, define the network attachments
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: app-network
+spec:
+  network:
+    vsphere:
+      portgroup: "VM Network"
+  ipAllocation:
+    type: Static
+    address: "192.168.100.50/24"
+    gateway: "192.168.100.1"
+    dns: ["192.168.1.10", "8.8.8.8"]
+
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: mgmt-network
+spec:
+  network:
+    vsphere:
+      portgroup: "Management"
+  ipAllocation:
+    type: DHCP
+
+---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
 metadata:
@@ -348,52 +360,33 @@ spec:
   imageRef:
     name: ubuntu-22-04-template
   powerState: On
-  
+
   # Disk configuration
   disks:
-    - name: root
-      size: "100Gi"
-      storageClass: "ssd-storage"
-      # vSphere-specific disk options
-      spec:
-        diskMode: "persistent"       # persistent, independent_persistent, independent_nonpersistent
-        diskFormat: "thin"           # thick, thin, eagerZeroedThick
-        controllerType: "scsi"       # scsi, ide, nvme
-        unitNumber: 0                # SCSI unit number
-    
     - name: data
-      size: "500Gi" 
+      sizeGiB: 500
+      type: thin
       storageClass: "hdd-storage"
-      spec:
-        diskFormat: "thick"
-        controllerType: "scsi"
-        unitNumber: 1
-  
-  # Network configuration
+      scsi:
+        controllerType: pvscsi
+
+  # Network configuration (references VMNetworkAttachment resources)
   networks:
-    # Primary application network
     - name: app-network
-      portGroup: "VM Network"
-      # Optional: Static IP assignment
-      staticIP:
-        address: "192.168.100.50/24"
-        gateway: "192.168.100.1"
-        dns: ["192.168.1.10", "8.8.8.8"]
-    
-    # Management network
+      networkRef:
+        name: app-network
     - name: mgmt-network
-      portGroup: "Management"
-      # DHCP assignment (default)
-  
-  # vSphere-specific placement
+      networkRef:
+        name: mgmt-network
+
+  # vSphere placement (no 'datacenter' field — datacenter is derived from the provider endpoint)
   placement:
-    datacenter: "Production"
     cluster: "Compute-Cluster"
     resourcePool: "Production"
     folder: "/vm/applications"
-    datastore: "datastore-ssd"      # Override class default
-    host: "esxi-01.example.com"      # Pin to specific host (optional)
-  
+    datastore: "datastore-ssd"      # explicit datastore
+    host: "esxi-01.example.com"     # pin to specific host (optional)
+
   # Guest customization
   userData:
     cloudInit:
@@ -422,14 +415,15 @@ spec:
 The vSphere provider supports online VM reconfiguration for CPU, memory, and disk resources:
 
 ```yaml
-# Reconfigure VM resources
+# Reconfigure VM resources by changing classRef
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
 metadata:
   name: web-server
 spec:
-  vmClassRef: medium  # Change from small to medium
-  powerState: "On"
+  classRef:
+    name: medium    # Changed from small to medium
+  powerState: On
 ```
 
 **Capabilities**:
@@ -453,15 +447,22 @@ spec:
 Create full or linked clones of existing VMs and templates:
 
 ```yaml
-# Clone from existing VM
+# Clone from existing VM via VMClone resource
 apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
+kind: VMClone
 metadata:
-  name: web-server-02
+  name: web-server-02-clone
 spec:
-  vmClassRef: small
-  vmImageRef: web-server-01  # Source VM
-  cloneType: linked  # or "full"
+  source:
+    vmRef:
+      name: web-server-01
+  target:
+    name: web-server-02
+    classRef:
+      name: small
+  options:
+    type: LinkedClone   # or FullClone
+    powerOn: true
 ```
 
 **Clone Types**:
@@ -567,59 +568,131 @@ spec:
     osType: "linux"
 ```
 
+### StoragePod Support (Datastore Cluster Auto-Selection)
+
+VirtRigaud supports automatic datastore selection from a vSphere Datastore Cluster (StoragePod). When a StoragePod is configured, the provider picks the member datastore with the most free space at VM creation time. This is a lightweight alternative to Storage DRS and does **not** require Storage DRS to be enabled on the cluster.
+
+#### Precedence Order
+
+| Priority | Source | When Used |
+|----------|--------|-----------|
+| 1 (highest) | `placement.datastore` on the VM | Explicit datastore always wins |
+| 2 | `placement.storagePod` on the VM | Per-VM Datastore Cluster override |
+| 3 | `PROVIDER_DEFAULT_STORAGE_POD` env var | Provider-level default Datastore Cluster |
+| 4 (lowest) | `PROVIDER_DEFAULT_DATASTORE` env var | Final fallback to a fixed datastore |
+
+#### Configuring a Default StoragePod
+
+Set the environment variable on the vSphere provider deployment:
+
+```yaml
+providers:
+  vsphere:
+    env:
+      - name: PROVIDER_DEFAULT_STORAGE_POD
+        value: "DatastoreCluster-SSD"
+```
+
+#### Per-VM StoragePod Placement
+
+Override at the VM level via the `placement` field:
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VirtualMachine
+metadata:
+  name: web-application
+spec:
+  providerRef:
+    name: vsphere-prod
+  classRef:
+    name: standard-vm
+  imageRef:
+    name: ubuntu-22-04-template
+  powerState: On
+  placement:
+    datacenter: "Production"
+    cluster: "Compute-Cluster"
+    storagePod: "DatastoreCluster-SSD"   # picks member with most free space
+    folder: "/vm/applications"
+```
+
+#### How It Works
+
+1. VirtRigaud enumerates all datastores that are members of the named StoragePod via the vSphere API.
+2. It retrieves the `FreeSpace` summary for each member datastore.
+3. The datastore with the highest free space is selected.
+4. If multiple datastores are tied, the first one in the list is chosen (stable selection).
+
+!!! note
+    If `placement.datastore` is also set on the same VM, it takes priority and the StoragePod is ignored.
+
 ### Storage Policies
 
 ```yaml
-# VMClass with vSAN storage policy
+# VMClass with vSAN storage policy (use extraConfig for vSphere-specific storage policies)
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMClass
 metadata:
   name: high-performance
 spec:
-  cpus: 8
+  cpu: 8
   memory: "32Gi"
-  spec:
-    storage:
-      # vSAN storage policies
-      homePolicy: "VM Storage Policy - Performance"    # VM home/config files
-      diskPolicy: "VM Storage Policy - SSD Only"       # Virtual disks
-      swapPolicy: "VM Storage Policy - Standard"        # Swap files
-      
-      # Traditional storage
-      datastoreCluster: "DatastoreCluster-SSD"         # Datastore cluster
-      antiAffinityRules: true                          # VM anti-affinity
+  diskDefaults:
+    type: eagerzeroedthick
+    size: "50Gi"
+  extraConfig:
+    # vSAN storage policies (provider-specific keys)
+    "storage.homePolicy": "VM Storage Policy - Performance"
+    "storage.diskPolicy": "VM Storage Policy - SSD Only"
 ```
 
 ### Network Advanced Configuration
 
 ```yaml
-# Advanced networking with distributed switches
+# Distributed switch port group
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMNetworkAttachment
 metadata:
-  name: advanced-networking
+  name: frontend-network
 spec:
+  network:
+    vsphere:
+      portgroup: "DPG-Frontend-VLAN100"
+      distributedSwitch:
+        name: "DSwitch-Production"
+      vlan:
+        type: vlan
+        vlanID: 100
+    type: external
+
+---
+# Backend network attachment
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: backend-network
+spec:
+  network:
+    vsphere:
+      portgroup: "LS-Backend-App"
+    type: external
+
+---
+# Reference them from the VM
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VirtualMachine
+metadata:
+  name: multi-nic-vm
+spec:
+  # ...
   networks:
-    # Distributed port group
     - name: frontend
-      portGroup: "DPG-Frontend-VLAN100"
-      distributedSwitch: "DSwitch-Production"
-      vlan: 100
-      
-    # NSX-T logical switch
-    - name: backend  
-      portGroup: "LS-Backend-App"
-      nsx: true
-      securityPolicy: "Backend-Security-Policy"
-      
-    # SR-IOV for high performance
-    - name: storage
-      portGroup: "DPG-Storage-VLAN200"
-      sriov: true
-      bandwidth:
-        reservation: 1000  # Mbps
-        limit: 10000      # Mbps
-        shares: 100       # Priority
+      networkRef:
+        name: frontend-network
+    - name: backend
+      networkRef:
+        name: backend-network
 ```
 
 ### High Availability
@@ -872,28 +945,18 @@ kind: VMClass
 metadata:
   name: performance-optimized
 spec:
-  cpus: 16
+  cpu: 16
   memory: "64Gi"
-  spec:
-    cpu:
-      coresPerSocket: 8            # Match physical CPU topology
-      reservationMHz: 8000         # Guarantee CPU resources
-      shares: 2000                 # High priority (normal=1000)
-      enableVirtualization: false  # Disable if not needed for performance
-    
-    memory:
-      reservationMB: 65536         # Guarantee memory
-      shares: 2000                 # High priority
-      shareLevel: "high"           # Alternative to shares value
-    
-    hardware:
-      enableCpuHotAdd: false       # Better performance when disabled
-      enableMemoryHotAdd: false    # Better performance when disabled
-      
-    # NUMA configuration for large VMs
-    numa:
-      enabled: true
-      coresPerSocket: 8            # Align with NUMA topology
+  performanceProfile:
+    cpuHotAddEnabled: false        # Disable for better performance
+    memoryHotAddEnabled: false     # Disable for better performance
+    latencySensitivity: high
+    hyperThreadingPolicy: prefer
+  resourceLimits:
+    cpuReservation: 8000           # MHz — guarantee CPU resources
+    memoryReservation: "64Gi"      # Guarantee full memory
+  extraConfig:
+    "numvcpus.coresPerSocket": "8" # Align with NUMA topology
 ```
 
 ### Storage Optimization

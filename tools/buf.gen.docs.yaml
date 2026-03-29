@@ -1,0 +1,16 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+#
+# buf template used exclusively for documentation generation.
+# Run from the virtrigaud/ source directory:
+#   buf generate proto --template ../tools/buf.gen.docs.yaml
+#
+# This is intentionally separate from proto/buf.gen.yaml so that
+# doc generation is owned by the website repo and does not affect
+# Go code generation in the main repo.
+version: v1
+plugins:
+  - name: doc
+    out: ../src/references
+    opt:
+      - markdown,grpc-api.md
