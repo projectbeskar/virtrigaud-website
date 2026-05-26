@@ -3,28 +3,49 @@ Copyright (c) 2026 VirtRigaud Creators
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Libvirt Host Preparation Guide
+# Libvirt Host Preparation
 
-This guide provides detailed instructions on preparing a Libvirt/KVM host to work with VirtRigaud.
+This page is aligned to **VirtRigaud v0.3.6**. It describes what an operator
+must set up on a Libvirt/KVM host so the in-tree libvirt provider
+(`internal/providers/libvirt/`) can drive it over SSH.
 
-## Table of Contents
-- [Prerequisites](#prerequisites)
-- [User and Group Configuration](#user-and-group-configuration)
-- [SSH Configuration](#ssh-configuration)
-- [Storage Configuration](#storage-configuration)
-- [Network Configuration](#network-configuration)
-- [SELinux/AppArmor Configuration](#selinuxapparmor-configuration)
-- [Verification](#verification)
-- [Troubleshooting](#troubleshooting)
+## How the libvirt provider talks to the host
 
-## Prerequisites
+The libvirt provider does **not** link `libvirt.so`. It runs the `virsh` CLI
+as a subprocess (`internal/providers/libvirt/virsh.go`) against a libvirt URI
+of the form `qemu+ssh://<user>@<host>/system?no_verify=1&no_tty=1`. SSH auth
+uses either a password (via `sshpass` + `SSHPASS` env var) or an SSH private
+key, both read from the K8s Secret mounted at
+`/etc/virtrigaud/credentials/` (`internal/providers/libvirt/virsh.go:115-133`).
 
-### Required Packages
+!!! danger "SSH host-key verification is disabled in v0.3.6 (#149)"
+    The provider sets `no_verify=1` on the libvirt URI
+    (`internal/providers/libvirt/virsh.go:167`), which instructs the libvirt
+    client to **skip SSH host-key verification entirely**. This means:
 
-Install the following packages on your Libvirt host:
+    - A man-in-the-middle on the path between the provider pod and the
+      libvirt host can present any SSH host key and the provider will accept it.
+    - Rotating the libvirt host's SSH key will not break the provider — but
+      that property is the wrong kind of "robust": it eliminates the security
+      property the host key is supposed to provide.
+
+    **You cannot rely on SSH host-key verification as a security control.**
+    Until #149 lands (operator-supplied `known_hosts` enforced via a separate
+    URI flag), the compensating control is:
+
+    1. A `NetworkPolicy` that locks egress from the provider pod to the
+       libvirt host's IP/port only, **and**
+    2. Either a private network between cluster and libvirt host, or an
+       encrypted CNI overlay (Cilium WireGuard, Calico WireGuard, IPsec).
+
+    See [mTLS](../providers/security/mtls.md) and
+    [Security](security.md#what-virtrigaud-is-not-trying-to-protect-against)
+    for the broader compensating-controls posture.
+
+## Required packages on the libvirt host
 
 ```bash
-# Ubuntu/Debian
+# Ubuntu/Debian (matches the host the provider has been exercised against)
 sudo apt-get update
 sudo apt-get install -y \
   qemu-kvm \
@@ -33,8 +54,8 @@ sudo apt-get install -y \
   bridge-utils \
   cloud-utils \
   genisoimage \
-  sshpass \
-  qemu-utils
+  qemu-utils \
+  sshpass   # required only if you use password SSH (key-based is preferred)
 
 # RHEL/CentOS/Fedora
 sudo dnf install -y \
@@ -44,148 +65,241 @@ sudo dnf install -y \
   bridge-utils \
   cloud-utils \
   genisoimage \
-  sshpass \
   qemu-img
 ```
 
-### Virtualization Support
-
-Ensure your system supports hardware virtualization:
+## Hardware virtualization sanity check
 
 ```bash
-# Check for Intel VT-x or AMD-V support
-egrep -c '(vmx|svm)' /proc/cpuinfo
-# Should return a number > 0
+# CPU must report Intel VT-x (vmx) or AMD-V (svm)
+egrep -c '(vmx|svm)' /proc/cpuinfo   # > 0
 
-# Verify KVM modules are loaded
-lsmod | grep kvm
-# Should show kvm_intel or kvm_amd
+# KVM kernel modules loaded
+lsmod | grep kvm                     # kvm_intel or kvm_amd
 ```
 
-## User and Group Configuration
+If either of these is empty, the host cannot run KVM guests at all and no
+amount of libvirt config will help. Enable VT-x/AMD-V in the BIOS first.
 
-### Critical: libvirt-qemu Group Membership
+## User and group setup
 
-**This is the most critical step!** The `libvirt-qemu` user (which QEMU/KVM runs as) must be a member of the `libvirt` group to access VM disks in `/var/lib/libvirt/images/`.
+The libvirt provider creates VMs whose disks live in
+`/var/lib/libvirt/images/` (the path is **hard-coded** at
+`internal/providers/libvirt/storage.go:121` for the default pool created by
+the provider's `EnsureDefaultStoragePool`). For QEMU to read those disks at
+runtime, the `libvirt-qemu` user must be able to traverse and read the
+directory.
 
 ```bash
-# Add libvirt-qemu user to the libvirt group
+# Add libvirt-qemu (the QEMU runtime user) to the libvirt group
 sudo usermod -aG libvirt libvirt-qemu
 
-# Verify the group membership
-id libvirt-qemu
-# Should show: groups=994(kvm),111(libvirt),64055(libvirt-qemu)
+# Confirm
+id libvirt-qemu | tr ',' '\n' | grep libvirt
 
-# Restart libvirtd for changes to take effect
+# Apply
 sudo systemctl restart libvirtd
 ```
 
-### SSH User Configuration
+### SSH user the provider authenticates as
 
-Create or configure a user for VirtRigaud to connect via SSH:
+Create a dedicated SSH user for the provider. Do **not** reuse `root`.
 
 ```bash
-# If the user doesn't exist, create it
 sudo useradd -m -s /bin/bash virt-admin
-
-# Add the user to the libvirt and kvm groups
 sudo usermod -aG libvirt,kvm virt-admin
-
-# Set up passwordless sudo for libvirt commands (optional but recommended)
-echo "virt-admin ALL=(ALL) NOPASSWD: /usr/bin/virsh, /usr/bin/qemu-img, /usr/bin/chown, /usr/bin/chmod, /bin/systemctl restart libvirtd" | sudo tee /etc/sudoers.d/virt-admin
-sudo chmod 0440 /etc/sudoers.d/virt-admin
 ```
 
-### SSH Key Setup
+#### Sudo grant — minimal viable set
 
-Set up SSH key authentication for the VirtRigaud provider:
+The provider invokes `sudo` for a small set of commands. The exact set is
+visible by grepping the provider for the strings it sends to
+`runVirshCommand("!", "sudo", ...)`:
 
 ```bash
-# On your Kubernetes/VirtRigaud host, generate an SSH key if needed
-ssh-keygen -t ed25519 -f ~/.ssh/virtrigaud_libvirt -N ""
-
-# Copy the public key to the Libvirt host
-ssh-copy-id -i ~/.ssh/virtrigaud_libvirt.pub virt-admin@<libvirt-host>
-
-# Test the connection
-ssh -i ~/.ssh/virtrigaud_libvirt virt-admin@<libvirt-host> "virsh version"
+grep -rn 'runVirshCommand[^"]*"!", "sudo"' internal/providers/libvirt/
 ```
 
-## Storage Configuration
+For v0.3.6, the minimal sudoers grant is:
 
-### Default Storage Pool
-
-VirtRigaud uses `/var/lib/libvirt/images` as the default storage location. Ensure proper permissions:
-
-```bash
-# Verify directory permissions
-ls -ld /var/lib/libvirt/images
-# Should show: drwxrwsrwx 2 root root 4096 ...
-
-# If permissions are incorrect, fix them:
-sudo mkdir -p /var/lib/libvirt/images
-sudo chmod 777 /var/lib/libvirt/images
-sudo chmod g+s /var/lib/libvirt/images  # Set GID bit for inheritance
-
-# Verify parent directory permissions
-ls -ld /var/lib/libvirt
-# Should show: drwxr-x--- 8 root libvirt ... (with libvirt group)
+```text
+# /etc/sudoers.d/virt-admin   (mode 0440, owner root:root)
+virt-admin ALL=(ALL) NOPASSWD: /usr/bin/virsh, /usr/bin/qemu-img, /usr/bin/chown, /usr/bin/chmod, /usr/sbin/restorecon, /usr/bin/rm
 ```
 
-### Storage Pool Definition
+`restorecon` is included because the provider calls it after writing a new
+disk file (`internal/providers/libvirt/storage.go:339`). If SELinux is not
+installed on the host, the call fails and the provider logs `WARN Failed to
+restore SELinux context (may not be using SELinux): ...` and proceeds — that
+is expected and is not an error.
 
-Create or verify the default storage pool:
+### SSH key-based auth (preferred)
 
 ```bash
-# Check if a pool exists
-virsh pool-list --all
+# On the operator workstation (or the cluster's secret-management host)
+ssh-keygen -t ed25519 -f ./virtrigaud_libvirt -N ""
 
-# If no pool exists, create one:
+# Copy public key to the libvirt host
+ssh-copy-id -i ./virtrigaud_libvirt.pub virt-admin@<libvirt-host>
+
+# Verify
+ssh -i ./virtrigaud_libvirt virt-admin@<libvirt-host> "virsh version"
+```
+
+Then mount the private key as the `ssh-privatekey` key on the credentials
+Secret:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: libvirt-creds
+  namespace: virtrigaud-system
+type: Opaque
+stringData:
+  username: virt-admin
+  ssh-privatekey: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    ...
+    -----END OPENSSH PRIVATE KEY-----
+```
+
+The provider reads these keys at
+`internal/providers/libvirt/virsh.go:115-133`.
+
+## Storage pool setup
+
+### Default pool
+
+The libvirt provider's `EnsureDefaultStoragePool`
+(`internal/providers/libvirt/storage.go:76-117`) auto-creates a pool named
+`default` at `/var/lib/libvirt/images` on first connect. If a pool named
+`default` already exists *but points elsewhere*, the provider logs a warning
+and uses what it finds — it does not relocate the pool.
+
+To check / pre-create manually:
+
+```bash
+virsh pool-list --all                      # 'default' should be present
+virsh pool-info default                    # should show Path: /var/lib/libvirt/images
+
+# Create manually if missing:
 virsh pool-define-as default dir --target /var/lib/libvirt/images
 virsh pool-build default
 virsh pool-start default
 virsh pool-autostart default
-
-# Verify the pool
-virsh pool-info default
 ```
 
-### Alternative Storage Locations
-
-If you need to use a different storage location (e.g., NFS mount, dedicated partition):
+Directory permissions the provider expects (and creates if missing):
 
 ```bash
-# Example: Using /vm-pool01
+ls -ld /var/lib/libvirt/images
+# Should be drwxrwsrwx, owner root, with the setgid bit set so new files
+# inherit the libvirt group.
+```
+
+### Linked clones (qcow2 backing files)
+
+!!! warning "Capability flag says yes; in-tree Clone RPC is a stub in v0.3.6"
+    The libvirt provider advertises `SupportsLinkedClones: true` from
+    `GetCapabilities` (`internal/providers/libvirt/server.go:463`), and the
+    underlying qcow2 format does support backing files (the host requirement
+    that this section documents). However, the **`Clone` RPC implementation
+    itself** (`internal/providers/libvirt/server.go:428-442`) currently
+    returns a synthetic `vm-clone-<id>` and a synthetic task ID without
+    issuing any storage or libvirt operations. The
+    `StorageProvider.CloneVolume` helper exists at
+    `internal/providers/libvirt/storage.go:459`, but is not yet invoked by
+    the Clone RPC.
+
+    The host preparation in this section is correct for when the Clone RPC
+    starts using `CloneVolume` — it does not enable linked-clone behavior in
+    v0.3.6 on its own.
+
+The qcow2 format supports a backing file (`qcow2: backing_file=<path>`)
+which lets a clone share unchanged blocks with its parent and only allocate
+new blocks for writes. Required on the host to take advantage of this:
+
+- `qemu-img` 2.x+ (any current distro ships this).
+- Parent qcow2 file in the same pool that the clone will live in (cross-pool
+  backing-file references are fragile).
+- Sufficient inotify / fanotify budget if you plan dozens of clones from one
+  parent (`/proc/sys/fs/inotify/max_user_watches`).
+
+You can pre-create a "golden" volume manually now and reference it from a
+future-style clone workflow:
+
+```bash
+# On the libvirt host, in /var/lib/libvirt/images:
+sudo qemu-img create -f qcow2 -F qcow2 \
+     -b /var/lib/libvirt/images/ubuntu-22.04-golden.qcow2 \
+     /var/lib/libvirt/images/my-clone.qcow2 20G
+
+sudo chown libvirt-qemu:kvm /var/lib/libvirt/images/my-clone.qcow2
+sudo chmod 660           /var/lib/libvirt/images/my-clone.qcow2
+```
+
+### Custom storage location
+
+If `/var/lib/libvirt/images` is not where you want VirtRigaud to write disks,
+create a *separate* libvirt pool and reference it from your `VMClass` — do
+**not** override `/var/lib/libvirt/images` itself, because the default-pool
+auto-creation logic is keyed to that path.
+
+```bash
 sudo mkdir -p /vm-pool01
 sudo chown root:libvirt /vm-pool01
-sudo chmod 770 /vm-pool01
+sudo chmod 2770 /vm-pool01     # setgid so new files inherit libvirt group
 
-# Create a storage pool
 virsh pool-define-as vm-pool01 dir --target /vm-pool01
 virsh pool-build vm-pool01
 virsh pool-start vm-pool01
 virsh pool-autostart vm-pool01
 ```
 
-**Note:** Update your `VMImage` resource to reference images in the custom pool path.
+## Image import (the `ImagePrepare` RPC)
 
-## Network Configuration
+!!! warning "ImagePrepare gRPC handler returns a task ref without issuing the import"
+    The in-tree libvirt `ImagePrepare`
+    (`internal/providers/libvirt/server.go:445-454`) currently returns a
+    synthetic task ID and does **not** invoke the real image download path.
+    The real download helper —
+    `StorageProvider.DownloadCloudImage`
+    (`internal/providers/libvirt/storage.go:265-363`) — exists, is correct,
+    and is invoked elsewhere (notably during VM creation when an image is
+    needed but missing). It is just not yet wired into the `ImagePrepare`
+    RPC.
 
-### Bridge Network Setup
+    In practical terms: if you `kubectl apply` a `VMImage` that points at a
+    cloud-image URL and then create a `VirtualMachine` that references it,
+    the image *will* be downloaded — by the VM-create path, not the
+    ImagePrepare path.
 
-For VMs to have direct network access, configure a bridge:
+The host requirements for the download path are:
 
-```bash
-# Install bridge utilities
-sudo apt-get install bridge-utils  # Ubuntu/Debian
-sudo dnf install bridge-utils      # RHEL/Fedora
+- `wget` available in the provider pod's command-execution context (the
+  provider invokes it through `virsh -c qemu+ssh://...` shells the command
+  to the libvirt host, where it must be installed).
+- `qemu-img` for format conversion (`apt install qemu-utils` /
+  `dnf install qemu-img`).
+- Enough free space in `/tmp` on the libvirt host for the largest image
+  you'll be importing (image is downloaded to `/tmp/<volumeName>-temp.img`,
+  then converted into the pool — see `storage.go:280`).
 
-# Example: Create br0 bridge on eno1 interface
-# WARNING: This will temporarily disrupt network connectivity
-# It's recommended to do this via console access
+## Network configuration
 
-# Using netplan (Ubuntu 18.04+):
-cat <<EOF | sudo tee /etc/netplan/01-netcfg.yaml
+### Bridge networking (recommended for production)
+
+Bridge networking gives VMs first-class L2 access to your physical network.
+The example below uses netplan on Ubuntu; consult your distro docs for
+alternatives.
+
+!!! warning "Bridge creation interrupts host networking"
+    The interface you bridge stops carrying IP traffic for a moment. Do this
+    from console / iLO / IPMI, not over SSH on the same interface.
+
+```yaml
+# /etc/netplan/01-bridge.yaml
 network:
   version: 2
   renderer: networkd
@@ -201,21 +315,16 @@ network:
       parameters:
         stp: false
         forward-delay: 0
-EOF
-
-sudo netplan apply
-
-# Verify bridge
-brctl show
-ip addr show br0
 ```
 
-### Libvirt Network Configuration
+```bash
+sudo netplan apply
+brctl show     # should show br0 with eno1 enslaved
+```
 
-Create a libvirt network that uses the bridge:
+Then declare a libvirt network that uses the bridge:
 
 ```bash
-# Create network XML
 cat <<EOF > /tmp/host-bridge.xml
 <network>
   <name>host-bridge</name>
@@ -224,553 +333,218 @@ cat <<EOF > /tmp/host-bridge.xml
 </network>
 EOF
 
-# Define and start the network
 virsh net-define /tmp/host-bridge.xml
 virsh net-start host-bridge
 virsh net-autostart host-bridge
-
-# Verify
-virsh net-list --all
-virsh net-dumpxml host-bridge
 ```
 
-### NAT Network (Alternative)
+Reference it from a `VMNetworkAttachment`:
 
-If you prefer NAT networking instead of bridged:
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: corp-bridge
+spec:
+  type: bridge
+  bridgeName: host-bridge      # libvirt network name
+```
+
+### NAT (libvirt's `default` network)
+
+If you cannot bridge — typical on a laptop or single-NIC dev host — use the
+libvirt-managed NAT network:
 
 ```bash
-# The default network usually provides NAT
 virsh net-list --all
-# Should show 'default' network
-
-# If not present, create it:
+# If 'default' isn't listed:
 virsh net-define /usr/share/libvirt/networks/default.xml
 virsh net-start default
 virsh net-autostart default
 ```
 
-## SELinux/AppArmor Configuration
+NAT gives VMs outbound connectivity but no L2 reachability from your network
+to the VM. Fine for dev / build farms; not suitable for production VMs that
+need to be reachable.
+
+## SELinux / AppArmor
 
 ### SELinux (RHEL/CentOS/Fedora)
 
-If SELinux is enabled, ensure proper contexts:
-
 ```bash
-# Check SELinux status
-getenforce
+getenforce        # Enforcing | Permissive | Disabled
 
-# If SELinux is enabled, set proper contexts
+# If Enforcing, label the storage directories so libvirt can read/write them
 sudo semanage fcontext -a -t virt_image_t "/var/lib/libvirt/images(/.*)?"
 sudo restorecon -Rv /var/lib/libvirt/images
 
-# For custom storage locations
+# If you created a custom pool:
 sudo semanage fcontext -a -t virt_image_t "/vm-pool01(/.*)?"
 sudo restorecon -Rv /vm-pool01
 ```
 
-**Note:** VirtRigaud automatically runs `restorecon` on disk images after creation, but this will fail silently if SELinux is not installed.
+The provider invokes `restorecon` itself after writing new disk files
+(`internal/providers/libvirt/storage.go:339`). If `restorecon` is not
+installed, the call logs a warning and the operation proceeds.
 
 ### AppArmor (Ubuntu/Debian)
 
-AppArmor profiles for libvirt are usually pre-configured, but verify:
-
 ```bash
-# Check AppArmor status
 sudo aa-status | grep libvirt
-
-# If issues arise, you may need to adjust the profile
-sudo aa-complain /usr/sbin/libvirtd  # Set to complain mode for debugging
-# or
-sudo aa-disable /usr/sbin/libvirtd   # Disable AppArmor for libvirt
 ```
 
-### Disable Security (Not Recommended for Production)
-
-For testing environments only:
-
-```bash
-# Disable SELinux temporarily
-sudo setenforce 0
-
-# Or disable AppArmor for libvirt
-sudo systemctl stop apparmor
-```
+The default Ubuntu AppArmor profile for libvirtd is permissive enough for
+the provider's needs. If you see denials in `journalctl -u apparmor`, work
+out which path is being blocked and add it to
+`/etc/apparmor.d/local/usr.sbin.libvirtd` rather than disabling the profile.
 
 ## Verification
 
-### Pre-Flight Checks
-
-Run these commands to verify your setup:
-
-```bash
-# 1. Check libvirt daemon
-sudo systemctl status libvirtd
-virsh version
-
-# 2. Verify user groups
-id libvirt-qemu | grep libvirt
-# Should show 'libvirt' in the groups
-
-# 3. Check storage permissions
-ls -ld /var/lib/libvirt
-ls -ld /var/lib/libvirt/images
-# Parent should be drwxr-x--- root libvirt
-# Images dir should be drwxrwsrwx
-
-# 4. Test storage pool
-virsh pool-list --all
-virsh pool-info default
-
-# 5. Check networks
-virsh net-list --all
-brctl show
-
-# 6. Test SSH connectivity
-ssh virt-admin@localhost "virsh list --all"
-
-# 7. Test file access as libvirt-qemu
-sudo -u libvirt-qemu test -r /var/lib/libvirt/images && echo "✓ READ OK" || echo "✗ READ FAILED"
-sudo -u libvirt-qemu test -w /var/lib/libvirt/images && echo "✓ WRITE OK" || echo "✗ WRITE FAILED"
-```
-
-### Test VM Creation
-
-Create a minimal test VM to verify everything works:
+After everything above is in place, run the following on the libvirt host
+and the answer should match. These are the same things the provider
+checks at runtime.
 
 ```bash
-# Download a cloud image
-cd /var/lib/libvirt/images
-sudo wget https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+# 1. libvirtd is up
+sudo systemctl is-active libvirtd                            # active
 
-# Set correct permissions
-sudo chown libvirt-qemu:kvm noble-server-cloudimg-amd64.img
-sudo chmod 777 noble-server-cloudimg-amd64.img
+# 2. virsh can list domains over the URI the provider will use
+sudo -u virt-admin virsh -c qemu:///system list --all
 
-# Create a test VM via VirtRigaud or manually with virt-install
+# 3. libvirt-qemu can read the image dir
+sudo -u libvirt-qemu test -r /var/lib/libvirt/images && echo OK
+sudo -u libvirt-qemu test -w /var/lib/libvirt/images && echo OK
+
+# 4. Default pool is active
+sudo -u virt-admin virsh pool-info default                   # State: running
+
+# 5. Network is up
+sudo -u virt-admin virsh net-list                            # default | host-bridge | active
+
+# 6. SSH from the provider's network reach
+ssh -i ~/.ssh/virtrigaud_libvirt virt-admin@<libvirt-host> "virsh -c qemu:///system list --all"
 ```
+
+If all six succeed and your `Provider` CR's `credentialSecretRef` points at
+the Secret you created above, the provider should reach `Ready` after
+reconciliation.
 
 ## Troubleshooting
 
-### Permission Denied Errors
+### `Permission denied` on disk access
 
-**Symptom:** `Cannot access storage file ... Permission denied`
+Symptom: VM fails to start, libvirt log shows
+`Cannot access storage file ... Permission denied`.
 
-**Common Causes:**
-1. `libvirt-qemu` user not in `libvirt` group
-2. Parent directory `/var/lib/libvirt` has restrictive permissions
-3. Disk file missing execute bit (should be 777, not 666)
+Common causes (most → least common):
 
-**Solution:**
+1. `libvirt-qemu` is not in the `libvirt` group.
+2. Parent directory `/var/lib/libvirt` has mode `0750` and excludes
+   `libvirt-qemu`'s group from traverse.
+3. The qcow2 file's permissions are `0640` instead of `0660` (the provider
+   sets `0777` itself; if you copied files in manually, fix the mode).
+
 ```bash
-# Fix group membership
 sudo usermod -aG libvirt libvirt-qemu
 sudo systemctl restart libvirtd
 
-# Fix file permissions
-sudo chmod 777 /var/lib/libvirt/images/*.qcow2
-
-# Verify access
-sudo -u libvirt-qemu test -r /var/lib/libvirt/images/disk.qcow2 && echo "OK" || echo "FAILED"
+# Inspect the offending file
+ls -l /var/lib/libvirt/images/<vm>-disk.qcow2
+sudo chown libvirt-qemu:kvm /var/lib/libvirt/images/<vm>-disk.qcow2
+sudo chmod 660 /var/lib/libvirt/images/<vm>-disk.qcow2
 ```
 
-### Network Issues
+### `storage pool 'default' is not active`
 
-**Symptom:** VM has no network connectivity or wrong interface type
-
-**Solution:**
 ```bash
-# Check network is active
-virsh net-list --all
-
-# Verify bridge exists
-brctl show
-ip link show br0
-
-# Check VM network configuration
-virsh domiflist <vm-name>
-# Should show bridge interface, not 'user' type
-
-# Restart network
-virsh net-destroy host-bridge
-virsh net-start host-bridge
-```
-
-### SSH Connection Issues
-
-**Symptom:** Provider cannot connect to libvirt host
-
-**Solution:**
-```bash
-# Test SSH connection
-ssh -v virt-admin@<host> "virsh version"
-
-# Check SSH key authentication
-ssh -i /path/to/key virt-admin@<host> "echo OK"
-
-# Verify sshpass is installed (needed for password auth)
-which sshpass
-```
-
-### Storage Pool Issues
-
-**Symptom:** `storage pool 'default' is not active`
-
-**Solution:**
-```bash
-# Check pool status
-virsh pool-list --all
-
-# Start pool
 virsh pool-start default
 virsh pool-autostart default
+```
 
-# Delete and recreate if path is wrong
-virsh pool-destroy old-pool
-virsh pool-undefine old-pool
+If pool-start fails with a path error, you likely have a stale pool
+definition pointing at a path that no longer exists; remove and recreate it:
+
+```bash
+virsh pool-destroy default
+virsh pool-undefine default
 virsh pool-define-as default dir --target /var/lib/libvirt/images
 virsh pool-build default
 virsh pool-start default
 virsh pool-autostart default
 ```
 
-### Cloud Image Issues
+### SSH connection rejected
 
-**Symptom:** VM fails to boot or cloud-init doesn't work
+Symptom: provider logs `Failed to connect to libvirt: ssh: handshake failed`.
 
-**Solution:**
-```bash
-# Verify cloud-init ISO was created
-ls -l /var/lib/libvirt/images/*-cidata.iso
-
-# Check ISO permissions
-sudo chmod 644 /var/lib/libvirt/images/*-cidata.iso
-
-# Verify cloud-init disk is attached
-virsh dumpxml <vm-name> | grep -A 5 "device='cdrom'"
-
-# Check cloud-init status inside VM
-ssh user@vm-ip "cloud-init status"
-# Should show: status: done
-
-# If cloud-init is stuck, check logs
-ssh user@vm-ip "sudo cat /var/log/cloud-init.log | grep ERROR"
-```
-
-### Cloud-init Network Configuration
-
-**Default Behavior (v0.3.7-dev+):**
-
-VirtRigaud provides **default DHCP networking** in cloud-init meta-data using version 1 format. This ensures VMs get network connectivity out of the box while allowing users to override with custom configuration.
-
-**Default Network Configuration:**
-```yaml
-network:
-  version: 1
-  config:
-    - type: physical
-      name: eth0
-      subnets:
-        - type: dhcp
-    - type: physical
-      name: ens3
-      subnets:
-        - type: dhcp
-    - type: physical
-      name: enp0s3
-      subnets:
-        - type: dhcp
-```
-
-**Why Version 1 Format?**
-
-Version 1 network configuration:
-- ✅ Works across all major distributions (Ubuntu, RHEL, CentOS, Fedora, Debian, openSUSE)
-- ✅ Applies immediately without requiring reboot
-- ✅ Cloud-init translates to distro-specific formats (NetworkManager, ifcfg, netplan, etc.)
-- ✅ Multiple interface names ensure compatibility with different naming schemes
-- ✅ Does NOT cause netplan regeneration on Ubuntu
-
-**Configuring Custom Networking:**
-
-Users can override the default DHCP configuration by providing network configuration in their **user-data**. User-data network configuration takes precedence over meta-data.
-
-#### Option 1: Static IP Configuration
-
-**For Ubuntu/Debian (using write_files):**
-```yaml
-#cloud-config
-write_files:
-  - path: /etc/netplan/99-static.yaml
-    permissions: '0644'
-    content: |
-      network:
-        version: 2
-        ethernets:
-          ens3:
-            addresses: [192.168.1.100/24]
-            routes:
-              - to: default
-                via: 192.168.1.1
-            nameservers:
-              addresses: [8.8.8.8, 8.8.4.4]
-runcmd:
-  - netplan apply
-```
-
-**For RHEL/CentOS (using nmcli):**
-```yaml
-#cloud-config
-runcmd:
-  - nmcli con mod "System ens3" ipv4.addresses 192.168.1.100/24
-  - nmcli con mod "System ens3" ipv4.gateway 192.168.1.1
-  - nmcli con mod "System ens3" ipv4.dns "8.8.8.8 8.8.4.4"
-  - nmcli con mod "System ens3" ipv4.method manual
-  - nmcli con up "System ens3"
-```
-
-**Universal approach (cloud-init network key in user-data):**
-```yaml
-#cloud-config
-network:
-  version: 1
-  config:
-    - type: physical
-      name: ens3
-      subnets:
-        - type: static
-          address: 192.168.1.100/24
-          gateway: 192.168.1.1
-          dns_nameservers:
-            - 8.8.8.8
-            - 8.8.4.4
-```
-
-#### Option 2: Custom DHCP Configuration
-
-**With specific DNS servers:**
-```yaml
-#cloud-config
-network:
-  version: 1
-  config:
-    - type: physical
-      name: ens3
-      subnets:
-        - type: dhcp
-          dns_nameservers:
-            - 1.1.1.1
-            - 1.0.0.1
-```
-
-**With MTU and other options:**
-```yaml
-#cloud-config
-network:
-  version: 1
-  config:
-    - type: physical
-      name: ens3
-      mtu: 9000
-      subnets:
-        - type: dhcp
-```
-
-#### Option 3: Multiple Network Interfaces
-
-```yaml
-#cloud-config
-network:
-  version: 1
-  config:
-    - type: physical
-      name: ens3
-      subnets:
-        - type: dhcp
-    - type: physical
-      name: ens4
-      subnets:
-        - type: static
-          address: 10.0.0.100/24
-```
-
-#### Option 4: VLAN Configuration
-
-```yaml
-#cloud-config
-network:
-  version: 1
-  config:
-    - type: physical
-      name: ens3
-      subnets:
-        - type: dhcp
-    - type: vlan
-      name: ens3.100
-      vlan_id: 100
-      vlan_link: ens3
-      subnets:
-        - type: static
-          address: 192.168.100.10/24
-```
-
-**Important Notes:**
-
-1. **Network config in user-data overrides meta-data**: If you provide network configuration in your user-data, the default DHCP configuration in meta-data is ignored.
-
-2. **Interface naming**: Use the actual interface name for your VM. Common names:
-   - `eth0` - Traditional naming
-   - `ens3` - Predictable naming (most common for virtualized environments)
-   - `enp0s3` - Predictable naming with PCI info
-
-3. **Testing**: After changing network configuration, you can test with:
-   ```bash
-   cloud-init clean --logs
-   cloud-init init --local
-   cloud-init init
-   ```
-
-### Windows Support
-
-**Note:** Windows cloud images use **cloudbase-init** instead of cloud-init. VirtRigaud supports Windows VMs with specific configuration requirements:
-
-#### Windows Network Configuration
-
-Cloudbase-init uses different configuration formats than cloud-init. Here's how to configure Windows VMs:
-
-**DHCP Configuration (Default):**
-```yaml
-#cloud-config
-# For Windows, this section is interpreted by cloudbase-init
-users:
-  - name: Administrator
-    passwd: MySecurePassword123!
-    groups: Administrators
-
-# Network configuration for Windows (cloudbase-init)
-# By default, Windows will use DHCP if no network config is provided
-```
-
-**Static IP Configuration for Windows:**
-```yaml
-#cloud-config
-users:
-  - name: Administrator
-    passwd: MySecurePassword123!
-    groups: Administrators
-
-runcmd:
-  # Configure static IP using PowerShell
-  - 'powershell.exe -Command "New-NetIPAddress -InterfaceAlias \"Ethernet\" -IPAddress 192.168.1.100 -PrefixLength 24 -DefaultGateway 192.168.1.1"'
-  - 'powershell.exe -Command "Set-DnsClientServerAddress -InterfaceAlias \"Ethernet\" -ServerAddresses 8.8.8.8,8.8.4.4"'
-```
-
-**Alternative: Using write_files for Windows netsh:**
-```yaml
-#cloud-config
-write_files:
-  - path: C:\configure-network.cmd
-    permissions: '0755'
-    content: |
-      netsh interface ip set address "Ethernet" static 192.168.1.100 255.255.255.0 192.168.1.1
-      netsh interface ip set dns "Ethernet" static 8.8.8.8
-      netsh interface ip add dns "Ethernet" 8.8.4.4 index=2
-
-runcmd:
-  - 'C:\configure-network.cmd'
-```
-
-#### Windows Image Requirements
-
-1. **Cloudbase-init must be pre-installed** in the Windows cloud image
-2. **VirtIO drivers** must be installed for network and disk access
-3. **Guest agent** (qemu-guest-agent for Windows) should be installed for IP detection
-
-#### Windows Cloud Images
-
-Common sources for Windows cloud images with cloudbase-init:
-- **Official**: Build your own using [cloudbase-init documentation](https://cloudbase-init.readthedocs.io/)
-- **Community**: Check your hypervisor vendor's marketplace for pre-configured images
-
-#### Important Windows Notes
-
-1. **Password Complexity**: Windows requires complex passwords by default
-2. **Interface Names**: Windows uses "Ethernet", "Ethernet 2", etc. instead of eth0/ens3
-3. **First Boot**: Windows first boot takes longer than Linux (driver installation, etc.)
-4. **Guest Agent**: Install qemu-guest-agent for Windows to enable IP detection in VirtRigaud
-
-- **Network Configuration**: Windows images usually auto-configure networking via DHCP without explicit cloud-init config
-- **Meta-data Format**: Cloudbase-init accepts the same meta-data format but ignores network configuration
-- **User-data**: Use PowerShell scripts or unattend.xml format in user-data
-- **Guest Agent**: Windows requires **QEMU Guest Agent for Windows** to be installed for IP detection
-
-**Example Windows User-data:**
-```yaml
-#ps1_sysnative
-# PowerShell script for Windows initialization
-Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
-Install-WindowsFeature -Name Web-Server -IncludeManagementTools
-```
-
-For detailed Windows support, refer to [Cloudbase-init documentation](https://cloudbase-init.readthedocs.io/).
-
-### "Pending Changes" in Cockpit
-
-**Symptom:** Cockpit shows "pending changes" for CPU/Network after VM creation
-
-**Explanation:** This is normal behavior. When a VM is created with `cpu mode='host-model'`, libvirt dynamically expands this to specific CPU features when the VM starts. VirtRigaud automatically syncs the persistent definition with the running configuration to eliminate this warning.
-
-**If the warning persists:**
-```bash
-# Manually sync the persistent definition
-virsh dumpxml <vm-name> > /tmp/vm.xml
-virsh define /tmp/vm.xml
-
-# Verify no differences remain
-diff <(virsh dumpxml <vm-name> --inactive) <(virsh dumpxml <vm-name>)
-```
-
-## Security Considerations
-
-### Production Environments
-
-For production deployments:
-
-1. **Use SSH keys** instead of passwords
-2. **Restrict sudo access** to only required commands
-3. **Enable SELinux/AppArmor** with proper contexts
-4. **Use firewall rules** to restrict libvirt host access
-5. **Use dedicated storage** with proper quotas
-6. **Regular backups** of VM configurations and storage pools
-7. **Audit logging** for all VM operations
-
-### Minimal Privilege Setup
+Check, in order:
 
 ```bash
-# Create a dedicated virtrigaud user with minimal permissions
-sudo useradd -m -s /bin/bash virtrigaud
-sudo usermod -aG libvirt,kvm virtrigaud
+# Network reach
+nc -vz <libvirt-host> 22
 
-# Restrict sudo to specific commands only
-cat <<EOF | sudo tee /etc/sudoers.d/virtrigaud
-virtrigaud ALL=(ALL) NOPASSWD: /usr/bin/virsh, /usr/bin/qemu-img, /usr/bin/chown, /usr/bin/chmod
-EOF
-sudo chmod 0440 /etc/sudoers.d/virtrigaud
+# Cred filenames in the Secret match what the provider reads
+kubectl -n virtrigaud-system get secret <libvirt-creds> -o jsonpath='{.data}' | \
+  jq 'keys'           # expect "username" + ("ssh-privatekey" or "password")
+
+# Provider container can reach the host
+kubectl -n virtrigaud-system exec deploy/<provider-deployment> -- \
+  nc -vz <libvirt-host> 22
 ```
 
-## Additional Resources
+Remember: host-key verification is **disabled** in v0.3.6 (#149), so a host
+key mismatch is *not* what you're hitting. If `nc` works and `virsh
+version` from inside the provider pod still fails, it's almost always a
+credentials / sudo / group-membership issue on the libvirt side, not SSH
+itself.
 
-- [Libvirt Documentation](https://libvirt.org/docs.html)
-- [KVM Documentation](https://www.linux-kvm.org/page/Documents)
-- [Cloud-init Documentation](https://cloudinit.readthedocs.io/)
-- [VirtRigaud Provider Documentation](./providers/tutorial.md)
-- [VirtRigaud Remote Providers Guide](./remote-providers.md)
+### Cloud-init does not run
 
-## Support
+The provider builds a cloud-init `cidata` ISO in
+`internal/providers/libvirt/cloudinit.go` and uploads it to
+`/var/lib/libvirt/images/cloud-init/` on the libvirt host (`cloudinit.go:208`).
 
-If you encounter issues not covered in this guide:
+Verify on the libvirt host:
 
-1. Check the VirtRigaud provider logs: `kubectl logs -n <namespace> deploy/virtrigaud-provider-<name>`
-2. Check libvirt logs: `sudo journalctl -u libvirtd -f`
-3. Enable debug logging: Set `LIBVIRT_DEBUG=1` in provider environment
-4. Open an issue on the VirtRigaud GitHub repository with detailed logs and configuration
+```bash
+ls -l /var/lib/libvirt/images/cloud-init/*-cidata.iso
+# Should be readable by libvirt-qemu:kvm
 
+# Verify the VM has the ISO attached
+virsh dumpxml <vm-name> | grep -A 3 "device='cdrom'"
+
+# In the guest, check cloud-init ran
+ssh <user>@<vm-ip> "cloud-init status"     # should print: status: done
+```
+
+For the network-configuration defaults that the provider injects into
+cloud-init meta-data, see the libvirt provider page at
+[Providers / Libvirt](../providers/libvirt.md#cloud-init-nocloud-iso).
+
+## Security checklist for production
+
+- [ ] SSH key auth, not password auth. Password auth requires `sshpass` and
+      makes the secret rotate-once-per-host instead of per-cluster.
+- [ ] Sudo grant restricted to the exact commands above. No `ALL`.
+- [ ] `virt-admin` user has no shell login from anywhere except the cluster
+      network range (enforced at sshd / firewalld level).
+- [ ] `NetworkPolicy` on the libvirt-provider pod that locks egress to the
+      libvirt host's IP/port only (compensates for #149).
+- [ ] SELinux/AppArmor on the libvirt host stays in Enforcing/enforce mode.
+      Diagnose denials by adjusting the profile, not by disabling it.
+- [ ] Storage pool on a dedicated filesystem with quotas, so a runaway VM
+      cannot fill the root partition.
+- [ ] `libvirtd` and `journalctl -u libvirtd` ship to your central log
+      aggregator. K8s audit logs separately ship operator-side reconcile
+      decisions.
+
+## Cross-references
+
+- [Providers / Libvirt](../providers/libvirt.md) — provider configuration,
+  capability flags, and Provider CR spec.
+- [Operations / Security](security.md) — full credential flow and the
+  STRIDE-style threat model.
+- [mTLS Configuration](../providers/security/mtls.md) — what is and is not
+  wired in v0.3.6 (#147, #149).
+- [Network Policies](../providers/security/network-policies.md) — the
+  compensating control while gRPC and SSH-host-key controls are not wired.

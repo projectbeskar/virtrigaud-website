@@ -3,530 +3,348 @@ Copyright (c) 2026 VirtRigaud Creators
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# VM Migration Guide
+# VM Migration Guide — architecture and internals
 
-This guide explains how to migrate VMs between providers using VirtRigaud's VM migration feature.
+This page is the **architectural deep dive** for VirtRigaud's `VMMigration`
+flow in v0.3.6. It complements the practical [User Guide](user-guide.md)
+and the field-by-field [API Reference](api-reference.md).
 
-## Overview
+If you want to migrate a VM today, start with the User Guide. If you want
+to understand why the controller is organized the way it is, or you are
+debugging a failed migration, read on.
 
-VirtRigaud supports migrating VMs across different providers (Libvirt, Proxmox, vSphere) without data loss. The migration uses a cold migration approach:
+## Where the code lives
 
-1. **Snapshot**: Create a snapshot of the source VM (optional)
-2. **Export**: Export the VM disk from the source provider
-3. **Transfer**: Upload the disk to intermediate storage (S3/HTTP/NFS)
-4. **Import**: Download and import the disk to the target provider
-5. **Create**: Create the target VM with the migrated disk
-6. **Validate**: Verify the migration succeeded
+| Concern | Location |
+|--------|----------|
+| `VMMigration` CRD Go types | `api/infra.virtrigaud.io/v1beta1/vmmigration_types.go` |
+| Reconciler (~2074 LOC, the most complex in the codebase per `PROJECT_CONTEXT.md`) | `internal/controller/vmmigration_controller.go` |
+| Storage validation | `internal/controller/vmmigration_controller.go:1419-1450` |
+| Per-provider Export RPC implementations | `internal/providers/{vsphere,libvirt,proxmox}/server.go` — `ExportDisk` |
+| Per-provider Import RPC implementations | Same files — `ImportDisk` (e.g. `internal/providers/libvirt/server.go:471-…` decodes `pvc://` URLs) |
+| ADR for transport + storage design | `fieldTesting/ADR-0001-transport-grpc-and-capi-integration.md` |
+| Field-test postmortems | `fieldTesting/MIGRATION_*.md` |
 
-## Prerequisites
+## v0.3.6 supported direction
 
-### Storage Backend
+!!! danger "vSphere → Libvirt is the only validated direction in v0.3.6"
+    The migration controller and all three production providers have the
+    full export / import / format-conversion code. The only direction
+    smoke-tested on a real lab cluster in v0.3.6 is **vSphere → Libvirt**
+    (see `fieldTesting/MIGRATION_SUCCESS_v0.3.62.md` and
+    `fieldTesting/MIGRATION_VERIFICATION_v0.3.62.md`).
 
-You must configure intermediate storage for disk transfer. Supported options:
+    Other directions (Libvirt → vSphere, Proxmox ↔ anything,
+    vSphere → Proxmox) are alpha-quality in v0.3.6.
 
-- **S3-compatible storage** (AWS S3, MinIO)
-- **HTTP/HTTPS file server**
-- **NFS shared storage**
+## High-level model
 
-### Provider Requirements
-
-- Source and target providers must be running and healthy
-- Source VM must be provisioned and accessible
-- Target provider must have sufficient storage space
-- Network connectivity between providers and storage
-
-## Basic Migration
-
-### Step 1: Create Storage Configuration
-
-If using S3:
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: migration-storage-credentials
-  namespace: virtrigaud-system
-type: Opaque
-stringData:
-  accessKey: "YOUR_ACCESS_KEY"
-  secretKey: "YOUR_SECRET_KEY"
+```text
+                        ┌──────────────────────────────────┐
+                        │      VMMigration CR (CRD)        │
+                        │  spec.source / target / storage  │
+                        └──────────────┬───────────────────┘
+                                       │ watch + reconcile
+                                       ▼
+                ┌───────────────────────────────────────────────┐
+                │       VMMigrationReconciler                   │
+                │  (~2074 LOC, phase machine in switch on       │
+                │   migration.Status.Phase; vmmigration_         │
+                │   controller.go:198-218)                      │
+                └───────────────┬───────────────┬───────────────┘
+                                │               │
+              ┌─────────────────┘               └─────────────────┐
+              ▼                                                   ▼
+  Annotate Source + Target Provider CRs              Create / reuse intermediate PVC
+   virtrigaud.io/migration-pvc=<pvc>                 (owned by VMMigration; ReadWriteMany)
+              │                                                   │
+              ▼                                                   │
+  ProviderReconciler rolls provider Deployments                   │
+  with the PVC added as a volume mount at                         │
+  /mnt/migration-storage/<pvc-name>/                              │
+              │                                                   │
+              └───────────────┬───────────────────────────────────┘
+                              ▼
+                ┌──────────────────────────────────┐
+                │  Migration proceeds through      │
+                │  Snapshotting → Exporting →      │
+                │  Transferring → Converting →     │
+                │  Importing → Creating →          │
+                │  Validating-Target → Ready       │
+                └──────────────────────────────────┘
 ```
 
-### Step 2: Create VMMigration Resource
+The decisive choice in v0.3.6 is that the **transfer medium is a Kubernetes
+PVC**, not an external storage system. That choice is captured in
+ADR-0001 (`fieldTesting/ADR-0001-transport-grpc-and-capi-integration.md`)
+and reflects three constraints:
 
-```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMMigration
-metadata:
-  name: migrate-vm-to-proxmox
-  namespace: default
-spec:
-  # Source VM configuration
-  source:
-    vmRef:
-      name: my-libvirt-vm
-    createSnapshot: true  # Create snapshot before migration
-  
-  # Target configuration
-  target:
-    name: my-vm-on-proxmox
-    providerRef:
-      name: proxmox-provider
-      namespace: virtrigaud-system
-    classRef:
-      name: medium-vm
-    networks:
-      - name: default
-  
-  # Storage configuration
-  storage:
-    type: s3
-    bucket: vm-migrations
-    region: us-east-1
-    endpoint: https://s3.amazonaws.com
-    credentialsSecretRef:
-      name: migration-storage-credentials
-  
-  # Migration options
-  options:
-    diskFormat: qcow2
-    compress: true
-    verifyChecksums: true
-    timeout: 4h
-    retryPolicy:
-      maxRetries: 3
-      retryDelay: 5m
-      backoffMultiplier: 2
+1. **One credentials story.** Adding S3/HTTP/NFS would force a per-backend
+   credentials/region/endpoint surface in the CRD and in every provider.
+2. **K8s-native cleanup.** Owner references on the PVC make
+   `kubectl delete vmmigration <name>` clean up the intermediate without
+   bespoke controller logic.
+3. **The operator already has a StorageClass.** Most clusters in the
+   target deployment profile have RWX storage available; demanding NFS/EFS
+   as a hard requirement is reasonable.
+
+The trade-off is that **the disk has to fit in a PVC twice** (once for
+the export, transiently again during format conversion). The User Guide's
+sizing rule (1.5–2× source disk size) is the operational consequence.
+
+## The phase machine
+
+Phases are defined at `vmmigration_types.go:363-390`. The reconciler
+dispatches on `migration.Status.Phase` at
+`vmmigration_controller.go:198-218`.
+
+```text
+                          ┌─────────┐
+                          │ Pending │
+                          └────┬────┘
+                               │
+                               ▼
+                       ┌────────────────┐
+                       │  Validating    │ ─── any error ──┐
+                       └──────┬─────────┘                 │
+                              │                           │
+                              ▼                           │
+                       ┌────────────────┐                 │
+                       │ Snapshotting   │ ─── any error ──┤
+                       └──────┬─────────┘                 │
+                              │                           │
+                              ▼                           │
+                       ┌────────────────┐                 │
+                       │   Exporting    │ ─── any error ──┤
+                       └──────┬─────────┘                 │
+                              │                           │
+                              ▼                           │
+                       ┌────────────────┐                 │
+                       │  Transferring  │ ─── any error ──┤
+                       └──────┬─────────┘                 │
+                              │                           │
+                              ▼                           │
+                       ┌────────────────┐                 │
+                       │  Converting    │ ─── any error ──┤
+                       └──────┬─────────┘                 │
+                              │                           │
+                              ▼                           │
+                       ┌────────────────┐                 │
+                       │   Importing    │ ─── any error ──┤
+                       └──────┬─────────┘                 │
+                              │                           │
+                              ▼                           │
+                       ┌────────────────┐                 │
+                       │   Creating     │ ─── any error ──┤
+                       └──────┬─────────┘                 │
+                              │                           │
+                              ▼                           ▼
+                  ┌─────────────────────┐         ┌─────────┐
+                  │  Validating-Target  │ ────────│ Failed  │
+                  └──────┬──────────────┘   error └────┬────┘
+                         │                             │
+                         ▼                             │
+                    ┌─────────┐                   retry│ (per
+                    │  Ready  │                   loop │  options.retryPolicy)
+                    └─────────┘                        │
+                                                       ▼
+                                                 ┌─────────┐
+                                                 │ Pending │
+                                                 └─────────┘
 ```
 
-### Step 3: Monitor Migration Progress
+### Per-phase responsibilities
 
-```bash
-# Watch migration status
-kubectl get vmmigration migrate-vm-to-proxmox -w
+| Phase | Reconciler entry | Key actions |
+|-------|------------------|-------------|
+| `Pending` | `handlePendingPhase` | Validates spec invariants, transitions to `Validating`. |
+| `Validating` | `handleValidatingPhase` | Resolves source + target providers; validates `storage.type=pvc`; creates/reuses the PVC; **annotates both Provider CRs** to trigger a roll; waits for both providers `Ready`. (`vmmigration_controller.go:311-365`) |
+| `Snapshotting` | `handleSnapshottingPhase` | If `spec.source.snapshotRef` is set, uses it. Else issues a `SnapshotCreate` RPC against the source provider. (`vmmigration_controller.go:369-…`) |
+| `Exporting` | `handleExportingPhase` | Calls `ExportDisk` RPC on the source provider with a `pvc://<pvc-name>/…` destination. (`vmmigration_controller.go:469-…`) |
+| `Transferring` | implicit during `Exporting` in PVC mode | In the PVC model the export *is* the transfer; the phase exists in the enum for backend models other than PVC. |
+| `Converting` | `handleConvertingPhase` | If `options.diskFormat` differs from the exported format, runs `qemu-img convert` to a sibling file in the PVC. Skipped on format match. |
+| `Importing` | `handleImportingPhase` | Calls `ImportDisk` RPC on the target provider with a `pvc://<pvc-name>/<file>` source. The libvirt provider decodes this at `internal/providers/libvirt/server.go:485-489`. |
+| `Creating` | `handleCreatingPhase` | Creates the target `VirtualMachine` CR with `importedDisk` referencing the imported disk. |
+| `Validating-Target` | `handleValidatingTargetPhase` | Runs the checks in `options.validationChecks`. `checkBoot` / `checkConnectivity` are opt-in. |
+| `Ready` | terminal success | Annotates target VM `virtrigaud.io/migration-completed=true`; the migration CR can now be safely deleted without affecting the VM. |
+| `Failed` | terminal failure | Bumps `status.retryCount`; if below `options.retryPolicy.maxRetries`, sets a requeue with `retryDelay * backoffMultiplier^retryCount` and resets `phase=Pending`. (`vmmigration_controller.go:1180-1190`) |
 
-# View detailed status
-kubectl describe vmmigration migrate-vm-to-proxmox
+### Idempotency
 
-# Check migration logs
-kubectl logs -n virtrigaud-system deployment/virtrigaud-manager -f | grep migrate-vm-to-proxmox
+Each phase handler is designed to be re-entrant. Concretely, the controller:
+
+- Stores intermediate identifiers in `status` (snapshot ID, export task ID,
+  import task ID, target VM ID) so a re-reconcile after a manager restart
+  can resume without redoing work.
+- Owns the PVC via owner references, so the K8s GC reclaims it on
+  `VMMigration` delete even if the controller never gets a chance to run a
+  cleanup pass.
+- Uses K8s annotations on the Provider CRs (`virtrigaud.io/migration-pvc`,
+  `virtrigaud.io/reconcile-trigger`) rather than direct state inside the
+  Provider's `spec`, so re-running the same migration twice does not
+  conflict with other migrations.
+
+## Reconciler instrumentation
+
+The reconciler is the most heavily instrumented in the codebase as of
+v0.3.6:
+
+- `virtrigaud_manager_reconcile_total{name="VMMigration", outcome=…}` —
+  every reconcile records one sample. The
+  G3 + K5 double-count fix in PR
+  [#106](https://github.com/projectbeskar/virtrigaud/pull/106) made this
+  accurate; earlier releases recorded two samples per errored reconcile.
+- `virtrigaud_manager_reconcile_duration_seconds{name="VMMigration"}` —
+  histogram of reconcile latency.
+- `virtrigaud_errors_total{reason="get_migration", controller="VMMigration"}` —
+  per-reason error counter.
+
+Plus the indirect signals from the provider RPCs the migration drives:
+
+- `virtrigaud_provider_rpc_requests_total{method=ExportDisk|ImportDisk|SnapshotCreate|…}` —
+  per-RPC throughput.
+- `virtrigaud_circuit_breaker_state{provider_type, provider}` — one breaker
+  per Provider CR (G6 / PR
+  [#112](https://github.com/projectbeskar/virtrigaud/pull/112)).
+  **A long migration is the most demanding test of CircuitBreaker
+  semantics** because a single migration can issue many provider RPCs back
+  to back. The CB half-open accounting fix in PR
+  [#100](https://github.com/projectbeskar/virtrigaud/pull/100) is what
+  makes this reliable in v0.3.6.
+
+See [Resilience](../operations/resilience.md#circuitbreaker-on-the-provider-grpc-path-v036)
+for the breaker's behavior in detail.
+
+## Provider-side responsibilities
+
+The proto contract for the migration-specific RPCs is in
+`proto/provider/v1/provider.proto`:
+
+```text
+rpc ExportDisk(ExportDiskRequest) returns (ExportDiskResponse);   // proto.proto:296
+rpc ImportDisk(ImportDiskRequest) returns (ImportDiskResponse);   // proto.proto:297
+rpc GetDiskInfo(GetDiskInfoRequest) returns (GetDiskInfoResponse);// proto.proto:298
+rpc SnapshotCreate(SnapshotCreateRequest) returns (SnapshotCreateResponse); // proto.proto:282
 ```
 
-### Step 4: Verify Migration
-
-Once the migration reaches `Ready` phase:
-
-```bash
-# Check target VM was created
-kubectl get virtualmachine my-vm-on-proxmox
-
-# Verify VM is running
-kubectl describe virtualmachine my-vm-on-proxmox
-```
-
-## Advanced Features
-
-### Using Existing Snapshot
-
-To migrate from a specific snapshot:
-
-```yaml
-spec:
-  source:
-    vmRef:
-      name: my-vm
-    snapshotRef:
-      name: pre-migration-snapshot
-    createSnapshot: false  # Use existing snapshot
-```
-
-### Delete Source VM After Migration
-
-```yaml
-spec:
-  source:
-    vmRef:
-      name: my-vm
-    deleteAfterMigration: true  # Delete source VM after successful migration
-```
-
-### Cross-Namespace Migration
-
-```yaml
-spec:
-  source:
-    vmRef:
-      name: vm-in-prod
-      namespace: production
-    providerRef:
-      name: vsphere-provider
-      namespace: infrastructure
-  
-  target:
-    name: vm-in-staging
-    namespace: staging
-    providerRef:
-      name: proxmox-provider
-      namespace: infrastructure
-```
-
-### NFS Storage Backend
-
-For on-premises deployments:
-
-```yaml
-spec:
-  storage:
-    type: nfs
-    endpoint: /mnt/nfs-migration-share
-```
-
-The NFS share must be mounted on all provider pods at the same path.
-
-### HTTP Storage Backend
-
-For simple file server storage:
-
-```yaml
-spec:
-  storage:
-    type: http
-    endpoint: http://fileserver.local/migrations
-```
-
-## Migration Phases
-
-The migration goes through the following phases:
-
-| Phase | Description |
-|-------|-------------|
-| `Pending` | Migration created, awaiting processing |
-| `Validating` | Validating source VM, target provider, storage |
-| `Snapshotting` | Creating snapshot of source VM |
-| `Exporting` | Exporting disk from source provider |
-| `Importing` | Importing disk to target provider |
-| `Creating` | Creating target VM |
-| `ValidatingTarget` | Verifying target VM is ready |
-| `Ready` | Migration completed successfully |
-| `Failed` | Migration failed (will retry if configured) |
-
-## Monitoring
-
-### Status Conditions
-
-```bash
-kubectl get vmmigration migrate-vm -o jsonpath='{.status.conditions}' | jq
-```
-
-Key conditions:
-- `Ready`: Migration completed
-- `Validating`: Validation in progress
-- `Exporting`: Disk export in progress
-- `Importing`: Disk import in progress
-- `Failed`: Migration failed
-
-### Progress Tracking
-
-```bash
-kubectl get vmmigration migrate-vm -o jsonpath='{.status.progress}' | jq
-```
-
-Shows:
-- Bytes transferred
-- Overall percentage
-- Current phase
-- Estimated time remaining
-
-## Troubleshooting
-
-### Migration Stuck in Exporting Phase
-
-**Problem**: Export task not completing
-
-**Solutions**:
-1. Check source provider is healthy: `kubectl get provider <name>`
-2. Verify storage credentials are correct
-3. Check network connectivity to storage
-4. Review provider logs for errors
-
-### Migration Failed with Storage Error
-
-**Problem**: Can't access intermediate storage
-
-**Solutions**:
-1. Verify storage configuration is correct
-2. Check credentials secret exists and is valid
-3. Test connectivity: `aws s3 ls s3://bucket` or curl for HTTP
-4. Ensure storage has sufficient space
-
-### Target VM Creation Failed
-
-**Problem**: VM creation fails on target provider
-
-**Solutions**:
-1. Check target provider has sufficient resources
-2. Verify VMClass and network references exist
-3. Review target provider logs
-4. Check imported disk is valid
-
-### Migration Keeps Retrying
-
-**Problem**: Migration retries but keeps failing
-
-**Solutions**:
-1. Check the error message in status.message
-2. Review the retry count: `kubectl get vmmigration -o jsonpath='{.status.retryCount}'`
-3. If max retries reached, migration will stay failed
-4. Delete and recreate migration after fixing root cause
-
-## Cleanup
-
-### VM Lifecycle and Deletion Behavior
-
-**Important**: VirtRigaud follows a separation of concerns pattern for VM lifecycle management:
-
-- **Successful migrations**: The target `VirtualMachine` is **completely independent** of the `VMMigration` resource
-- **Failed migrations**: Partially created VMs are automatically cleaned up
-- **Migration deletion**: Deleting a `VMMigration` resource **never** deletes successfully migrated VMs
-
-This ensures that:
-- ✅ Production VMs persist independently after migration completes
-- ✅ You can safely delete migration resources to clean up artifacts
-- ✅ Failed/partial VMs are automatically cleaned up
-- ✅ Clear audit trail remains via VM annotations
-
-### Manual Cleanup
-
-Delete the migration resource after completion:
-
-```bash
-kubectl delete vmmigration migrate-vm
-```
-
-This automatically cleans up:
-- ✅ Intermediate storage artifacts (PVCs, uploaded disks)
-- ✅ Migration-created snapshots
-- ✅ Partially created target VMs (only if migration failed)
-- ❌ **Never** deletes successfully migrated VMs
-
-The migrated VM remains and must be deleted separately if needed:
-
-```bash
-# Only if you want to delete the migrated VM
-kubectl delete virtualmachine my-vm-migrated
-```
-
-### Migration Completion Marker
-
-When a migration completes successfully, the target VM receives a special annotation:
-
-```yaml
-metadata:
-  annotations:
-    virtrigaud.io/migration-completed: "true"
-    virtrigaud.io/migration-completed-at: "2025-11-08T15:30:00Z"
-```
-
-This marker:
-- Protects the VM from deletion when the migration is removed
-- Provides an audit trail of when the migration completed
-- Indicates the VM is production-ready and independent
-
-### Cleanup Configuration
-
-Control cleanup behavior for source resources:
-
-```yaml
-spec:
-  source:
-    deleteAfterMigration: true  # Delete source VM after success
-  
-  options:
-    cleanupPolicy:
-      keepSnapshots: false  # Delete migration snapshots
-      keepIntermediateStorage: false  # Delete storage artifacts
-```
-
-## Best Practices
-
-### 1. Pre-Migration Checklist
-
-- [ ] Verify source VM is in a consistent state
-- [ ] Create a manual snapshot for rollback
-- [ ] Test storage connectivity
-- [ ] Verify sufficient storage space (2x VM disk size)
-- [ ] Plan for downtime if source VM must be powered off
-
-### 2. Storage Selection
-
-- **S3**: Best for cloud deployments, multi-site migrations
-- **NFS**: Best for on-premises, high-speed local network
-- **HTTP**: Simple setups, temporary migrations
-
-### 3. Network Considerations
-
-- Migration time depends on network bandwidth
-- 100GB VM over 1Gbps network: ~15 minutes
-- 1TB VM over 100Mbps network: ~24 hours
-- Use compression for slow networks
-
-### 4. Validation
-
-After migration:
-- Test VM boots successfully
-- Verify applications work correctly
-- Check network connectivity
-- Validate disk integrity
-
-### 5. Rollback Plan
-
-Before migration:
-1. Document source VM configuration
-2. Create manual snapshot
-3. Test restore procedure
-4. Keep source VM until validation complete
-
-## Performance Tuning
-
-### Compression
-
-Enable compression for slower networks:
-
-```yaml
-spec:
-  options:
-    compress: true  # Trade CPU for bandwidth
-```
-
-### Parallel Migrations
-
-Run multiple migrations concurrently:
-
-```bash
-# Migrate multiple VMs
-for vm in vm1 vm2 vm3; do
-  kubectl apply -f migration-${vm}.yaml
-done
-```
-
-### Timeout Configuration
-
-Adjust timeout for large VMs:
-
-```yaml
-spec:
-  options:
-    timeout: 8h  # For very large VMs
-```
-
-## Security Considerations
-
-### Storage Credentials
-
-- Store credentials in Kubernetes Secrets
-- Use RBAC to restrict access
-- Rotate credentials regularly
-- Use encrypted storage (S3 SSE, HTTPS)
-
-### Network Security
-
-- Use HTTPS/TLS for all transfers
-- Verify checksums are enabled
-- Use VPN for cross-site migrations
-- Isolate migration traffic if possible
-
-## Examples
-
-See `docs/examples/` for complete examples:
-
-- `vmmigration-basic.yaml`: Simple migration
-- `vmmigration-s3.yaml`: Migration with S3 storage
-- `vmmigration-nfs.yaml`: Migration with NFS storage
-- `vmmigration-advanced.yaml`: Advanced configuration
-- `vmmigration-cross-namespace.yaml`: Cross-namespace migration
-
-## How Migrated VMs Are Created
-
-### ImportedDisk Feature
-
-Migrated VMs use the `ImportedDisk` field instead of `ImageRef` in the VirtualMachine spec. This provides:
-
-**Benefits:**
-- Full audit trail via `migrationRef`
-- Disk metadata (format, source, size)
-- Type-safe validation
-- Clear separation between template-based and disk-based VMs
-
-**Example:**
-
-When a migration completes, the target VM is automatically created with:
+Each in-tree provider implements these:
+
+| Provider | Export | Import | Status |
+|---------|--------|--------|--------|
+| **vSphere** | `internal/providers/vsphere/server.go` — uses govmomi `NfcLease` to download the VM's disk to the PVC path. | vSphere is not a primary migration *target* in v0.3.6, but the RPC is wired. | Source side validated end-to-end. |
+| **Libvirt** | Uses `virsh vol-download` (via the SSH'd `virsh` wrapper) to write the disk to the PVC. | `ImportDisk` decodes `pvc://` URLs to local PVC paths (`internal/providers/libvirt/server.go:485-489`) and uses `virsh vol-upload` (or copy + define) to register the imported volume. | Target side validated end-to-end. |
+| **Proxmox** | Uses the Proxmox API to export the disk. | Uses the Proxmox API to import the disk. | Compiles; not validated in v0.3.6 lab. |
+| **Mock** | No-op writes. | No-op reads. | Used in unit tests. |
+
+The **PVC URL** is the consistent contract between the controller and the
+providers. The source provider writes `pvc://<name>/disk.<fmt>` to its
+mounted path; the target provider reads it from its mounted path. There is
+no network transfer between providers — the data only crosses the PVC.
+
+## Why the migration controller is the failure-prone one
+
+Per `PROJECT_CONTEXT.md`, `vmmigration_controller.go` is the most complex
+file in the codebase. The reasons are visible from the phase machine:
+
+- **It owns external state in two providers and one PVC.** A simple VM
+  reconciler owns external state in one provider. The migration controller
+  has to coordinate a multi-actor dance and survive any of those actors
+  failing.
+- **The Provider-CR-roll step is unusual.** Most reconcilers don't modify
+  *other* CRs to make their work go. The migration controller mutates both
+  Provider CRs to add the PVC mount.
+- **Long-running RPCs.** Exports and imports for large disks can take
+  hours. The keep-alive tuning in
+  [v0.3.51 (`GRPC_CONNECTION_AGE_FIX`)](https://github.com/projectbeskar/virtrigaud/blob/main/fieldTesting/GRPC_CONNECTION_AGE_FIX_v0.3.52.md)
+  was a direct response to migrations failing because the SDK server was
+  closing connections at 30s.
+- **Many failure modes have the same surface.** "Phase=Failed, ProviderError"
+  could be a credentials problem, a network partition, an SSH host issue,
+  a disk-space issue on the PVC, a format-conversion error, a target VM
+  with the same name already existing, etc. The reconciler tries to set
+  helpful `status.conditions` but operators routinely need to consult the
+  provider logs.
+
+The fieldTesting postmortems (`fieldTesting/MIGRATION_*`) catalogue the
+real-world failures the team has shipped fixes for. If your migration is
+failing in a way that doesn't match the [User Guide
+troubleshooting](user-guide.md#failure-modes-and-recovery), those notes
+are worth reading even though they describe earlier versions.
+
+## ImportedDisk vs ImageRef on the target VM
+
+When the migration creates the target `VirtualMachine`, it does **not** set
+`spec.imageRef`. It sets `spec.importedDisk` instead:
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
 metadata:
-  name: my-vm-migrated
-  namespace: default
+  name: my-vm-libvirt
+  namespace: applications
   annotations:
-    virtrigaud.io/migrated-from: "default/my-source-vm"
-    virtrigaud.io/migration: "default/my-migration"
-    virtrigaud.io/imported-disk-id: "my-vm-migrated-disk"
+    virtrigaud.io/migrated-from: applications/my-vsphere-vm
+    virtrigaud.io/migration: applications/my-vm-to-libvirt
+    virtrigaud.io/migration-completed: "true"
+    virtrigaud.io/migration-completed-at: "2026-05-23T11:14:35Z"
 spec:
   providerRef:
-    name: target-provider
+    name: libvirt-prod
+    namespace: virtrigaud-system
   classRef:
     name: medium-vm
-  # ImportedDisk is set instead of imageRef
   importedDisk:
-    diskID: my-vm-migrated-disk
+    diskID: my-vm-libvirt-disk
     format: qcow2
     source: migration
     migrationRef:
-      name: my-migration
+      name: my-vm-to-libvirt
   networks:
-    - name: default
+    - name: corp-bridge
 ```
 
-**Key Points:**
-- `importedDisk` and `imageRef` are mutually exclusive
-- `importedDisk.diskID` references the disk imported during migration
-- `migrationRef` provides traceability back to the migration resource
-- Providers automatically resolve disk paths based on `diskID`
+Key properties:
 
-### Manual Disk Import (Advanced)
+- `importedDisk` and `imageRef` are **mutually exclusive** on a
+  `VirtualMachine` spec.
+- `importedDisk.diskID` is the provider-specific disk identifier (e.g.
+  libvirt volume name) — the provider knows how to resolve this to a path.
+- `importedDisk.migrationRef` is purely audit / traceability. The target
+  VM continues to function even after the `VMMigration` CR is deleted.
+- `importedDisk.source` is one of `migration`, `clone`, `import`, `snapshot`,
+  `manual`. The migration controller sets it to `migration`.
 
-You can also create VMs from manually imported disks:
+You can also create a `VirtualMachine` with `importedDisk` **outside the
+migration flow** — useful for adopting an existing disk from a manual
+import or a clone. Set `source: manual` in that case.
 
-```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
-metadata:
-  name: manual-disk-vm
-spec:
-  providerRef:
-    name: libvirt-provider
-  classRef:
-    name: medium-vm
-  importedDisk:
-    diskID: my-manual-disk
-    path: /var/lib/libvirt/images/my-manual-disk.qcow2  # Optional: explicit path
-    format: qcow2
-    source: manual  # Options: migration, clone, import, snapshot, manual
-    sizeGiB: 40  # Optional: for capacity planning
-```
+## Roadmap
 
-This is useful for:
-- Importing VMs from external sources
-- Using cloned disks
-- Working with snapshot-based disks
-- Migrating VMs manually
+The directions explicitly on the roadmap for after v0.3.6:
 
-## API Reference
+- **Validating the other provider directions.** Libvirt → vSphere is the
+  inverse and conceptually trivial — the RPCs exist, the format conversion
+  is `qcow2 → vmdk`. It is gated on a lab cycle, not new code.
+- **Cross-cluster migration.** v0.3.6 assumes both providers are managed
+  by the same VirtRigaud manager. Cross-cluster (federated) migrations
+  would require a different transfer medium (probably S3 or HTTP) and is
+  not on the v0.3.x scope.
+- **Live migration.** All v0.3.x migrations are cold (snapshot-based).
+  Live migration within a hypervisor family (vSphere vMotion, libvirt
+  `migrate`) is a separate feature, not a `VMMigration` mode.
+- **Per-Provider CircuitBreaker thresholds.** v0.3.6 uses
+  `resilience.DefaultConfig()` uniformly. A long migration that legitimately
+  takes hours might want a higher `FailureThreshold` than a short
+  `Describe`-driven reconcile loop. Tracked on the resilience roadmap.
 
-For detailed API documentation, see:
-- [VMMigration CRD Reference](crds.md)
-- [Migration Status Fields](crds.md)
-- [Storage Configuration](crds.md)
-- [ImportedDiskRef API](crds.md)
+## See also
 
+- [VM Migration User Guide](user-guide.md) — practical how-to.
+- [VM Migration API Reference](api-reference.md) — every spec field with
+  defaults and validation rules.
+- [Resilience](../operations/resilience.md) — CircuitBreaker behavior
+  during long migrations.
+- [Full CRD Reference](../references/generated-crd-docs.md#vmmigration) —
+  generated CRD documentation.
+- [`fieldTesting/ADR-0001-transport-grpc-and-capi-integration.md`](https://github.com/projectbeskar/virtrigaud/blob/main/fieldTesting/ADR-0001-transport-grpc-and-capi-integration.md) — design rationale for gRPC + PVC.
+- Field-test postmortems: `fieldTesting/MIGRATION_*.md` in the main repo.
