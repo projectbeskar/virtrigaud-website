@@ -211,7 +211,6 @@ See the [Release Guide](https://github.com/projectbeskar/virtrigaud/blob/main/do
 
 - **[GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues)** - Bug reports, feature requests
 - **[GitHub Discussions](https://github.com/projectbeskar/virtrigaud/discussions)** - Questions, ideas
-- **[Slack Channel](https://kubernetes.slack.com/messages/virtrigaud)** - Real-time chat
 - **[Contributing Guide](contributing.md)** - How to contribute
 
 ### Code of Conduct

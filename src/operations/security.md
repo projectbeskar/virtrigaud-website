@@ -188,7 +188,6 @@ For security-related questions that are not vulnerabilities, you can:
 
 - Open a GitHub Discussion in the Security category
 - Email security@virtrigaud.io
-- Join the #virtrigaud-security channel on Kubernetes Slack
 
 ## Recognition
 
