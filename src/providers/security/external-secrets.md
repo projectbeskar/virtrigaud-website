@@ -3,26 +3,114 @@ Copyright (c) 2026 VirtRigaud Creators
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# External Secrets Management
+# External Secrets for Provider Credentials
 
-This guide covers integrating VirtRigaud providers with external secret management systems using ExternalSecrets operators and best practices for credential security.
+This page shows how to wire [External Secrets Operator](https://external-secrets.io) (ESO) into a VirtRigaud **v0.3.6** deployment so provider credentials are sourced from your central secret store (Vault / AWS Secrets Manager / Azure Key Vault / GCP Secret Manager / etc.) rather than committed to Git or hand-applied with `kubectl create secret`.
 
-## Overview
+The key constraint is: **VirtRigaud providers read credentials as named files**, not as env vars. So the `ExternalSecret` you produce must materialise a `Secret` whose **keys match exactly** what each provider's `New()` function reads.
 
-External secret management provides secure, centralized credential storage and automatic secret rotation. Supported systems include:
+## How VirtRigaud consumes the Secret
 
-- **HashiCorp Vault**: Enterprise secret management with dynamic secrets
-- **AWS Secrets Manager**: Cloud-native secret storage with automatic rotation
-- **Azure Key Vault**: Azure-integrated secret management
-- **Google Secret Manager**: GCP secret storage service
-- **Kubernetes External Secrets**: Generic external secret integration
+```
+ExternalSecret  ────►  Secret (operator namespace)
+                              │
+                              │ Provider.spec.credentialSecretRef.name = "<Secret name>"
+                              ▼
+                       ProviderReconciler
+                              │
+                              │ mounts the Secret read-only at
+                              │ /etc/virtrigaud/credentials inside the provider pod
+                              ▼
+                       Provider pod reads each Secret key as a FILE
+                       (e.g. /etc/virtrigaud/credentials/username)
+```
 
-## External Secrets Operator Setup
+References:
 
-### Installation
+- `internal/controller/provider_controller.go:692-700` — controller mounts the Secret.
+- `internal/providers/vsphere/server.go:129-140` — vSphere reads `username` and `password`.
+- `internal/providers/libvirt/virsh.go:115-133` — libvirt reads `username`, `password`, `ssh-privatekey`.
+- `internal/providers/proxmox/server.go:69-72` — Proxmox reads `token_id`, `token_secret`, `username`, `password`.
+
+The implication: **every example below must produce a Secret whose `.data` keys match those filenames exactly**. Wrong key names = silent credential failure at provider startup (validation will fail with "no valid credentials found in environment variables or mounted files" for libvirt, or "username and password are required" for vSphere).
+
+## Per-provider key requirements (authoritative)
+
+### vSphere
+
+```yaml
+# The Secret your ExternalSecret must produce
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vsphere-prod-credentials
+type: Opaque
+data:
+  username: <base64>  # vCenter SSO principal, e.g. virtrigaud@vsphere.local
+  password: <base64>
+```
+
+Optional additional fields are not consumed by the vSphere provider. Do **not** include `server` or `endpoint` in the Secret — the endpoint comes from `Provider.spec.endpoint`, not from credentials.
+
+### Libvirt (SSH password auth)
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: libvirt-prod-credentials
+type: Opaque
+data:
+  username: <base64>  # SSH username (also injected into qemu+ssh:// URI)
+  password: <base64>  # SSH password
+```
+
+### Libvirt (SSH key auth — preferred)
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: libvirt-prod-credentials
+type: Opaque
+data:
+  username: <base64>          # SSH username
+  ssh-privatekey: <base64>    # PEM-encoded SSH private key
+```
+
+The key name is `ssh-privatekey` (no underscore) to match the read at `internal/providers/libvirt/virsh.go:129`.
+
+### Proxmox (API token — required for production)
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: proxmox-prod-credentials
+type: Opaque
+data:
+  token_id: <base64>      # e.g. virtrigaud@pve!vrtg-token
+  token_secret: <base64>  # the token's UUID value
+```
+
+### Proxmox (password — development/CI only)
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: proxmox-dev-credentials
+type: Opaque
+data:
+  username: <base64>  # e.g. virtrigaud@pve
+  password: <base64>
+```
+
+See the [Proxmox provider page](../proxmox.md#authentication) for why API tokens are required in production.
+
+## Installing ESO
 
 ```bash
-# Install External Secrets Operator
 helm repo add external-secrets https://charts.external-secrets.io
 helm repo update
 
@@ -32,167 +120,155 @@ helm install external-secrets external-secrets/external-secrets \
   --set installCRDs=true
 ```
 
-### Basic Configuration
+## HashiCorp Vault
 
-```yaml
-# ServiceAccount for External Secrets Operator
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: external-secrets
-  namespace: virtrigaud-system
-  annotations:
-    # For AWS IRSA (IAM Roles for Service Accounts)
-    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/external-secrets-role
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: external-secrets
-rules:
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["create", "update", "patch", "delete", "get", "list", "watch"]
-  - apiGroups: ["external-secrets.io"]
-    resources: ["*"]
-    verbs: ["*"]
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: external-secrets
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: external-secrets
-subjects:
-  - kind: ServiceAccount
-    name: external-secrets
-    namespace: virtrigaud-system
-```
-
-## HashiCorp Vault Integration
-
-### Vault SecretStore
+### SecretStore
 
 ```yaml
 apiVersion: external-secrets.io/v1beta1
 kind: SecretStore
 metadata:
-  name: vault-secret-store
+  name: vault-virtrigaud
   namespace: virtrigaud-system
 spec:
   provider:
     vault:
-      server: "https://vault.example.com:8200"
-      path: "secret"
-      version: "v2"
-      auth:
-        # Use Kubernetes service account for authentication
-        kubernetes:
-          mountPath: "kubernetes"
-          role: "virtrigaud-role"
-          serviceAccountRef:
-            name: "external-secrets"
-
----
-# For multi-namespace access
-apiVersion: external-secrets.io/v1beta1
-kind: ClusterSecretStore
-metadata:
-  name: vault-cluster-store
-spec:
-  provider:
-    vault:
-      server: "https://vault.example.com:8200"
+      server: "https://vault.internal.example.com:8200"
       path: "secret"
       version: "v2"
       auth:
         kubernetes:
           mountPath: "kubernetes"
-          role: "virtrigaud-cluster-role"
+          role: "virtrigaud"
           serviceAccountRef:
-            name: "external-secrets"
-            namespace: "virtrigaud-system"
+            name: external-secrets
 ```
 
-### Vault Policy Configuration
+The Vault role `virtrigaud` should be bound to the `external-secrets` ServiceAccount in `virtrigaud-system` and have policy granting `read` on `secret/data/virtrigaud/*`.
 
-```hcl
-# Vault policy for VirtRigaud secrets
-path "secret/data/virtrigaud/*" {
-  capabilities = ["read"]
-}
+### vSphere via Vault
 
-path "secret/data/providers/*" {
-  capabilities = ["read"]
-}
+Stored in Vault at `secret/data/virtrigaud/vsphere-prod`:
 
-# Dynamic database credentials
-path "database/creds/readonly" {
-  capabilities = ["read"]
-}
-
-# PKI for TLS certificates
-path "pki/issue/virtrigaud" {
-  capabilities = ["create", "update"]
+```json
+{
+  "username": "virtrigaud@vsphere.local",
+  "password": "..."
 }
 ```
 
-### vSphere Credentials from Vault
+Materialise as a K8s Secret with the correct keys:
 
 ```yaml
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
-  name: vsphere-credentials
-  namespace: vsphere-providers
+  name: vsphere-prod-credentials
+  namespace: virtrigaud-system
 spec:
   refreshInterval: 1h
   secretStoreRef:
-    name: vault-secret-store
+    name: vault-virtrigaud
     kind: SecretStore
   target:
-    name: vsphere-credentials
+    name: vsphere-prod-credentials  # must match Provider.spec.credentialSecretRef.name
     creationPolicy: Owner
-    template:
-      type: Opaque
-      data:
-        username: "{{ .username }}"
-        password: "{{ .password }}"
-        server: "{{ .server }}"
-        # Optional: TLS certificate
-        ca.crt: "{{ .ca_cert | b64dec }}"
   data:
     - secretKey: username
       remoteRef:
-        key: secret/data/providers/vsphere
+        key: secret/data/virtrigaud/vsphere-prod
         property: username
     - secretKey: password
       remoteRef:
-        key: secret/data/providers/vsphere
+        key: secret/data/virtrigaud/vsphere-prod
         property: password
-    - secretKey: server
-      remoteRef:
-        key: secret/data/providers/vsphere
-        property: server
-    - secretKey: ca_cert
-      remoteRef:
-        key: secret/data/providers/vsphere
-        property: ca_cert
 ```
 
-## AWS Secrets Manager Integration
+### Libvirt SSH key via Vault
 
-### AWS SecretStore with IRSA
+Stored at `secret/data/virtrigaud/libvirt-prod`:
+
+```json
+{
+  "username": "virtrigaud",
+  "ssh_privatekey": "-----BEGIN OPENSSH PRIVATE KEY-----\n..."
+}
+```
+
+```yaml
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: libvirt-prod-credentials
+  namespace: virtrigaud-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-virtrigaud
+    kind: SecretStore
+  target:
+    name: libvirt-prod-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: username
+      remoteRef:
+        key: secret/data/virtrigaud/libvirt-prod
+        property: username
+    # NOTE the secretKey value: ssh-privatekey (hyphen), matching the file
+    # that internal/providers/libvirt/virsh.go:129 reads. The Vault property
+    # name on the right is whatever you store it under; the LEFT side must
+    # match the provider's expected filename exactly.
+    - secretKey: ssh-privatekey
+      remoteRef:
+        key: secret/data/virtrigaud/libvirt-prod
+        property: ssh_privatekey
+```
+
+### Proxmox API token via Vault
+
+Stored at `secret/data/virtrigaud/proxmox-prod`:
+
+```json
+{
+  "token_id": "virtrigaud@pve!vrtg-token",
+  "token_secret": "12345678-1234-1234-1234-123456789012"
+}
+```
+
+```yaml
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: proxmox-prod-credentials
+  namespace: virtrigaud-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-virtrigaud
+    kind: SecretStore
+  target:
+    name: proxmox-prod-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: token_id
+      remoteRef:
+        key: secret/data/virtrigaud/proxmox-prod
+        property: token_id
+    - secretKey: token_secret
+      remoteRef:
+        key: secret/data/virtrigaud/proxmox-prod
+        property: token_secret
+```
+
+## AWS Secrets Manager
+
+### SecretStore with IRSA
 
 ```yaml
 apiVersion: external-secrets.io/v1beta1
 kind: SecretStore
 metadata:
-  name: aws-secrets-manager
+  name: aws-virtrigaud
   namespace: virtrigaud-system
 spec:
   provider:
@@ -200,13 +276,14 @@ spec:
       service: SecretsManager
       region: us-west-2
       auth:
-        # Use IAM Roles for Service Accounts (IRSA)
-        serviceAccount:
-          name: external-secrets
-          namespace: virtrigaud-system
+        jwt:
+          serviceAccountRef:
+            name: external-secrets
+```
 
----
-# IAM Policy for the IRSA role
+The ESO ServiceAccount needs an IAM role (via IRSA annotation) with this policy:
+
+```json
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -216,663 +293,154 @@ spec:
         "secretsmanager:GetSecretValue",
         "secretsmanager:DescribeSecret"
       ],
-      "Resource": [
-        "arn:aws:secretsmanager:us-west-2:ACCOUNT:secret:virtrigaud/*"
-      ]
+      "Resource": "arn:aws:secretsmanager:us-west-2:ACCOUNT:secret:virtrigaud/*"
     }
   ]
 }
 ```
 
-### AWS Secret Configuration
+### vSphere from AWS Secrets Manager
+
+Stored in AWS as JSON under the secret name `virtrigaud/vsphere-prod`:
+
+```json
+{ "username": "virtrigaud@vsphere.local", "password": "..." }
+```
 
 ```yaml
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
-  name: aws-provider-credentials
-  namespace: provider-namespace
+  name: vsphere-prod-credentials
+  namespace: virtrigaud-system
 spec:
-  refreshInterval: 15m
+  refreshInterval: 1h
   secretStoreRef:
-    name: aws-secrets-manager
+    name: aws-virtrigaud
     kind: SecretStore
   target:
-    name: provider-credentials
+    name: vsphere-prod-credentials
     creationPolicy: Owner
   data:
-    - secretKey: credentials.json
+    - secretKey: username
       remoteRef:
-        key: "virtrigaud/provider-credentials"
-        property: "credentials"
-    - secretKey: api-key
+        key: virtrigaud/vsphere-prod
+        property: username
+    - secretKey: password
       remoteRef:
-        key: "virtrigaud/api-keys"
-        property: "provider-api-key"
+        key: virtrigaud/vsphere-prod
+        property: password
 ```
 
-## Azure Key Vault Integration
-
-### Azure SecretStore
+## Azure Key Vault
 
 ```yaml
 apiVersion: external-secrets.io/v1beta1
 kind: SecretStore
 metadata:
-  name: azure-key-vault
+  name: azure-virtrigaud
   namespace: virtrigaud-system
 spec:
   provider:
     azurekv:
-      vaultUrl: "https://virtrigaud-vault.vault.azure.net/"
-      authType: "ManagedIdentity"
-      # Or use Service Principal:
-      # authType: "ServicePrincipal"
-      # authSecretRef:
-      #   clientId:
-      #     name: azure-secret
-      #     key: client-id
-      #   clientSecret:
-      #     name: azure-secret
-      #     key: client-secret
-      tenantId: "tenant-id-here"
-
----
-# Managed Identity setup (ARM template or Terraform)
-apiVersion: v1
-kind: Secret
-metadata:
-  name: azure-config
-  namespace: virtrigaud-system
-type: Opaque
-data:
-  # Base64 encoded values
-  tenant-id: dGVuYW50LWlkLWhlcmU=
-  client-id: Y2xpZW50LWlkLWhlcmU=
-  client-secret: Y2xpZW50LXNlY3JldC1oZXJl
+      vaultUrl: "https://virtrigaud-kv.vault.azure.net/"
+      authType: WorkloadIdentity
+      serviceAccountRef:
+        name: external-secrets
 ```
 
-### Azure Key Vault Secret
+In Azure Key Vault, store each value as a separate secret:
+
+- `virtrigaud-vsphere-prod-username`
+- `virtrigaud-vsphere-prod-password`
 
 ```yaml
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
-  name: azure-provider-secrets
-  namespace: provider-namespace
+  name: vsphere-prod-credentials
+  namespace: virtrigaud-system
 spec:
-  refreshInterval: 30m
+  refreshInterval: 1h
   secretStoreRef:
-    name: azure-key-vault
+    name: azure-virtrigaud
     kind: SecretStore
   target:
-    name: provider-secrets
+    name: vsphere-prod-credentials
     creationPolicy: Owner
   data:
-    - secretKey: subscription-id
+    - secretKey: username
       remoteRef:
-        key: "azure-subscription-id"
-    - secretKey: resource-group
+        key: virtrigaud-vsphere-prod-username
+    - secretKey: password
       remoteRef:
-        key: "azure-resource-group"
-    - secretKey: client-certificate
-      remoteRef:
-        key: "azure-client-cert"
+        key: virtrigaud-vsphere-prod-password
 ```
 
-## Google Secret Manager Integration
-
-### GCP SecretStore
+## Google Secret Manager
 
 ```yaml
 apiVersion: external-secrets.io/v1beta1
 kind: SecretStore
 metadata:
-  name: gcp-secret-manager
+  name: gcp-virtrigaud
   namespace: virtrigaud-system
 spec:
   provider:
     gcpsm:
-      projectId: "your-gcp-project"
+      projectID: my-gcp-project
       auth:
-        # Use Workload Identity
         workloadIdentity:
           clusterLocation: us-central1
           clusterName: virtrigaud-cluster
           serviceAccountRef:
             name: external-secrets
-            namespace: virtrigaud-system
-
----
-# Workload Identity binding
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: external-secrets
-  namespace: virtrigaud-system
-  annotations:
-    iam.gke.io/gcp-service-account: virtrigaud-secrets@PROJECT.iam.gserviceaccount.com
 ```
 
-### GCP Secret Configuration
+Store as `projects/my-gcp-project/secrets/virtrigaud-vsphere-prod-username` etc., and reference per-key as in the Azure example.
 
-```yaml
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: gcp-provider-secrets
-  namespace: provider-namespace
-spec:
-  refreshInterval: 20m
-  secretStoreRef:
-    name: gcp-secret-manager
-    kind: SecretStore
-  target:
-    name: gcp-provider-credentials
-    creationPolicy: Owner
-  data:
-    - secretKey: service-account.json
-      remoteRef:
-        key: "virtrigaud-service-account"
-        version: "latest"
-    - secretKey: project-id
-      remoteRef:
-        key: "gcp-project-id"
-        version: "latest"
-```
+## What ESO does NOT solve in v0.3.6
 
-## Provider-Specific Configurations
+ESO solves **provisioning** of the K8s Secret. It does **not** solve:
 
-### vSphere Provider with Dynamic Credentials
+1. **Rotation propagation to the running provider pod.** When ESO refreshes the K8s Secret, the kubelet eventually updates the projected files inside the pod (typically within `syncFrequency`, default 1 minute), but the provider only reads the files at startup. **Rotating a credential requires a provider pod restart** in v0.3.6. There is no in-process credential reload.
 
-```yaml
-# Vault configuration for vSphere dynamic credentials
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: vsphere-dynamic-credentials
-  namespace: vsphere-providers
-spec:
-  refreshInterval: 15m  # Short refresh for dynamic credentials
-  secretStoreRef:
-    name: vault-secret-store
-    kind: SecretStore
-  target:
-    name: vsphere-dynamic-creds
-    creationPolicy: Owner
-    template:
-      type: Opaque
-      data:
-        username: "{{ .username }}"
-        password: "{{ .password }}"
-        server: "{{ .server }}"
-        session_ttl: "{{ .lease_duration }}"
-  data:
-    - secretKey: username
-      remoteRef:
-        key: "vsphere/creds/dynamic-role"
-        property: "username"
-    - secretKey: password
-      remoteRef:
-        key: "vsphere/creds/dynamic-role"
-        property: "password"
-    - secretKey: server
-      remoteRef:
-        key: "secret/data/vsphere/static"
-        property: "server"
-    - secretKey: lease_duration
-      remoteRef:
-        key: "vsphere/creds/dynamic-role"
-        property: "lease_duration"
+    Workaround: pair the `ExternalSecret` with a deployment-restart hook (e.g. `stakater/Reloader`) keyed on the Secret name. Stakater Reloader's annotation:
 
----
-# Provider deployment using dynamic credentials
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: vsphere-provider
-  namespace: vsphere-providers
-spec:
-  template:
-    spec:
-      containers:
-        - name: provider
-          env:
-            - name: VSPHERE_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: vsphere-dynamic-creds
-                  key: username
-            - name: VSPHERE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: vsphere-dynamic-creds
-                  key: password
-            - name: VSPHERE_SERVER
-              valueFrom:
-                secretKeyRef:
-                  name: vsphere-dynamic-creds
-                  key: server
-```
+    ```yaml
+    metadata:
+      annotations:
+        reloader.stakater.com/auto: "true"
+    ```
 
-### Libvirt Provider with SSH Keys
+    applied to the per-Provider Deployment (which the controller owns) will trigger a rolling restart when the Secret changes. **Note**: this annotation is on the Deployment that the controller creates; you may need a small Mutating webhook or a post-reconcile patch to set it, since the controller does not currently propagate Deployment annotations from the Provider CR.
 
-```yaml
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: libvirt-ssh-keys
-  namespace: libvirt-providers
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    name: vault-secret-store
-    kind: SecretStore
-  target:
-    name: libvirt-ssh-credentials
-    creationPolicy: Owner
-    template:
-      type: kubernetes.io/ssh-auth
-      data:
-        ssh-privatekey: "{{ .private_key }}"
-        ssh-publickey: "{{ .public_key }}"
-        known_hosts: "{{ .known_hosts }}"
-  data:
-    - secretKey: private_key
-      remoteRef:
-        key: "secret/data/libvirt/ssh"
-        property: "private_key"
-    - secretKey: public_key
-      remoteRef:
-        key: "secret/data/libvirt/ssh"
-        property: "public_key"
-    - secretKey: known_hosts
-      remoteRef:
-        key: "secret/data/libvirt/ssh"
-        property: "known_hosts"
+2. **Provider-side encryption-at-rest of the file.** The provider pod's tmpfs holds the credential plaintext while the pod is running. K8s does not encrypt projected Secret volumes; the cluster-level `EncryptionConfiguration` only protects etcd. A node-level attacker with root on the kubelet host can read the file.
 
----
-# Mount SSH keys in provider
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: libvirt-provider
-spec:
-  template:
-    spec:
-      containers:
-        - name: provider
-          volumeMounts:
-            - name: ssh-keys
-              mountPath: /home/provider/.ssh
-              readOnly: true
-          env:
-            - name: SSH_AUTH_SOCK
-              value: "/tmp/ssh-agent.sock"
-      volumes:
-        - name: ssh-keys
-          secret:
-            secretName: libvirt-ssh-credentials
-            defaultMode: 0600
-```
+3. **mTLS material distribution to the provider pod.** ESO can deliver `tls.crt` / `tls.key` files into a Secret, but the v0.3.6 controller does not mount them into the provider pod conditionally on a CRD field (`internal/controller/provider_controller.go:702-713` has `if false` around the TLS volume mount). See [mTLS](mtls.md).
 
-## TLS Certificate Management
+## Validating the materialised Secret
 
-### Automatic TLS with External Secrets
-
-```yaml
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: provider-tls-certs
-  namespace: provider-namespace
-spec:
-  refreshInterval: 24h
-  secretStoreRef:
-    name: vault-secret-store
-    kind: SecretStore
-  target:
-    name: provider-tls
-    creationPolicy: Owner
-    template:
-      type: kubernetes.io/tls
-      data:
-        tls.crt: "{{ .certificate }}"
-        tls.key: "{{ .private_key }}"
-        ca.crt: "{{ .ca_certificate }}"
-  data:
-    - secretKey: certificate
-      remoteRef:
-        key: "pki/issue/virtrigaud"
-        property: "certificate"
-    - secretKey: private_key
-      remoteRef:
-        key: "pki/issue/virtrigaud"
-        property: "private_key"
-    - secretKey: ca_certificate
-      remoteRef:
-        key: "pki/issue/virtrigaud"
-        property: "issuing_ca"
-
----
-# Vault PKI configuration (run in Vault)
-# vault write pki/roles/virtrigaud \
-#   allowed_domains="virtrigaud.local,provider-service" \
-#   allow_subdomains=true \
-#   max_ttl="8760h" \
-#   generate_lease=true
-```
-
-## Monitoring and Alerting
-
-### ExternalSecret Monitoring
-
-```yaml
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: external-secrets-monitor
-  namespace: monitoring
-spec:
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: external-secrets
-  endpoints:
-    - port: metrics
-      interval: 30s
-
----
-apiVersion: monitoring.coreos.com/v1
-kind: PrometheusRule
-metadata:
-  name: external-secrets-alerts
-  namespace: monitoring
-spec:
-  groups:
-    - name: external-secrets.rules
-      rules:
-        - alert: ExternalSecretSyncFailure
-          expr: increase(external_secrets_sync_calls_error[5m]) > 0
-          for: 2m
-          labels:
-            severity: warning
-          annotations:
-            summary: "External secret sync failure"
-            description: "ExternalSecret {{ $labels.name }} in namespace {{ $labels.namespace }} failed to sync"
-        
-        - alert: ExternalSecretStale
-          expr: (time() - external_secrets_sync_calls_total) > 3600
-          for: 5m
-          labels:
-            severity: critical
-          annotations:
-            summary: "External secret not refreshed"
-            description: "ExternalSecret {{ $labels.name }} has not been refreshed for over 1 hour"
-```
-
-### Custom Monitoring
-
-```go
-package monitoring
-
-import (
-    "context"
-    "time"
-    
-    "github.com/prometheus/client_golang/prometheus"
-    "github.com/prometheus/client_golang/prometheus/promauto"
-    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-    "k8s.io/client-go/kubernetes"
-)
-
-var (
-    secretAge = promauto.NewGaugeVec(
-        prometheus.GaugeOpts{
-            Name: "virtrigaud_secret_age_seconds",
-            Help: "Age of provider secrets in seconds",
-        },
-        []string{"secret_name", "namespace", "provider"},
-    )
-    
-    secretRotationCount = promauto.NewCounterVec(
-        prometheus.CounterOpts{
-            Name: "virtrigaud_secret_rotations_total",
-            Help: "Total number of secret rotations",
-        },
-        []string{"secret_name", "namespace", "provider"},
-    )
-)
-
-type SecretMonitor struct {
-    client kubernetes.Interface
-}
-
-func (sm *SecretMonitor) MonitorSecrets(ctx context.Context) {
-    ticker := time.NewTicker(60 * time.Second)
-    defer ticker.Stop()
-    
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case <-ticker.C:
-            sm.updateSecretMetrics()
-        }
-    }
-}
-
-func (sm *SecretMonitor) updateSecretMetrics() {
-    secrets, err := sm.client.CoreV1().Secrets("").List(context.TODO(), metav1.ListOptions{
-        LabelSelector: "app.kubernetes.io/managed-by=external-secrets",
-    })
-    if err != nil {
-        return
-    }
-    
-    for _, secret := range secrets.Items {
-        provider := secret.Labels["provider"]
-        if provider == "" {
-            continue
-        }
-        
-        age := time.Since(secret.CreationTimestamp.Time).Seconds()
-        secretAge.WithLabelValues(secret.Name, secret.Namespace, provider).Set(age)
-    }
-}
-```
-
-## Security Best Practices
-
-### 1. Least Privilege Access
-
-```yaml
-# Minimal Vault policy for specific provider
-path "secret/data/providers/vsphere/{{ identity.entity.aliases.auth_kubernetes_*.metadata.service_account_namespace }}" {
-  capabilities = ["read"]
-}
-
-# Time-bound secrets
-path "vsphere/creds/readonly" {
-  capabilities = ["read"]
-  allowed_parameters = {
-    "ttl" = ["15m", "30m", "1h"]
-  }
-}
-```
-
-### 2. Secret Rotation Automation
-
-```yaml
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: rotate-provider-secrets
-  namespace: virtrigaud-system
-spec:
-  schedule: "0 2 * * 0"  # Weekly on Sunday at 2 AM
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          containers:
-            - name: secret-rotator
-              image: virtrigaud/secret-rotator:latest
-              command:
-                - /bin/sh
-                - -c
-                - |
-                  # Force refresh of all external secrets
-                  kubectl annotate externalsecret --all \
-                    force-sync="$(date +%s)" \
-                    --namespace=vsphere-providers
-                  
-                  # Restart provider deployments to pick up new secrets
-                  kubectl rollout restart deployment \
-                    --selector=app.kubernetes.io/name=virtrigaud-provider-runtime \
-                    --namespace=vsphere-providers
-          restartPolicy: OnFailure
-          serviceAccountName: secret-rotator
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: secret-rotator
-rules:
-  - apiGroups: ["external-secrets.io"]
-    resources: ["externalsecrets"]
-    verbs: ["get", "list", "patch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "patch"]
-```
-
-### 3. Audit Logging
-
-```yaml
-# Vault audit configuration
-vault audit enable file file_path=/vault/logs/audit.log
-
-# Example audit log entry structure
-{
-  "time": "2023-12-01T10:30:00Z",
-  "type": "request",
-  "auth": {
-    "client_token": "hvs.xxx",
-    "accessor": "hmac-sha256:xxx",
-    "display_name": "kubernetes-virtrigaud-system-external-secrets",
-    "policies": ["virtrigaud-policy"],
-    "metadata": {
-      "service_account_name": "external-secrets",
-      "service_account_namespace": "virtrigaud-system"
-    }
-  },
-  "request": {
-    "id": "request-id",
-    "operation": "read",
-    "path": "secret/data/providers/vsphere",
-    "data": null,
-    "remote_address": "10.0.0.100"
-  }
-}
-```
-
-### 4. Emergency Procedures
+After ESO syncs, verify the K8s Secret has the right keys:
 
 ```bash
-#!/bin/bash
-# emergency-secret-rotation.sh
+kubectl get secret vsphere-prod-credentials -n virtrigaud-system \
+  -o jsonpath='{.data}' | jq 'keys'
+# Expected for vSphere:
+# [ "password", "username" ]
 
-echo "=== Emergency Secret Rotation ==="
+# For libvirt SSH key:
+# [ "ssh-privatekey", "username" ]
 
-# 1. Revoke all active leases for a provider
-vault lease revoke -prefix vsphere/creds/
-
-# 2. Force refresh all external secrets
-kubectl get externalsecret --all-namespaces -o name | \
-  xargs -I {} kubectl annotate {} force-sync="$(date +%s)"
-
-# 3. Restart all provider deployments
-kubectl get deployments --all-namespaces \
-  -l app.kubernetes.io/name=virtrigaud-provider-runtime \
-  -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' | \
-  while read deployment; do
-    kubectl rollout restart deployment $deployment
-  done
-
-# 4. Monitor rollout status
-kubectl get deployments --all-namespaces \
-  -l app.kubernetes.io/name=virtrigaud-provider-runtime \
-  -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' | \
-  while read deployment; do
-    kubectl rollout status deployment $deployment --timeout=300s
-  done
-
-echo "Emergency rotation completed"
+# For Proxmox API token:
+# [ "token_id", "token_secret" ]
 ```
 
-### 5. Secret Validation
+If a key is missing or mistyped, the provider pod will fail validation at startup and the `Provider` CR's `Healthy` condition will not flip to true. The provider container logs will tell you which key was missing.
 
-```go
-package validation
+## See also
 
-import (
-    "crypto/x509"
-    "encoding/pem"
-    "fmt"
-    "time"
-)
-
-func ValidateSecret(secretData map[string][]byte, secretType string) error {
-    switch secretType {
-    case "tls":
-        return validateTLSSecret(secretData)
-    case "ssh":
-        return validateSSHSecret(secretData)
-    case "credential":
-        return validateCredentialSecret(secretData)
-    }
-    return nil
-}
-
-func validateTLSSecret(data map[string][]byte) error {
-    cert, ok := data["tls.crt"]
-    if !ok {
-        return fmt.Errorf("missing tls.crt")
-    }
-    
-    key, ok := data["tls.key"]
-    if !ok {
-        return fmt.Errorf("missing tls.key")
-    }
-    
-    // Parse certificate
-    block, _ := pem.Decode(cert)
-    if block == nil {
-        return fmt.Errorf("failed to parse certificate PEM")
-    }
-    
-    parsedCert, err := x509.ParseCertificate(block.Bytes)
-    if err != nil {
-        return fmt.Errorf("failed to parse certificate: %w", err)
-    }
-    
-    // Check expiration
-    if time.Now().After(parsedCert.NotAfter) {
-        return fmt.Errorf("certificate expired on %v", parsedCert.NotAfter)
-    }
-    
-    if time.Now().Add(24*time.Hour).After(parsedCert.NotAfter) {
-        return fmt.Errorf("certificate expires soon on %v", parsedCert.NotAfter)
-    }
-    
-    // Validate key
-    block, _ = pem.Decode(key)
-    if block == nil {
-        return fmt.Errorf("failed to parse private key PEM")
-    }
-    
-    return nil
-}
-```
-
+- [Operations -> Security: Provider credentials](../../operations/security.md#provider-credentials) — full flow diagram.
+- [Bearer token authentication](bearer-token.md) — separate authentication path for the gRPC channel (not via Secrets).
+- [Proxmox provider](../proxmox.md#authentication) — why API tokens are required in production.
+- [Libvirt provider](../libvirt.md) — SSH credential options.
