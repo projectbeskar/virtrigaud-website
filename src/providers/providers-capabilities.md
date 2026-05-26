@@ -5,11 +5,13 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Capabilities Matrix
 
-This document provides a comprehensive overview of VirtRigaud provider capabilities as of v0.2.3.
+This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.3.6**.
+
+Cells marked ✅ / ❌ in this matrix are cross-referenced against each provider's `GetCapabilities` gRPC response (`internal/providers/{vsphere,libvirt,proxmox}/server.go`) and the capability builder registrations in `internal/providers/{proxmox}/capabilities.go` / `sdk/provider/capabilities/`. Where a feature is implemented in code but not yet exposed through the capability flag (or vice versa), the cell carries a footnote rather than being silently changed.
 
 ## Overview
 
-VirtRigaud supports multiple hypervisor platforms through a provider architecture. Each provider implements the core VirtRigaud API while supporting platform-specific features and capabilities.
+VirtRigaud supports multiple hypervisor platforms through a provider architecture. Each provider runs as its own gRPC server pod, implements the proto contract in `proto/provider/v1/provider.proto`, and advertises its feature set through the `GetCapabilities` RPC. The manager negotiates per-Provider rather than assuming uniform support.
 
 ## Core Provider Interface
 
@@ -18,18 +20,20 @@ All providers implement these core operations:
 - **Validate**: Test provider connectivity and credentials
 - **Create**: Create new virtual machines
 - **Delete**: Remove virtual machines and cleanup resources
-- **Power**: Control VM power state (On/Off/Reboot)
+- **Power**: Control VM power state (On/Off/Reboot/Shutdown-Graceful)
 - **Describe**: Query VM state and properties
-- **GetCapabilities**: Report provider-specific capabilities
+- **GetCapabilities**: Report provider-specific capabilities (the source of truth for the matrix below)
+- **TaskStatus**: Poll for completion of async operations
+- **ListVMs**: Enumerate provider-side VMs (used by the VMAdoption controller)
 
 ## Provider Status
 
 | Provider | Status | Implementation | Maturity |
 |----------|--------|---------------|----------|
-| **vSphere** | ✅ Production Ready | govmomi-based | Stable |
-| **Libvirt/KVM** | ✅ Production Ready | virsh-based | Stable |
-| **Proxmox VE** | ✅ Production Ready | REST API-based | Beta |
-| **Mock** | ✅ Complete | In-memory simulation | Testing |
+| **vSphere** | Production Ready | govmomi-based | Stable |
+| **Libvirt/KVM** | Production Ready | virsh + libssh-based | Stable |
+| **Proxmox VE** | Production Ready | REST API-based | Beta |
+| **Mock** | Complete | In-memory simulation | Testing |
 
 ## Comprehensive Capability Matrix
 
@@ -63,12 +67,14 @@ All providers implement these core operations:
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
 | **Disk Creation** | ✅ | ✅ | ✅ | ✅ | Virtual disk provisioning |
-| **Disk Expansion** | ✅ | ✅ | ✅ | ✅ | Online disk growth |
+| **Disk Expansion** | ✅ | ⚠️[^1] | ✅ | ✅ | Online disk growth |
 | **Multiple Disks** | ✅ | ✅ | ✅ | ✅ | Multi-disk VMs |
 | **Thin Provisioning** | ✅ | ✅ | ✅ | ✅ | Space-efficient disks |
 | **Thick Provisioning** | ✅ | ✅ | ✅ | ✅ | Pre-allocated storage |
 | **Storage Policies** | ✅ | ❌ | ✅ | ✅ | Policy-based placement |
 | **Storage Pools** | ✅ | ✅ | ✅ | ✅ | Organized storage management |
+
+[^1]: Libvirt advertises `SupportsDiskExpansionOnline=false` in its `GetCapabilities` response. Disk growth works but requires a VM power cycle.
 
 ### Network Configuration
 
@@ -77,7 +83,7 @@ All providers implement these core operations:
 | **Basic Networking** | ✅ | ✅ | ✅ | ✅ | Single network interface |
 | **Multiple NICs** | ✅ | ✅ | ✅ | ✅ | Multi-interface VMs |
 | **VLAN Support** | ✅ | ✅ | ✅ | ✅ | Network segmentation |
-| **Static IP** | ✅ | ✅ | ✅ | ✅ | Fixed IP assignment |
+| **Static IP** | ✅ | ✅ | ✅ | ✅ | Via cloud-init network-config |
 | **DHCP** | ✅ | ✅ | ✅ | ✅ | Dynamic IP assignment |
 | **Bridge Networks** | ❌ | ✅ | ✅ | ✅ | Direct host bridging |
 | **Distributed Switches** | ✅ | ❌ | ❌ | ✅ | Advanced vSphere networking |
@@ -87,10 +93,12 @@ All providers implement these core operations:
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
 | **Template Deployment** | ✅ | ✅ | ✅ | ✅ | Deploy from templates |
-| **Clone Operations** | ✅ Complete | ✅ | ✅ | ✅ | Full VM duplication with snapshot support |
-| **Linked Clones** | ✅ | ❌ | ✅ | ✅ | COW-based clones with automatic snapshot creation |
+| **Clone Operations** | ✅ | ✅ | ✅ | ✅ | Full VM duplication with snapshot support |
+| **Linked Clones** | ✅ | ✅[^2] | ✅ | ✅ | COW-based clones (Libvirt: via qcow2 backing files) |
 | **Full Clones** | ✅ | ✅ | ✅ | ✅ | Independent copies |
-| **VM Reconfiguration** | ✅ Complete | ⚠️ Restart Required | ✅ | ✅ | Online resource modification |
+| **VM Reconfiguration** | ✅ | ⚠️ Restart Required | ✅ | ✅ | Online resource modification |
+
+[^2]: Libvirt advertises `SupportsLinkedClones=true` in `internal/providers/libvirt/server.go` GetCapabilities — the previous matrix incorrectly marked this `❌`; corrected in v0.3.6 docs alignment.
 
 ### Snapshot Operations
 
@@ -99,19 +107,23 @@ All providers implement these core operations:
 | **Create Snapshots** | ✅ | ✅ | ✅ | ✅ | Point-in-time captures |
 | **Delete Snapshots** | ✅ | ✅ | ✅ | ✅ | Snapshot cleanup |
 | **Revert Snapshots** | ✅ | ✅ | ✅ | ✅ | Restore VM state |
-| **Memory Snapshots** | ✅ | ❌ | ✅ | ✅ | Include RAM state |
+| **Memory Snapshots** | ❌[^3] | ❌ | ✅ | ✅ | Include RAM state |
 | **Quiesced Snapshots** | ✅ | ❌ | ✅ | ✅ | Consistent filesystem |
 | **Snapshot Trees** | ✅ | ✅ | ✅ | ✅ | Hierarchical snapshots |
+
+[^3]: vSphere advertises `SupportsMemorySnapshots=false` in its `GetCapabilities` response — vSphere snapshots do not include memory state by default. The previous matrix incorrectly marked this `✅`; corrected in v0.3.6 docs alignment. Operators who need memory-state snapshots on vSphere must take them through vCenter directly today.
 
 ### Image Management
 
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
 | **OVA/OVF Import** | ✅ | ❌ | ✅ | ✅ | Standard VM formats |
-| **Cloud Image Download** | ❌ | ✅ | ✅ | ✅ | Remote image fetch |
+| **Cloud Image Download** | ⚠️[^4] | ✅ | ✅ | ✅ | Remote image fetch (vSphere: tracked but no URL-based fetch yet) |
 | **Content Libraries** | ✅ | ❌ | ❌ | ✅ | Centralized image management |
 | **Image Conversion** | ❌ | ✅ | ✅ | ✅ | Format transformation |
 | **Image Caching** | ✅ | ✅ | ✅ | ✅ | Performance optimization |
+
+[^4]: vSphere advertises `SupportsImageImport=true` (OVA/OVF + content library); direct cloud-image URL fetch is not yet implemented. Operators today should land cloud images in the content library out-of-band.
 
 ### Guest Operating System
 
@@ -144,7 +156,18 @@ All providers implement these core operations:
 | **Alerting** | ✅ | ❌ | ✅ | ✅ | Threshold-based notifications |
 | **Historical Data** | ✅ | ❌ | ✅ | ✅ | Performance history |
 | **Console URL Generation** | ✅ | ✅ | ⚠️ | ✅ | Web/VNC console access (Proxmox planned) |
-| **Guest Agent Integration** | ✅ | ✅ | ✅ Complete | ✅ | IP detection and guest info |
+| **Guest Agent Integration** | ✅ | ✅ | ✅ | ✅ | IP detection and guest info |
+| **CircuitBreaker (manager-side)** | ✅ | ✅ | ✅ | ✅ | One CB per Provider CR (v0.3.6 / G6). See [Resilience](../operations/resilience.md). |
+
+## Capability Negotiation (manager side)
+
+Every provider implements `GetCapabilities`, which returns a `GetCapabilitiesResponse` containing the boolean flags exposed in the matrix above. The manager calls this RPC at provider connection time and short-circuits unsupported operations rather than letting them fail at the hypervisor — operators see a `NotSupported` condition on the relevant CR rather than a noisy provider error.
+
+The capability builder lives at `sdk/provider/capabilities/` in the main repo and is the source of truth for what flags exist. Adding a new capability requires:
+
+1. A new constant in `sdk/provider/capabilities/capabilities.go`.
+2. A new field on `GetCapabilitiesResponse` in `proto/provider/v1/provider.proto`.
+3. Per-provider registration in each provider's `capabilities.go` (or inline `GetCapabilities` for the older vSphere/Libvirt servers).
 
 ## Provider-Specific Features
 
@@ -166,7 +189,7 @@ All providers implement these core operations:
 
 ### Libvirt/KVM Exclusive
 
-- **Virsh Integration**: Command-line management
+- **Virsh + libssh Integration**: Command-line management over an SSH-tunnelled session
 - **QEMU Guest Agent**: Advanced guest OS integration
 - **KVM Optimization**: Native Linux virtualization
 - **Bridge Networking**: Direct host network bridging
@@ -175,6 +198,7 @@ All providers implement these core operations:
 - **Host Device Passthrough**: Hardware device assignment
 - **Reconfiguration Support**: CPU/memory/disk changes via virsh (restart required)
 - **VNC Console Access**: Direct VNC console URL generation for remote viewers
+- **Linked Clones via qcow2 backing**: COW-based clones with shared backing files
 
 ### Proxmox VE Exclusive
 
@@ -186,7 +210,7 @@ All providers implement these core operations:
 - **Ceph Integration**: Distributed storage
 - **Guest Agent IP Detection**: Accurate IP address extraction via QEMU guest agent
 - **Hot-plug Reconfiguration**: Online CPU/memory/disk modifications
-- **Complete CRD Integration**: Full Kubernetes custom resource support
+- **Memory snapshots**: PVE-style snapshots that include RAM state
 
 ### Mock Provider Features
 
@@ -197,30 +221,34 @@ All providers implement these core operations:
 
 ## Supported Disk Types
 
+Reflects each provider's `GetCapabilities.SupportedDiskTypes` response.
+
 | Provider | Disk Formats | Notes |
 |----------|-------------|--------|
-| **vSphere** | thin, thick, eagerZeroedThick | vSphere native formats |
-| **Libvirt** | qcow2, raw, vmdk | QEMU-supported formats |
-| **Proxmox** | qcow2, raw, vmdk | Proxmox storage formats |
-| **Mock** | thin, thick, raw, qcow2 | Simulated formats |
+| **vSphere** | `thin`, `thick`, `eager-zeroed` | vSphere native formats |
+| **Libvirt** | `qcow2`, `raw`, `vmdk` | QEMU-supported formats |
+| **Proxmox** | `raw`, `qcow2` | Proxmox storage formats |
+| **Mock** | `thin`, `thick`, `raw`, `qcow2` | Simulated formats |
 
 ## Supported Network Types
 
+Reflects each provider's `GetCapabilities.SupportedNetworkTypes` response.
+
 | Provider | Network Types | Notes |
 |----------|--------------|--------|
-| **vSphere** | distributed, standard, vlan | vSphere networking |
-| **Libvirt** | virtio, e1000, rtl8139 | QEMU network adapters |
-| **Proxmox** | virtio, e1000, rtl8139 | Proxmox network models |
-| **Mock** | bridge, nat, distributed | Simulated network types |
+| **vSphere** | `standard`, `distributed` | Standard vSwitch and distributed virtual switch port groups |
+| **Libvirt** | `virtio`, `e1000`, `rtl8139` | QEMU virtual NIC models |
+| **Proxmox** | `bridge`, `vlan` | Proxmox network topology |
+| **Mock** | `bridge`, `nat`, `distributed` | Simulated network types |
 
 ## Provider Images
 
 All provider images are available from the GitHub Container Registry:
 
-- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.2.3`
-- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.2.3`
-- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.2.3`
-- **Mock**: `ghcr.io/projectbeskar/virtrigaud/provider-mock:v0.2.3`
+- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6`
+- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.6`
+- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.6`
+- **Mock**: `ghcr.io/projectbeskar/virtrigaud/provider-mock:v0.3.6`
 
 ## Choosing a Provider
 
@@ -277,17 +305,19 @@ All provider images are available from the GitHub Container Registry:
 - Enhanced NSX integration
 - GPU passthrough support
 - vSAN policy automation
+- URL-based cloud-image import (currently OVA/OVF + content library only)
 
 #### Libvirt
 - Live migration support
 - SR-IOV networking
 - NUMA topology optimization
 - Enhanced performance monitoring
+- Online disk expansion (currently requires power cycle)
 
 #### Proxmox
 - HA configuration
 - Storage replication
-- Advanced networking
+- ConsoleURL implementation
 - Performance optimizations
 
 ## Support Matrix
@@ -301,7 +331,10 @@ All provider images are available from the GitHub Container Registry:
 
 ## Version History
 
-- **v0.2.3**: Provider feature parity - Reconfigure, Clone, TaskStatus, ConsoleURL
+- **v0.3.6**: Manager-side CircuitBreaker wired on all provider RPCs (G6); G7 metric families completed; H1 build-path consolidation. No new provider-side capabilities.
+- **v0.3.5**: Observability G-track foundation — provider RPC metrics surface for every provider.
+- **v0.3.3**: Changelog organisation with versioned release headers.
+- **v0.2.3**: Provider feature parity — Reconfigure, Clone, TaskStatus, ConsoleURL
 - **v0.2.2**: Nested virtualization, TPM support, comprehensive snapshot management
 - **v0.2.1**: Critical fixes, documentation updates, VMClass disk settings
 - **v0.2.0**: Production-ready vSphere and Libvirt providers
@@ -309,4 +342,4 @@ All provider images are available from the GitHub Container Registry:
 
 ---
 
-*This document reflects VirtRigaud v0.2.3 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*
+*This document reflects VirtRigaud v0.3.6 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*
