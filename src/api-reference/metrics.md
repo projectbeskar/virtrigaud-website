@@ -3,277 +3,204 @@ Copyright (c) 2026 VirtRigaud Creators
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Metrics Catalog
+# Metrics Reference
 
-VirtRigaud exposes comprehensive metrics for monitoring and observability. All metrics are available at the `/metrics` endpoint on port 8080.
+Pure catalog of all `virtrigaud_*` metric families. For operator interpretation, PromQL examples, alerting recipes, and wiring details see the [Observability Guide](../operations/observability.md).
 
-## Manager Metrics
+All metrics are registered with controller-runtime's metrics registry and served on **`:8080/metrics`** alongside the standard `workqueue_*`, `go_*`, and `process_*` families.
 
-### Reconciliation Metrics
-
-| Metric Name | Type | Labels | Description |
-|-------------|------|--------|-------------|
-| `virtrigaud_manager_reconcile_total` | Counter | `kind`, `outcome` | Total number of reconcile loops |
-| `virtrigaud_manager_reconcile_duration_seconds` | Histogram | `kind` | Time spent in reconcile loops |
-| `virtrigaud_queue_depth` | Gauge | `kind` | Current queue depth for each resource kind |
-
-### VM Operation Metrics
-
-| Metric Name | Type | Labels | Description |
-|-------------|------|--------|-------------|
-| `virtrigaud_vm_operations_total` | Counter | `operation`, `provider_type`, `provider`, `outcome` | Total VM operations |
-| `virtrigaud_vm_reconfigure_total` | Counter | `provider_type`, `outcome` | Total VM reconfiguration operations |
-| `virtrigaud_vm_snapshot_total` | Counter | `action`, `provider_type`, `outcome` | Total VM snapshot operations |
-| `virtrigaud_vm_clone_total` | Counter | `linked`, `provider_type`, `outcome` | Total VM clone operations |
-| `virtrigaud_vm_image_prepare_total` | Counter | `provider_type`, `outcome` | Total VM image preparation operations |
-
-### Build Information
-
-| Metric Name | Type | Labels | Description |
-|-------------|------|--------|-------------|
-| `virtrigaud_build_info` | Gauge | `version`, `git_sha`, `go_version` | Build information |
-
-## Provider Metrics
-
-### gRPC Metrics
-
-| Metric Name | Type | Labels | Description |
-|-------------|------|--------|-------------|
-| `virtrigaud_provider_rpc_requests_total` | Counter | `provider_type`, `method`, `code` | Total gRPC requests |
-| `virtrigaud_provider_rpc_latency_seconds` | Histogram | `provider_type`, `method` | gRPC request latency |
-| `virtrigaud_provider_tasks_inflight` | Gauge | `provider_type`, `provider` | Number of inflight tasks |
-
-### Provider-Specific Metrics
-
-| Metric Name | Type | Labels | Description |
-|-------------|------|--------|-------------|
-| `virtrigaud_ip_discovery_duration_seconds` | Histogram | `provider_type` | Time to discover VM IP addresses |
-
-### Error Metrics
-
-| Metric Name | Type | Labels | Description |
-|-------------|------|--------|-------------|
-| `virtrigaud_errors_total` | Counter | `reason`, `component` | Total errors by reason and component |
-
-## Label Definitions
-
-### Common Labels
-
-- `provider_type`: The type of provider (`vsphere`, `libvirt`)
-- `provider`: The name of the provider instance
-- `outcome`: The result of an operation (`success`, `failure`, `error`)
-- `kind`: The Kubernetes resource kind (`VirtualMachine`, `VMClass`, etc.)
-- `component`: The component generating the metric (`manager`, `provider`)
-
-### Operation-Specific Labels
-
-- `operation`: Type of VM operation (`Create`, `Delete`, `Power`, `Describe`, `Reconfigure`)
-- `method`: gRPC method name (`CreateVM`, `DeleteVM`, `PowerVM`, etc.)
-- `code`: gRPC status code (`OK`, `INVALID_ARGUMENT`, `DEADLINE_EXCEEDED`, etc.)
-- `action`: Snapshot action (`create`, `delete`, `revert`)
-- `linked`: Whether a clone is linked (`true`, `false`)
-- `reason`: Error reason (`ConnectionFailed`, `AuthenticationError`, etc.)
-
-## Histogram Buckets
-
-Duration histograms use the following buckets (in seconds):
-```
-0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300
-```
-
-## Example Queries
-
-### Prometheus Queries
-
-#### Error Rate
-```promql
-# Overall error rate
-rate(virtrigaud_vm_operations_total{outcome="failure"}[5m]) /
-rate(virtrigaud_vm_operations_total[5m])
-
-# Provider-specific error rate
-rate(virtrigaud_provider_rpc_requests_total{code!="OK"}[5m]) /
-rate(virtrigaud_provider_rpc_requests_total[5m])
-```
-
-#### Latency
-```promql
-# 95th percentile VM creation time
-histogram_quantile(0.95, 
-  rate(virtrigaud_vm_operations_duration_seconds_bucket{operation="Create"}[5m])
-)
-
-# gRPC request latency by method
-histogram_quantile(0.95,
-  rate(virtrigaud_provider_rpc_latency_seconds_bucket[5m])
-) by (method)
-```
-
-#### Throughput
-```promql
-# VM operations per second
-rate(virtrigaud_vm_operations_total[5m])
-
-# Operations by provider
-rate(virtrigaud_vm_operations_total[5m]) by (provider_type, provider)
-```
-
-#### Queue Depth
-```promql
-# Current queue depth
-virtrigaud_queue_depth
-
-# Average queue depth over time
-avg_over_time(virtrigaud_queue_depth[5m])
-```
-
-#### Inflight Tasks
-```promql
-# Current inflight tasks
-virtrigaud_provider_tasks_inflight
-
-# Inflight tasks by provider
-virtrigaud_provider_tasks_inflight by (provider_type, provider)
-```
-
-### Grafana Dashboard Queries
-
-#### VM Creation Success Rate Panel
-```promql
-sum(rate(virtrigaud_vm_operations_total{operation="Create",outcome="success"}[5m])) /
-sum(rate(virtrigaud_vm_operations_total{operation="Create"}[5m])) * 100
-```
-
-#### Provider Health Panel
-```promql
-up{job="virtrigaud-provider"}
-```
-
-#### Error Rate by Provider Panel
-```promql
-sum(rate(virtrigaud_errors_total[5m])) by (component, provider_type)
-```
-
-## ServiceMonitor Configuration
-
-Example ServiceMonitor for Prometheus Operator:
-
-```yaml
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: virtrigaud-manager
-  namespace: virtrigaud-system
-spec:
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: virtrigaud
-      app.kubernetes.io/component: manager
-  endpoints:
-  - port: metrics
-    interval: 30s
-    path: /metrics
 ---
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: virtrigaud-providers
-  namespace: virtrigaud-system
-spec:
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: virtrigaud
-      app.kubernetes.io/component: provider
-  endpoints:
-  - port: metrics
-    interval: 30s
-    path: /metrics
-```
 
-## Alert Rules
+## Stable families (v0.3.6)
 
-Example PrometheusRule for common alerts:
+### `virtrigaud_build_info`
 
-```yaml
-apiVersion: monitoring.coreos.com/v1
-kind: PrometheusRule
-metadata:
-  name: virtrigaud-alerts
-  namespace: virtrigaud-system
-spec:
-  groups:
-  - name: virtrigaud.rules
-    rules:
-    - alert: VirtrigaudProviderDown
-      expr: up{job="virtrigaud-provider"} == 0
-      for: 5m
-      labels:
-        severity: critical
-      annotations:
-        summary: "Virtrigaud provider is down"
-        description: "Provider {{ $labels.instance }} has been down for more than 5 minutes"
+| Property | Value |
+|---|---|
+| Type | Gauge |
+| Help | `Build information for virtrigaud components` |
+| Labels | `version`, `git_sha`, `go_version`, `component` |
+| Value | Always `1` |
+| Stable since | v0.3.0 |
 
-    - alert: VirtrigaudHighErrorRate
-      expr: |
-        rate(virtrigaud_vm_operations_total{outcome="failure"}[5m]) /
-        rate(virtrigaud_vm_operations_total[5m]) > 0.1
-      for: 10m
-      labels:
-        severity: warning
-      annotations:
-        summary: "High error rate in VM operations"
-        description: "Error rate is {{ $value | humanizePercentage }} for {{ $labels.provider }}"
+Label notes:
 
-    - alert: VirtrigaudSlowVMCreation
-      expr: |
-        histogram_quantile(0.95,
-          rate(virtrigaud_vm_operations_duration_seconds_bucket{operation="Create"}[5m])
-        ) > 600
-      for: 15m
-      labels:
-        severity: warning
-      annotations:
-        summary: "Slow VM creation times"
-        description: "95th percentile VM creation time is {{ $value }}s"
+- `component`: `manager` for the manager process; `provider` for provider sidecars that call `SetupMetrics`.
+- `go_version`: the Go runtime version string returned by `runtime.Version()` (e.g. `go1.26.0`).
 
-    - alert: VirtrigaudQueueBacklog
-      expr: virtrigaud_queue_depth > 100
-      for: 10m
-      labels:
-        severity: warning
-      annotations:
-        summary: "Queue backlog detected"
-        description: "Queue depth for {{ $labels.kind }} is {{ $value }}"
-```
+---
 
-## Custom Metrics
+### `virtrigaud_manager_reconcile_total`
 
-Providers can expose additional custom metrics specific to their implementation:
+| Property | Value |
+|---|---|
+| Type | Counter |
+| Help | `Total number of reconcile operations by kind and outcome` |
+| Labels | `kind`, `outcome` |
+| Stable since | v0.3.0 |
 
-### vSphere Provider Metrics
+`outcome` values: `success`, `error`, `requeue`.
 
-| Metric Name | Type | Labels | Description |
-|-------------|------|--------|-------------|
-| `virtrigaud_vsphere_sessions_total` | Counter | `datacenter` | Total vSphere sessions created |
-| `virtrigaud_vsphere_api_calls_total` | Counter | `method`, `datacenter` | Total vSphere API calls |
+`kind` values (as of v0.3.6): `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMAdoption`, `VMSnapshot`, `VMMigration`, `VMSet`, `VMPlacementPolicy`, `VMClone`.
 
-### Libvirt Provider Metrics
+---
 
-| Metric Name | Type | Labels | Description |
-|-------------|------|--------|-------------|
-| `virtrigaud_libvirt_connections_total` | Counter | `host` | Total Libvirt connections |
-| `virtrigaud_libvirt_domains_total` | Gauge | `host`, `state` | Current number of domains by state |
+### `virtrigaud_manager_reconcile_duration_seconds`
 
-## Metric Collection Best Practices
+| Property | Value |
+|---|---|
+| Type | Histogram |
+| Help | `Duration of reconcile operations by kind` |
+| Labels | `kind` |
+| Buckets | Exponential: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms, 1.024s, 2.048s, 4.096s, 8.192s, 16.384s (15 buckets, `prometheus.ExponentialBuckets(0.001, 2, 15)`) |
+| Stable since | v0.3.0 |
 
-1. **Scrape Interval**: Use 30s interval for most metrics
-2. **Retention**: Keep metrics for at least 30 days for trending
-3. **High Cardinality**: Be careful with VM names and IDs in labels
-4. **Aggregation**: Use recording rules for frequently queried metrics
-5. **Alerting**: Set up alerts for SLI/SLO violations
+---
 
-## Related Documentation
+### `virtrigaud_errors_total`
 
-- [Monitoring Guide](../observability.md)
-- [Grafana Dashboards](../observability.md)
-- [Alert Runbooks](../observability.md)
+| Property | Value |
+|---|---|
+| Type | Counter |
+| Help | `Total number of errors by reason and component` |
+| Labels | `reason`, `component` |
+| Stable since | v0.3.0 |
+
+`component` values: `manager`, `provider`.
+
+`reason` is a small enum defined per-reconciler via `errReason*` constants. Taxonomy as of v0.3.6 for the VirtualMachine reconciler: `get-vm`, `add-finalizer`, `remove-finalizer`, `deps-not-found`, `deps-error`, `provider-resolve`, `provider-validate`, `provider-describe`, `provider-task-status`, `provider-delete`. Other reconcilers define their own reason sets.
+
+---
+
+### `virtrigaud_provider_rpc_requests_total`
+
+| Property | Value |
+|---|---|
+| Type | Counter |
+| Help | `Total number of provider RPC requests by provider type, method, and code` |
+| Labels | `provider_type`, `method`, `code` |
+| Stable since | v0.3.5 (G4 / PR #107) |
+
+`provider_type`: the value of `Provider.spec.type` (e.g. `vsphere`, `libvirt`, `proxmox`, `mock`).
+
+`method`: short RPC name extracted from the gRPC full method path (e.g. `Validate`, `Create`, `Delete`, `Power`, `Describe`, `Reconfigure`, `TaskStatus`, `ListVMs`, `SnapshotCreate`, `SnapshotDelete`, `SnapshotRevert`, `ExportDisk`, `ImportDisk`, `GetDiskInfo`).
+
+`code`: stringified gRPC status code from `codes.Code.String()`. Common values: `OK`, `Unavailable`, `DeadlineExceeded`, `NotFound`, `InvalidArgument`, `Internal`, `Unknown`. Circuit-breaker rejections appear as `Unavailable`.
+
+---
+
+### `virtrigaud_provider_rpc_latency_seconds`
+
+| Property | Value |
+|---|---|
+| Type | Histogram |
+| Help | `Latency of provider RPC requests by provider type and method` |
+| Labels | `provider_type`, `method` |
+| Buckets | Exponential: 1ms to ~32s (15 buckets, `prometheus.ExponentialBuckets(0.001, 2, 15)`) |
+| Stable since | v0.3.5 (G4 / PR #107) |
+
+---
+
+### `virtrigaud_circuit_breaker_state`
+
+| Property | Value |
+|---|---|
+| Type | Gauge |
+| Help | `Circuit breaker state (0=closed, 1=half-open, 2=open)` |
+| Labels | `provider_type`, `provider` |
+| Values | `0` = Closed, `1` = HalfOpen, `2` = Open |
+| Added | v0.3.6 (G6 / PR #111) |
+
+`provider`: the `metadata.name` of the `Provider` CR. Seeded to `0` at manager startup when the gRPC client is constructed. One time-series per Provider CR.
+
+---
+
+### `virtrigaud_circuit_breaker_failures_total`
+
+| Property | Value |
+|---|---|
+| Type | Counter |
+| Help | `Total number of circuit breaker failures` |
+| Labels | `provider_type`, `provider` |
+| Added | v0.3.6 (G6 / PR #111) |
+
+Counts infra-class RPC failures (`Unavailable`, `DeadlineExceeded`, `Internal`, `Unknown`) that are counted toward the circuit breaker's failure threshold. Business-class errors (`NotFound`, `InvalidArgument`, etc.) do not increment this counter.
+
+---
+
+### `virtrigaud_vm_operations_total`
+
+| Property | Value |
+|---|---|
+| Type | Counter |
+| Help | `Total number of VM operations by operation, provider type, provider, and outcome` |
+| Labels | `operation`, `provider_type`, `provider`, `outcome` |
+| Added | v0.3.6 (G7.1 / PR #124) |
+
+`operation` values: `Create`, `Delete`, `Power`, `Describe`, `Reconfigure`.
+
+`outcome` values: `success`, `error`.
+
+`provider`: the `metadata.name` of the `Provider` CR (the `providerName` passed to `NewClient`).
+
+One sample per VM operation method call (not per RPC — a Create that emits multiple TaskStatus polls still produces one sample here).
+
+---
+
+### `virtrigaud_ip_discovery_duration_seconds`
+
+| Property | Value |
+|---|---|
+| Type | Histogram |
+| Help | `Duration of IP discovery operations by provider type` |
+| Labels | `provider_type` |
+| Buckets | Exponential: 100ms, 200ms, 400ms, 800ms, 1.6s, 3.2s, 6.4s, 12.8s, 25.6s, 51.2s (10 buckets, `prometheus.ExponentialBuckets(0.1, 2, 10)`) |
+| Added | v0.3.6 (G7.2 / PR #127) |
+
+Duration measured from `vm.CreationTimestamp` to the first reconcile where `vm.Status.IPs` transitions from empty to non-empty. Emits exactly one sample per VM over its lifetime (idempotent across manager restarts via etcd persistence).
+
+---
+
+### `virtrigaud_provider_tasks_inflight`
+
+| Property | Value |
+|---|---|
+| Type | Gauge |
+| Help | `Number of inflight tasks by provider type and provider` |
+| Labels | `provider_type`, `provider` |
+| Added | v0.3.6 (G7.3 / PR #129) |
+
+Counts tasks the current manager instance is actively tracking (in its in-memory set). Seeded to `0` at manager startup. Measures "tasks THIS manager instance is tracking", not "tasks the provider believes are in-flight" — the gauge resets on manager restart.
+
+Task-creating RPCs: `Create`, `Delete`, `Power`, `Reconfigure`, `SnapshotCreate`, `SnapshotDelete`, `SnapshotRevert`, `ExportDisk`, `ImportDisk` (9 methods). Tasks are removed from the set when `IsTaskComplete` or `TaskStatus` observes `Done=true` or a terminal error.
+
+---
+
+## Deprecated families
+
+### `virtrigaud_queue_depth`
+
+| Property | Value |
+|---|---|
+| Type | Gauge |
+| Help | `[DEPRECATED v0.3.6 — use controller-runtime's workqueue_depth{name} instead. See CHANGELOG.] Current depth of work queue by kind.` |
+| Labels | `kind` |
+| Deprecated in | v0.3.6 (G7.4 / PR #131) |
+| Removal scheduled | v0.4.0 or later |
+
+Superseded by controller-runtime's standard `workqueue_depth{name}` metric. The Go variable and `SetQueueDepth` helper remain for compile compatibility with out-of-tree code that imported the metrics package; production code no longer calls `SetQueueDepth`.
+
+Migration: see the kind → controller-name mapping table in the [Upgrade Guide](../operations/upgrade.md).
+
+---
+
+## Standard families (controller-runtime + Go runtime)
+
+These appear on the same `/metrics` endpoint. Documented upstream; listed here for completeness.
+
+| Family prefix | Source | Notes |
+|---|---|---|
+| `workqueue_*` | controller-runtime | 9 families; per-reconciler depth, latency, retries. Present since v0.3.0. |
+| `go_*` | Go runtime | Goroutine count, GC pauses, memory stats |
+| `process_*` | Go runtime | CPU, RSS, file descriptor count |
+| `controller_runtime_*` | controller-runtime | Webhook admission metrics, active workers |

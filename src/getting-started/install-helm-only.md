@@ -3,264 +3,233 @@ Copyright (c) 2026 VirtRigaud Creators
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Helm-only Installation & Verify Conversion
+# Helm-only Installation
 
-This guide covers installing virtrigaud using only Helm (without pre-applying CRDs via Kustomize) and verifying that API conversion is working correctly.
+This guide covers installing VirtRigaud v0.3.6 using only Helm (CRDs included in the chart) and verifying the installation is healthy.
 
-## Helm-only Install
-
-VirtRigaud can be installed using only Helm, which will automatically install all required CRDs including conversion webhook configuration.
-
-### Prerequisites
+## Prerequisites
 
 - Kubernetes cluster (1.26+)
 - Helm 3.8+
 - `kubectl` configured to access your cluster
 
-### Installation
+## Installation
+
+### Add the Helm repository
 
 ```bash
-# Add the virtrigaud Helm repository (if available)
 helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
-helm repo update
+helm repo update virtrigaud
+```
 
-# Or install directly from source
-git clone https://github.com/projectbeskar/virtrigaud.git
-cd virtrigaud
+### Install VirtRigaud v0.3.6
 
-# Install virtrigaud with CRDs
-helm install virtrigaud charts/virtrigaud \
-  --namespace virtrigaud \
+```bash
+helm install virtrigaud virtrigaud/virtrigaud \
+  --version 0.3.6 \
+  --namespace virtrigaud-system \
   --create-namespace \
   --wait \
   --timeout 10m
 ```
 
-### Skip CRDs (if already installed)
+`--wait` blocks until all pods are ready. `--timeout 10m` matches the default provider image pull time on slow registries.
 
-If you need to install the chart without CRDs (e.g., they're managed separately):
+### Skip CRDs (if already installed separately)
 
 ```bash
-helm install virtrigaud charts/virtrigaud \
-  --namespace virtrigaud \
+helm install virtrigaud virtrigaud/virtrigaud \
+  --version 0.3.6 \
+  --namespace virtrigaud-system \
   --create-namespace \
   --skip-crds \
   --wait
 ```
 
-## Verify Conversion
+## Verify Installation
 
-After installation, verify that API conversion is working correctly.
-
-### Check CRD Conversion Configuration
+### Check pods and Helm release
 
 ```bash
-# Verify all CRDs have conversion webhook configuration
-kubectl get crd virtualmachines.infra.virtrigaud.io -o yaml | yq '.spec.conversion'
+# Manager pod is running
+kubectl get pods -n virtrigaud-system
+
+# Helm release is at v0.3.6
+helm list -n virtrigaud-system
+# NAME         NAMESPACE          REVISION  CHART                APP VERSION
+# virtrigaud   virtrigaud-system  1         virtrigaud-0.3.6     v0.3.6
 ```
 
-Expected output:
-```yaml
-strategy: Webhook
-webhook:
-  clientConfig:
-    service:
-      name: virtrigaud-webhook
-      namespace: virtrigaud
-      path: /convert
-  conversionReviewVersions:
-  - v1
-```
+Expected output from `helm list`:
 
-### Check API Versions
+- `CHART` column: `virtrigaud-0.3.6`
+- `APP VERSION` column: `v0.3.6`
 
-Verify that both v1beta1 and v1beta1 versions are available:
+### Verify the manager image tag
 
 ```bash
-# Check available versions for VirtualMachine CRD
-kubectl get crd virtualmachines.infra.virtrigaud.io -o jsonpath='{.spec.versions[*].name}' | tr ' ' '\n'
+kubectl get deployment virtrigaud-manager -n virtrigaud-system \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
+# ghcr.io/projectbeskar/virtrigaud/manager:v0.3.6
 ```
 
-Expected output:
-```
-v1beta1
-v1beta1
-```
-
-### Verify Storage Version
-
-Confirm that v1beta1 is set as the storage version:
+### Confirm v0.3.6 metrics are available
 
 ```bash
-# Check storage version
-kubectl get crd virtualmachines.infra.virtrigaud.io -o jsonpath='{.spec.versions[?(@.storage==true)].name}'
+kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8080:8080 &
+curl -s http://localhost:8080/metrics | grep '^virtrigaud_build_info'
 ```
 
-Expected output:
+Expected:
+
 ```
-v1beta1
+virtrigaud_build_info{component="manager",git_sha="<sha>",go_version="go1.26.x",version="v0.3.6"} 1
 ```
 
-### Test Conversion
-
-Create resources using different API versions and verify conversion works:
+New metric families available in v0.3.6 (seeded to 0 at boot before any Provider CRs are created):
 
 ```bash
-# Create a VM using v1beta1 API
-cat <<EOF | kubectl apply -f -
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
-metadata:
-  name: test-vm-alpha
-  namespace: default
-spec:
-  providerRef:
-    name: test-provider
-  classRef:
-    name: small
-  imageRef:
-    name: ubuntu-22
-  powerState: "On"
-EOF
+curl -s http://localhost:8080/metrics | grep 'virtrigaud_circuit_breaker\|virtrigaud_provider_tasks_inflight'
+```
 
-# Read it back as v1beta1
-kubectl get vm test-vm-alpha -o yaml | grep "apiVersion:"
-# Should show: apiVersion: infra.virtrigaud.io/v1beta1
+Once at least one Provider CR exists you will see:
 
-# Create a VM using v1beta1 API
-cat <<EOF | kubectl apply -f -
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
-metadata:
-  name: test-vm-beta
-  namespace: default
-spec:
-  providerRef:
-    name: test-provider
-  classRef:
-    name: small
-  imageRef:
-    name: ubuntu-22
-  powerState: On
-EOF
+```
+virtrigaud_circuit_breaker_state{provider="<name>",provider_type="<type>"} 0
+virtrigaud_provider_tasks_inflight{provider="<name>",provider_type="<type>"} 0
+```
 
-# Clean up test resources
-kubectl delete vm test-vm-alpha test-vm-beta
+For the full v0.3.6 metrics surface see the [Observability Guide](../operations/observability.md).
+
+### Check all 10 CRDs are installed
+
+```bash
+kubectl get crds | grep virtrigaud.io
+```
+
+Expected CRDs (10 total):
+
+```
+virtualmachines.infra.virtrigaud.io
+providers.infra.virtrigaud.io
+vmclasses.infra.virtrigaud.io
+vmimages.infra.virtrigaud.io
+vmnetworkattachments.infra.virtrigaud.io
+vmmigrations.infra.virtrigaud.io
+vmsnapshots.infra.virtrigaud.io
+vmsets.infra.virtrigaud.io
+vmplacementpolicies.infra.virtrigaud.io
+vmclones.infra.virtrigaud.io
+```
+
+## Verify API Version
+
+Confirm v1beta1 is the storage version:
+
+```bash
+kubectl get crd virtualmachines.infra.virtrigaud.io \
+  -o jsonpath='{.spec.versions[?(@.storage==true)].name}'
+# v1beta1
 ```
 
 ## Troubleshooting
 
-### Conversion Webhook Missing
-
-If the conversion webhook is missing or not configured:
+### Manager pod not starting
 
 ```bash
-# Check if webhook service exists
-kubectl get svc virtrigaud-webhook -n virtrigaud
-
-# Check webhook pod logs
-kubectl logs -l app.kubernetes.io/name=virtrigaud -n virtrigaud
-
-# Verify webhook certificate
-kubectl get secret virtrigaud-webhook-certs -n virtrigaud
+kubectl describe pod -n virtrigaud-system -l app.kubernetes.io/name=virtrigaud
+kubectl logs -n virtrigaud-system deployment/virtrigaud-manager
 ```
 
-### Conversion Webhook Failing
+Common causes: image pull failure, missing RBAC, CRD version mismatch.
 
-If conversion is failing:
+### `virtrigaud_build_info` returns nothing
+
+The manager process has not started or the metrics port is not reachable. Check:
 
 ```bash
-# Check conversion webhook logs
-kubectl logs -l app.kubernetes.io/name=virtrigaud -n virtrigaud | grep conversion
-
-# Test webhook connectivity
-kubectl get --raw "/api/v1/namespaces/virtrigaud/services/virtrigaud-webhook:webhook/proxy/convert"
-
-# Check webhook certificate validity
-kubectl get secret virtrigaud-webhook-certs -n virtrigaud -o yaml
+kubectl get svc -n virtrigaud-system | grep manager
 ```
 
-### API Version Issues
+### Circuit breaker open on startup
 
-If certain API versions aren't working:
+If a Provider CR already existed before this install, you may see:
 
-```bash
-# List all available APIs
-kubectl api-resources | grep virtrigaud
-
-# Check specific CRD status
-kubectl describe crd virtualmachines.infra.virtrigaud.io
-
-# Verify controller is running
-kubectl get pods -l app.kubernetes.io/name=virtrigaud -n virtrigaud
 ```
+virtrigaud_circuit_breaker_state{provider="my-provider",provider_type="libvirt"} 2
+```
+
+A circuit breaker that opens on startup is the expected signal for a provider that is unreachable — it is not a bug in the installation. Verify the provider pod is running and its endpoint is reachable. See [Resilience](../operations/resilience.md) for the state-machine details and recovery path. The breaker will transition to Half-Open after 60 seconds and close once 3 consecutive RPCs succeed.
 
 ## Integration with GitOps
 
 ### ArgoCD
 
 ```yaml
-apiVersion: argoproj.io/v1beta1
+apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: virtrigaud
+  namespace: argocd
 spec:
   source:
     chart: virtrigaud
     repoURL: https://projectbeskar.github.io/virtrigaud
-    targetRevision: "1.0.0"
+    targetRevision: "0.3.6"
     helm:
       values: |
         manager:
           image:
-            repository: ghcr.io/projectbeskar/virtrigaud/manager
-            tag: v1.0.0
+            tag: v0.3.6
 ```
 
-### Flux
+### Flux HelmRelease
 
 ```yaml
-apiVersion: helm.toolkit.fluxcd.io/v2beta1
+apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: virtrigaud
+  namespace: virtrigaud-system
 spec:
   chart:
     spec:
       chart: virtrigaud
+      version: "0.3.6"
       sourceRef:
         kind: HelmRepository
         name: virtrigaud
-      version: "1.0.0"
   values:
     manager:
       image:
-        repository: ghcr.io/projectbeskar/virtrigaud/manager
-        tag: v1.0.0
+        tag: v0.3.6
 ```
 
 ## Migration from Kustomize to Helm
 
-If you're currently using Kustomize for CRD management and want to switch to Helm:
+1. Back up existing resources:
 
-1. **Backup existing resources:**
    ```bash
-   kubectl get vms,providers,vmclasses -A -o yaml > virtrigaud-backup.yaml
+   kubectl get vms,providers,vmclasses,vmimages -A -o yaml > virtrigaud-backup.yaml
    ```
 
-2. **Uninstall Kustomize-managed CRDs (optional):**
+2. Remove Kustomize-managed resources (if safe to do so):
+
    ```bash
    kubectl delete -k config/default
    ```
 
-3. **Install via Helm:**
+3. Install via Helm:
+
    ```bash
-   helm install virtrigaud charts/virtrigaud --namespace virtrigaud --create-namespace
+   helm install virtrigaud virtrigaud/virtrigaud \
+     --version 0.3.6 \
+     --namespace virtrigaud-system \
+     --create-namespace
    ```
 
-4. **Restore resources:**
+4. Restore resources:
+
    ```bash
    kubectl apply -f virtrigaud-backup.yaml
    ```
-
-The conversion webhook will handle any necessary API version transformations automatically.

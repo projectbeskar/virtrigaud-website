@@ -5,28 +5,26 @@ SPDX-License-Identifier: Apache-2.0
 
 # Creating Your First Virtual Machine
 
-This guide walks you through creating a complete, working virtual machine from start to finish using VirtRigaud.
+This guide walks through creating a complete, working virtual machine from start to finish using VirtRigaud v0.3.6.
 
 ## Prerequisites
 
-Before creating a VM, ensure you have:
-
-- VirtRigaud installed in your Kubernetes cluster
-- A configured provider (vSphere, Libvirt, or Proxmox)
+- VirtRigaud v0.3.6 installed in your Kubernetes cluster
+- A configured Provider (vSphere, Libvirt, or Proxmox)
 - `kubectl` access to your cluster
 
 ## Overview
 
-Creating a VM requires four resources:
+Creating a VM requires four resources in order:
 
-1. **Provider** - Connection to your hypervisor
-2. **VMClass** - VM size/specifications (CPU, memory)
-3. **VMImage** - Operating system template
-4. **VirtualMachine** - The actual VM instance
+1. **Provider** — connection to your hypervisor
+2. **VMClass** — VM size/specifications (CPU, memory)
+3. **VMImage** — operating system template
+4. **VirtualMachine** — the actual VM instance
 
 ## Step 1: Create a Provider
 
-First, create credentials for your hypervisor:
+Create credentials for your hypervisor, then create the Provider CR.
 
 === "vSphere"
 
@@ -39,8 +37,6 @@ First, create credentials for your hypervisor:
       --from-literal=insecure=false
     ```
 
-    Then create the Provider:
-
     ```yaml
     apiVersion: infra.virtrigaud.io/v1beta1
     kind: Provider
@@ -49,13 +45,15 @@ First, create credentials for your hypervisor:
       namespace: default
     spec:
       type: vsphere
-      credentialsSecretRef:
+      endpoint: https://vcenter.example.com
+      credentialSecretRef:
         name: vsphere-creds
-      config:
-        datacenter: DC1
-        datastore: datastore1
-        network: "VM Network"
-        resourcePool: /DC1/host/Cluster1/Resources
+        namespace: default
+      runtime:
+        mode: Remote
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
+        service:
+          port: 9090
     ```
 
 === "Libvirt"
@@ -63,10 +61,9 @@ First, create credentials for your hypervisor:
     ```bash
     kubectl create secret generic libvirt-creds \
       --namespace default \
-      --from-literal=uri=qemu+ssh://root@hypervisor.example.com/system
+      --from-literal=uri=qemu+ssh://root@hypervisor.example.com/system \
+      --from-literal=privateKey="$(cat ~/.ssh/id_rsa)"
     ```
-
-    Then create the Provider:
 
     ```yaml
     apiVersion: infra.virtrigaud.io/v1beta1
@@ -76,11 +73,15 @@ First, create credentials for your hypervisor:
       namespace: default
     spec:
       type: libvirt
-      credentialsSecretRef:
+      endpoint: qemu+ssh://root@hypervisor.example.com/system
+      credentialSecretRef:
         name: libvirt-creds
-      config:
-        storagePool: default
-        network: default
+        namespace: default
+      runtime:
+        mode: Remote
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.6"
+        service:
+          port: 9090
     ```
 
 === "Proxmox"
@@ -94,8 +95,6 @@ First, create credentials for your hypervisor:
       --from-literal=insecure=false
     ```
 
-    Then create the Provider:
-
     ```yaml
     apiVersion: infra.virtrigaud.io/v1beta1
     kind: Provider
@@ -104,23 +103,21 @@ First, create credentials for your hypervisor:
       namespace: default
     spec:
       type: proxmox
-      credentialsSecretRef:
+      endpoint: https://proxmox.example.com:8006
+      credentialSecretRef:
         name: proxmox-creds
-      config:
-        node: pve1
-        storage: local-lvm
-        network: vmbr0
+        namespace: default
+      runtime:
+        mode: Remote
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.6"
+        service:
+          port: 9090
     ```
 
-Apply the provider configuration:
+Apply and verify:
 
 ```bash
 kubectl apply -f provider.yaml
-```
-
-Verify the provider is ready:
-
-```bash
 kubectl get providers
 # NAME               TYPE      READY   AGE
 # vsphere-provider   vsphere   true    10s
@@ -128,7 +125,7 @@ kubectl get providers
 
 ## Step 2: Define a VM Class
 
-Create a VM class that defines the size and specifications:
+`spec.cpu` is an integer (number of vCPUs). `spec.memory` is a Kubernetes resource quantity.
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -137,20 +134,9 @@ metadata:
   name: small
   namespace: default
 spec:
-  hardware:
-    cpus: 2
-    memory: 4Gi
-  policies:
-    resources:
-      requests:
-        cpu: "1"
-        memory: 2Gi
-      limits:
-        cpu: "2"
-        memory: 4Gi
+  cpu: 2
+  memory: 4Gi
 ```
-
-Apply the VM class:
 
 ```bash
 kubectl apply -f vmclass.yaml
@@ -158,7 +144,7 @@ kubectl apply -f vmclass.yaml
 
 ## Step 3: Define a VM Image
 
-Create a VM image referencing your OS template:
+Reference your OS template or image URL. The source structure is provider-specific.
 
 === "vSphere"
 
@@ -169,14 +155,9 @@ Create a VM image referencing your OS template:
       name: ubuntu-22
       namespace: default
     spec:
-      providerRef:
-        name: vsphere-provider
-      osInfo:
-        type: linux
-        version: "22.04"
       source:
-        type: template
-        name: ubuntu-22.04-template
+        vsphere:
+          templateName: ubuntu-22.04-template
     ```
 
 === "Libvirt"
@@ -188,14 +169,9 @@ Create a VM image referencing your OS template:
       name: ubuntu-22
       namespace: default
     spec:
-      providerRef:
-        name: libvirt-provider
-      osInfo:
-        type: linux
-        version: "22.04"
       source:
-        type: url
-        url: https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img
+        libvirt:
+          url: https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img
     ```
 
 === "Proxmox"
@@ -207,17 +183,10 @@ Create a VM image referencing your OS template:
       name: ubuntu-22
       namespace: default
     spec:
-      providerRef:
-        name: proxmox-provider
-      osInfo:
-        type: linux
-        version: "22.04"
       source:
-        type: template
-        id: 9000
+        proxmox:
+          templateId: 9000
     ```
-
-Apply the VM image:
 
 ```bash
 kubectl apply -f vmimage.yaml
@@ -225,7 +194,7 @@ kubectl apply -f vmimage.yaml
 
 ## Step 4: Create the Virtual Machine
 
-Now create your first VM:
+Network attachments are listed under `spec.networks[]`. Each entry references a `VMNetworkAttachment` CR via `networkRef`. If `networkRef` is omitted, the VM template's pre-configured network adapter is used.
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -235,20 +204,18 @@ metadata:
   namespace: default
 spec:
   providerRef:
-    name: vsphere-provider  # or libvirt-provider, proxmox-provider
+    name: vsphere-provider   # or libvirt-provider, proxmox-provider
+    namespace: default
   classRef:
     name: small
+    namespace: default
   imageRef:
     name: ubuntu-22
+    namespace: default
   powerState: "On"
-  network:
-    hostname: my-first-vm
-    interfaces:
-      - name: eth0
-        type: dhcp
+  networks:
+  - name: default
 ```
-
-Apply the VM configuration:
 
 ```bash
 kubectl apply -f vm.yaml
@@ -256,35 +223,36 @@ kubectl apply -f vm.yaml
 
 ## Step 5: Verify VM Creation
 
-Watch the VM being created:
-
 ```bash
 # Watch VM status
 kubectl get vm my-first-vm -w
 
-# Check detailed status
+# Detailed status
 kubectl describe vm my-first-vm
 
-# View VM events
+# VM events
 kubectl get events --field-selector involvedObject.name=my-first-vm
 ```
 
-Once the VM is ready, you should see:
+Once the VM is ready:
 
-```bash
-NAME          PROVIDER           CLASS   IMAGE       POWER   READY   AGE
-my-first-vm   vsphere-provider   small   ubuntu-22   On      True    2m
 ```
+NAME          PROVIDER           CLASS   IMAGE       PHASE     AGE
+my-first-vm   vsphere-provider   small   ubuntu-22   Running   2m
+```
+
+!!! note "Phase column for adopted VMs"
+    VMs auto-adopted by the VMAdoption controller (watching Provider CRs annotated `virtrigaud.io/adopt-vms: "true"`) may show an empty `phase` column. This is a known gap (issue I2); `status.ips` is still populated correctly.
 
 ## Step 6: Access Your VM
 
-Get the VM's IP address:
-
 ```bash
-kubectl get vm my-first-vm -o jsonpath='{.status.network.ipAddress}'
-```
+# Get the VM's IP addresses
+kubectl get vm my-first-vm -o jsonpath='{.status.ips}'
 
-Access the VM:
+# Get console URL (provider-dependent)
+kubectl get vm my-first-vm -o jsonpath='{.status.consoleURL}'
+```
 
 === "SSH"
 
@@ -295,13 +263,13 @@ Access the VM:
 === "Console (Libvirt)"
 
     ```bash
-    # Get console access via VNC
-    kubectl get vm my-first-vm -o jsonpath='{.status.console.vnc}'
+    # VNC address is in status.consoleURL
+    kubectl get vm my-first-vm -o jsonpath='{.status.consoleURL}'
     ```
 
 ## Complete Example
 
-Here's a complete YAML file with all resources:
+All resources in one file:
 
 ```yaml
 ---
@@ -324,13 +292,15 @@ metadata:
   namespace: default
 spec:
   type: vsphere
-  credentialsSecretRef:
+  endpoint: https://vcenter.example.com
+  credentialSecretRef:
     name: vsphere-creds
-  config:
-    datacenter: DC1
-    datastore: datastore1
-    network: "VM Network"
-    resourcePool: /DC1/host/Cluster1/Resources
+    namespace: default
+  runtime:
+    mode: Remote
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
+    service:
+      port: 9090
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMClass
@@ -338,17 +308,8 @@ metadata:
   name: small
   namespace: default
 spec:
-  hardware:
-    cpus: 2
-    memory: 4Gi
-  policies:
-    resources:
-      requests:
-        cpu: "1"
-        memory: 2Gi
-      limits:
-        cpu: "2"
-        memory: 4Gi
+  cpu: 2
+  memory: 4Gi
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMImage
@@ -356,14 +317,9 @@ metadata:
   name: ubuntu-22
   namespace: default
 spec:
-  providerRef:
-    name: vsphere-provider
-  osInfo:
-    type: linux
-    version: "22.04"
   source:
-    type: template
-    name: ubuntu-22.04-template
+    vsphere:
+      templateName: ubuntu-22.04-template
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
@@ -373,19 +329,17 @@ metadata:
 spec:
   providerRef:
     name: vsphere-provider
+    namespace: default
   classRef:
     name: small
+    namespace: default
   imageRef:
     name: ubuntu-22
+    namespace: default
   powerState: "On"
-  network:
-    hostname: my-first-vm
-    interfaces:
-      - name: eth0
-        type: dhcp
+  networks:
+  - name: default
 ```
-
-Save this to `complete-vm.yaml` and apply:
 
 ```bash
 kubectl apply -f complete-vm.yaml
@@ -393,41 +347,40 @@ kubectl apply -f complete-vm.yaml
 
 ## Next Steps
 
-Now that you've created your first VM, explore:
-
-- [Advanced VM Operations](../examples/advanced/) - Snapshots, cloning, scaling
-- [Provider-Specific Features](../providers/) - Provider capabilities
-- [VM Lifecycle Management](../advanced-lifecycle/) - Managing VM states
-- [Networking Configuration](../guides/networking/) - Advanced networking
+- [Advanced VM Operations](../examples/) — Snapshots, cloning, scaling
+- [Provider Capabilities](../providers/providers-capabilities.md) — per-provider feature matrix
+- [Observability Guide](../operations/observability.md) — dashboards and alerting
 
 ## Troubleshooting
 
 ### VM Stuck in Pending
 
 ```bash
-# Check provider status
+# Check provider status and circuit breaker
 kubectl describe provider vsphere-provider
-
-# Check VM events
 kubectl describe vm my-first-vm
 ```
+
+If `virtrigaud_circuit_breaker_state{provider="vsphere-provider"} 2`, the provider is unreachable. See [Resilience](../operations/resilience.md).
 
 ### VM Not Getting IP Address
 
 ```bash
-# Verify VMware Tools / guest agent is installed
-kubectl get vm my-first-vm -o jsonpath='{.status.guestAgent}'
+# Check IPs in status
+kubectl get vm my-first-vm -o jsonpath='{.status.ips}'
 
-# Check network configuration
-kubectl get vm my-first-vm -o yaml | yq '.spec.network'
+# Verify VMware Tools / guest agent is installed and the VM is actually running
+kubectl get vm my-first-vm -o jsonpath='{.status.powerState}'
 ```
+
+`virtrigaud_ip_discovery_duration_seconds` on `/metrics` tracks how long the no-IPs → has-IPs transition takes per provider type.
 
 ### Authentication Errors
 
 ```bash
-# Verify credentials secret
+# Verify the credentials secret exists and has the expected keys
 kubectl get secret vsphere-creds -o yaml
 
-# Check provider logs
-kubectl logs -n virtrigaud-system deployment/virtrigaud-manager | grep "my-first-vm"
+# Check provider pod logs
+kubectl logs -n virtrigaud-system -l app.kubernetes.io/component=provider-vsphere
 ```
