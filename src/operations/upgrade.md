@@ -40,6 +40,174 @@ helm upgrade virtrigaud virtrigaud/virtrigaud --version v0.2.1
 
 ## Version-Specific Upgrade Notes
 
+### v0.3.5 → v0.3.6
+
+Released 2026-05-25. **Headline observability + supply-chain release.** No
+breaking changes for default-config users; binary consumers via released
+images are unaffected.
+
+#### Breaking changes
+
+- **None for operators.** Source builders need **Go 1.26+** installed
+  locally ([#125](https://github.com/projectbeskar/virtrigaud/pull/125),
+  toolchain floor bumped 1.24.0 → 1.26.0). If you only consume the released
+  manager + provider container images, this does not affect you.
+
+#### Helm upgrade command
+
+```bash
+helm repo update
+helm upgrade -i virtrigaud virtrigaud/virtrigaud \
+  --version 0.3.6 \
+  --reset-values
+```
+
+`--reset-values` matches the established pattern used on the maintainer's
+lab cluster (`vr1.lab.k8`) and ensures the upgrade picks up any new chart
+defaults rather than carrying over stale rendered values. If you have local
+value overrides, pass them via `-f your-values.yaml` after `--reset-values`.
+
+#### New `/metrics` families to add to dashboards
+
+After the rollout, the following `virtrigaud_*` families become available
+(some emit immediately, some on first activity):
+
+| Metric | Type | Labels | When it populates |
+|---|---|---|---|
+| `virtrigaud_circuit_breaker_state` | gauge | `provider_type`, `provider` | Immediately at boot (one row per Provider CR). Values: 0=Closed, 1=HalfOpen, 2=Open. **Alertable on `> 0`.** |
+| `virtrigaud_circuit_breaker_failures_total` | counter | `provider_type`, `provider` | On first CB-counted RPC failure per Provider |
+| `virtrigaud_vm_operations_total` | counter | `provider_type`, `provider`, `operation`, `outcome` | On the first VM RPC after deploy (Create/Delete/Power/Describe/Reconfigure) |
+| `virtrigaud_ip_discovery_duration_seconds` | histogram | `provider_type` | On the first no-IPs → has-IPs VM transition (idempotent across manager restarts) |
+| `virtrigaud_provider_tasks_inflight` | gauge | `provider_type`, `provider` | Seeded to 0 at boot, increments on the first task-creating RPC |
+
+These slot in alongside the metrics already present since v0.3.5. The full
+metric inventory after v0.3.6 is **11 of 12** `virtrigaud_*` families wired
+in code; the 12th (`virtrigaud_queue_depth`) is explicitly deprecated — see
+the next section.
+
+Suggested baseline alerts:
+
+- `max by (provider) (virtrigaud_circuit_breaker_state) > 0` for **5m** —
+  fires when any Provider's circuit opens or half-opens
+- `rate(virtrigaud_vm_operations_total{outcome="error"}[5m]) > 0` per
+  provider/operation — surface elevated failure rates
+- `histogram_quantile(0.95, sum by (le, provider_type) (rate(virtrigaud_ip_discovery_duration_seconds_bucket[5m])))` —
+  P95 time from `kubectl apply` to first IP
+
+#### Deprecation: `virtrigaud_queue_depth`
+
+The `virtrigaud_queue_depth{kind}` gauge and the
+`(*ReconcileMetrics).SetQueueDepth` helper are **deprecated in v0.3.6**
+([#132](https://github.com/projectbeskar/virtrigaud/pull/132)). They are
+redundant with controller-runtime's `workqueue_depth{name=<controller-name>}`,
+which has been on `/metrics` since v0.3.0 and ships with 8 sibling workqueue
+metrics for free.
+
+The metric family is still registered (no breakage), but the `# HELP` line
+now begins with `[DEPRECATED v0.3.6 — use workqueue_depth{name} instead]` so
+the deprecation surfaces on your next scrape. Scheduled for removal in
+**v0.4.0 or later**.
+
+**Migration mapping** for the 8 reconciler kinds (also in the GoDoc on
+`SetQueueDepth`):
+
+| Reconciler                       | controller-runtime `name` label |
+|----------------------------------|---------------------------------|
+| `VirtualMachineReconciler`       | `virtualmachine`                |
+| `ProviderReconciler`             | `provider`                      |
+| `VMClassReconciler`              | `vmclass`                       |
+| `VMImageReconciler`              | `vmimage`                       |
+| `VMNetworkAttachmentReconciler`  | `vmnetworkattachment`           |
+| `VMAdoptionReconciler`           | `vmadoption`                    |
+| `VMSnapshotReconciler`           | `vmsnapshot`                    |
+| `VMMigrationReconciler`          | `vmmigration`                   |
+
+Dashboard rewrite recipe:
+
+```
+virtrigaud_queue_depth{kind="virtualmachine"}
+    →    workqueue_depth{name="virtualmachine"}
+```
+
+#### CircuitBreaker behaviour change
+
+Every outbound provider gRPC RPC is now wrapped by a per-Provider
+CircuitBreaker ([#112](https://github.com/projectbeskar/virtrigaud/issues/112)),
+backed by the new `virtrigaud_circuit_breaker_*` metric families above.
+
+Defaults:
+
+| Setting              | Default | Effect                                         |
+|----------------------|---------|------------------------------------------------|
+| `FailureThreshold`   | 10      | Open after 10 consecutive infra-class failures |
+| `ResetTimeout`       | 60s     | Time in Open before transitioning to HalfOpen  |
+| `HalfOpenMaxCalls`   | 3       | Probe calls allowed in HalfOpen state          |
+
+**What trips the breaker** (infra-class gRPC errors):
+
+- `Unavailable`
+- `DeadlineExceeded`
+- `Internal`
+- `Unknown`
+
+**What passes through** (business-class errors — no CB impact):
+
+- `NotFound`, `AlreadyExists`, `InvalidArgument`, `FailedPrecondition`,
+  `PermissionDenied`, `Unauthenticated`, etc.
+
+!!! warning "Global config only — no per-Provider knob yet"
+    The CB defaults come from `resilience.DefaultConfig()` and are applied
+    uniformly to every Provider CR. There is **no per-Provider override
+    field** in v0.3.6. If you need different thresholds for a high-latency
+    provider, that work is tracked separately; for now, plan around the
+    defaults above.
+
+#### Security: OpenTelemetry CVE fixes
+
+The OpenTelemetry Go SDK dependencies are bumped to **v1.43.0** in v0.3.6,
+closing 3 HIGH-severity CVEs that were present in v0.3.5
+([#143/#144](https://github.com/projectbeskar/virtrigaud/pull/144)):
+
+| CVE              | Package                            | v0.3.5 | v0.3.6  |
+|------------------|------------------------------------|--------|---------|
+| CVE-2026-29181   | `go.opentelemetry.io/otel`         | v1.39.0 | v1.43.0 |
+| CVE-2026-24051   | `go.opentelemetry.io/otel/sdk`     | v1.39.0 | v1.43.0 |
+| CVE-2026-39883   | `go.opentelemetry.io/otel/sdk`     | v1.39.0 | v1.43.0 |
+
+CVE-2026-24051 and CVE-2026-39883 are PATH-hijacking primitives — exactly
+the class of finding regulated environments will not accept. **Upgrade
+promptly** if you scan with Trivy/Grype.
+
+#### Smoke recipe (verify your upgrade)
+
+After the rollout completes, verify the manager is running the v0.3.6 binary
+and the new metrics are present:
+
+```bash
+# Port-forward to the manager metrics endpoint
+kubectl -n virtrigaud-system port-forward deploy/virtrigaud-manager 8080:8080 &
+
+# 1. Build info must report v0.3.6 / Go 1.26.x
+curl -s localhost:8080/metrics | grep '^virtrigaud_build_info'
+# Expect: virtrigaud_build_info{version="v0.3.6", go_version="go1.26.x", ...} 1
+
+# 2. Count distinct virtrigaud_* metric families on /metrics
+curl -s localhost:8080/metrics | grep -E '^# HELP virtrigaud_' | wc -l
+# Expect: ~9-11 families emit immediately. The remaining 2 (vm_operations_total,
+# ip_discovery_duration_seconds) populate on the first relevant VM event.
+
+# 3. Confirm the CB gauge is exposed (one row per Provider CR)
+curl -s localhost:8080/metrics | grep '^virtrigaud_circuit_breaker_state'
+
+# 4. Confirm deprecation banner on the old queue_depth gauge
+curl -s localhost:8080/metrics | grep -B1 '^virtrigaud_queue_depth' | head -2
+# Expect a # HELP line beginning with [DEPRECATED v0.3.6 ...]
+```
+
+If any of those checks fail, capture the manager logs
+(`kubectl -n virtrigaud-system logs deploy/virtrigaud-manager`) before
+rolling back.
+
 ### v0.2.0 → v0.2.1
 
 **Breaking Changes:**
