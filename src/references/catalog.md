@@ -253,7 +253,6 @@ To be included in the catalog, providers must:
 - **Documentation:** [VirtRigaud Provider Docs](https://projectbeskar.github.io/virtrigaud/providers/)
 - **Issues:** [GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/projectbeskar/virtrigaud/discussions)
-- **Slack:** [VirtRigaud Community](https://virtrigaud.slack.com)
 
 ## Versioning and Compatibility
 

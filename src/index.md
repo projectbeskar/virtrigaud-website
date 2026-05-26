@@ -157,7 +157,6 @@ See [CHANGELOG.md](https://github.com/projectbeskar/virtrigaud/blob/main/CHANGEL
 
 - **GitHub Issues**: [github.com/projectbeskar/virtrigaud/issues](https://github.com/projectbeskar/virtrigaud/issues)
 - **Discussions**: [github.com/projectbeskar/virtrigaud/discussions](https://github.com/projectbeskar/virtrigaud/discussions)
-- **Slack**: #virtrigaud on Kubernetes Slack
 
 ## Quick Links
 

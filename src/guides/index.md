@@ -154,7 +154,6 @@ See the [Security Guide](../operations/security.md) for detailed recommendations
 - **[Troubleshooting](../getting-started/index.md#troubleshooting)** - Common issues
 - **[Examples](../examples/)** - Working configurations
 - **[GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues)** - Report bugs or request features
-- **[Slack Channel](https://kubernetes.slack.com/messages/virtrigaud)** - Community support
 
 ## Next Steps
 

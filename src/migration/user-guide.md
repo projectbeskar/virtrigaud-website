@@ -541,7 +541,6 @@ See [examples/](../../examples/migration/) directory for more migration scenario
 For issues and questions:
 - GitHub Issues: https://github.com/projectbeskar/virtrigaud/issues
 - Documentation: https://virtrigaud.io/docs
-- Community: #virtrigaud on Kubernetes Slack
 
 ---
 

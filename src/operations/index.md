@@ -315,7 +315,6 @@ kubectl get vms -A
 ## Support and Resources
 
 - **[GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues)** - Report bugs
-- **[Slack Channel](https://kubernetes.slack.com/messages/virtrigaud)** - Community support
 - **[Documentation](https://projectbeskar.github.io/virtrigaud/)** - Comprehensive guides
 - **[Security Guide](security.md)** - Security best practices
 - **[Observability Guide](observability.md)** - Monitoring setup
