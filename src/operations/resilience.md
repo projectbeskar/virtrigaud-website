@@ -5,23 +5,160 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Resilience Guide
 
-This document describes the resilience patterns and error handling mechanisms in VirtRigaud.
+This document describes the resilience patterns and error-handling mechanisms in VirtRigaud as of **v0.3.6**.
 
 ## Overview
 
-VirtRigaud implements comprehensive resilience patterns:
+VirtRigaud's resilience model is layered:
 
-- **Error Taxonomy** - Structured error classification
-- **Circuit Breakers** - Protection against cascading failures  
-- **Exponential Backoff** - Intelligent retry strategies
-- **Timeout Policies** - Prevent resource exhaustion
-- **Rate Limiting** - Provider protection
+- **Error Taxonomy** — Structured error classification (`internal/providers/contracts`)
+- **CircuitBreaker on the provider gRPC RPC path** — One breaker per Provider CR, **wired automatically** since v0.3.6 (G6 / #112). Operators get a visible signal when a provider goes bad and the manager stops hammering it.
+- **Exponential Backoff** — Intelligent retry strategies for transient failures
+- **Timeout Policies** — Per-RPC deadlines prevent resource exhaustion
+- **Rate Limiting** — Provider-side protection
+
+## CircuitBreaker on the Provider gRPC Path (v0.3.6)
+
+### What changed in v0.3.6
+
+The `internal/resilience/circuitbreaker.go` primitive has existed in the codebase for several releases, but **before v0.3.6 it had no production callsite on the gRPC path**. The manager would happily keep firing RPCs at a wedged provider, and operators had no metric signal that a provider was unhealthy.
+
+v0.3.6 (G6 / PR #112) fixed that. The gRPC client constructor (`internal/transport/grpc/client.go`) now installs a `providerCircuitBreakerInterceptor` on every outbound RPC, fed by one breaker per `Provider` CR.
+
+### Architecture
+
+```
+VirtualMachine reconciler
+        │
+        │ resolver.GetProvider(ctx, vm.Spec.ProviderRef)
+        ▼
+remote.Resolver
+        │  cbRegistry.GetOrCreate("provider-grpc",
+        │                          provider.Spec.Type,
+        │                          provider.Name)
+        ▼
+resilience.Registry  ────►  resilience.CircuitBreaker  (one per Provider CR)
+        │                              │
+        ▼                              │ wraps every RPC via
+grpc.Client                            │ providerCircuitBreakerInterceptor
+        │ chained unary interceptors:  │
+        │   1. providerRPCMetricsInterceptor (G4)  ──► virtrigaud_provider_rpc_*
+        │   2. providerCircuitBreakerInterceptor   ──► virtrigaud_circuit_breaker_*
+        ▼
+provider-vsphere / provider-libvirt / provider-proxmox
+```
+
+Important properties of the v0.3.6 wiring:
+
+- **One breaker per `Provider` CR**, allocated lazily on first use by the `remote.Resolver`. Allocation key: `(providerType, providerName, "provider-grpc")`. Breakers are removed from the registry when the resolver invalidates a Provider connection.
+- **Interceptor order matters.** The metrics interceptor runs *before* the breaker interceptor, so every RPC (including breaker fast-fails, which surface as `code=Unavailable`) shows up in `virtrigaud_provider_rpc_requests_total`. Operators see breaker-rejected RPCs as `Unavailable` in their RPC dashboards — not as silent drops.
+- **The interceptor never panics**, by design. If it did, every provider RPC in the cluster would break.
+
+### Default configuration
+
+`resilience.DefaultConfig()`:
+
+| Setting | Value | Meaning |
+|---|---|---|
+| `FailureThreshold` | `10` | Number of consecutive infra-class failures that trip the breaker from Closed → Open. |
+| `ResetTimeout` | `60s` | After this much time in Open, the next call admits the breaker to Half-Open. |
+| `HalfOpenMaxCalls` | `3` | Number of trial calls admitted in Half-Open. All three must succeed to close the breaker; any single failure re-opens it. |
+
+These thresholds apply uniformly to all Provider CRs in v0.3.6. Per-Provider override is on the roadmap.
+
+### Failure classification — what trips the breaker
+
+The breaker is opinionated about which errors count toward the failure threshold. This matters: a `NotFound` on a deleted VM should not contribute to the manager deciding the whole provider is down.
+
+`internal/transport/grpc/client.go:isInfraFailure` classifies as follows.
+
+**Infra-class — counts toward the threshold:**
+
+| gRPC code | Meaning |
+|---|---|
+| `Unavailable` | Provider pod down, network partition, mTLS handshake failed |
+| `DeadlineExceeded` | Provider hung past the call timeout |
+| `Internal` | Provider crashed mid-call |
+| `Unknown` | Non-gRPC error from the transport layer (e.g. TCP reset) |
+
+**Business-class — passes through, does NOT trip the breaker:**
+
+| gRPC code | Why it shouldn't trip the breaker |
+|---|---|
+| `OK` | Obvious success |
+| `Canceled` | Caller gave up, not the provider failing |
+| `NotFound` | VM doesn't exist — the provider is healthy, the request was bad |
+| `InvalidArgument` | Provider correctly rejected a malformed request |
+| `AlreadyExists` | Provider correctly rejected a duplicate |
+| `FailedPrecondition` | Provider in a state that rejects this RPC right now |
+| `PermissionDenied` | Auth working as expected |
+| `Unauthenticated` | Same |
+| `ResourceExhausted` | Rate-limit signal — caller should back off this one call, not stop talking to the provider |
+| `Aborted`, `OutOfRange`, `Unimplemented` | Protocol-level, unrelated to provider health |
+
+Rationale: the breaker should fire when "the provider as a whole is in trouble," not when "one request was bad."
+
+### What happens when the breaker is open
+
+When the breaker is Open and an RPC arrives, the interceptor **does not invoke the provider call**. Instead, it synthesises a canonical `codes.Unavailable` status:
+
+```
+circuit breaker open: <breaker-name>
+```
+
+Downstream code paths — `c.mapGRPCError`, callers that do `errors.Is(err, contracts.RetryableError)`, the controller-runtime retry loop — all treat this exactly like any other `Unavailable` from the provider. Operators don't need a special handling path for "breaker open" vs "provider down."
+
+### State machine
+
+```
+       FailureThreshold infra-failures
+   ┌────────────────────────────────────►┌─────────┐
+   │                                      │  Open   │◄──┐ infra-failure
+┌──┴──────┐                                └────┬────┘   │
+│ Closed  │                                     │        │
+└──┬──────┘                                     │ ResetTimeout elapses
+   ▲                                            ▼
+   │ all HalfOpenMaxCalls succeed     ┌───────────────┐
+   └──────────────────────────────────│  Half-Open    │
+                                       │ (≤ 3 trial    │
+                                       │  RPCs)        │
+                                       └───────────────┘
+```
+
+- **Closed** — Normal operation. Each infra-class failure increments a counter; reaching `FailureThreshold` transitions to Open. Each success resets the counter.
+- **Open** — Fast-fail mode. RPCs return `Unavailable` without hitting the provider. After `ResetTimeout` (60s default), the *next* RPC admits the breaker to Half-Open and counts as the first half-open call (see issue #96).
+- **Half-Open** — Up to `HalfOpenMaxCalls` (3) trial RPCs are admitted. All three must succeed to transition back to Closed; any single infra-failure during this window re-opens the breaker.
+
+### Metrics
+
+```
+# Gauge: current state. 0=Closed, 1=Half-Open, 2=Open.
+virtrigaud_circuit_breaker_state{provider_type="vsphere", provider="vsphere-prod"} 0
+
+# Counter: every infra-class failure recorded against the breaker.
+virtrigaud_circuit_breaker_failures_total{provider_type="vsphere", provider="vsphere-prod"} 5
+```
+
+Both families have one series per `Provider` CR. Suggested operator alerts:
+
+- `virtrigaud_circuit_breaker_state > 0` — any breaker in a non-Closed state across the fleet.
+- `rate(virtrigaud_circuit_breaker_failures_total[5m]) > 0` — sustained infra failures even before the breaker trips.
+
+### Operational note from the v0.3.6-rc1 smoke
+
+On the v0.3.6-rc1 deploy to the `vr1.lab.k8` lab cluster, **the libvirt breaker tripped to Open immediately**. This was the metric working exactly as designed: the lab's libvirt provider had a pre-existing SSH-connectivity issue (tracked as #I1) that was silently failing every RPC in v0.3.5 with no operator-visible signal. Post-v0.3.6, the breaker surfaced it via the gauge within seconds.
+
+The expected operator response to a tripped breaker is:
+
+1. Check `virtrigaud_provider_rpc_requests_total{code="Unavailable"}` to confirm the failure pattern is on the provider, not the manager.
+2. Investigate the provider pod (`kubectl logs deployment/provider-<name>`) and its hypervisor connectivity.
+3. The breaker will self-recover once underlying connectivity is restored — no manual reset required. (`(*resilience.CircuitBreaker).Reset()` exists for emergency use but is not exposed via an admin API in v0.3.6.)
 
 ## Error Taxonomy
 
 ### Error Types
 
-VirtRigaud classifies all errors into specific categories:
+VirtRigaud classifies all provider-returned errors into specific categories. The classification drives controller retry behaviour and the conditions surfaced on each CR.
 
 | Type | Retryable | Description | Example |
 |------|-----------|-------------|---------|
@@ -30,13 +167,13 @@ VirtRigaud classifies all errors into specific categories:
 | `Unauthorized` | No | Authentication failed | Invalid credentials |
 | `NotSupported` | No | Unsupported operation | Feature not available |
 | `Retryable` | Yes | Transient error | Network timeout |
-| `Unavailable` | Yes | Service unavailable | Provider down |
+| `Unavailable` | Yes | Service unavailable | Provider down — **including circuit-breaker open** |
 | `RateLimit` | Yes | Rate limited | API quota exceeded |
 | `Timeout` | Yes | Operation timeout | Long-running task |
 | `QuotaExceeded` | No | Resource quota hit | Storage full |
 | `Conflict` | No | Resource conflict | Duplicate name |
 
-### Error Creation
+### Error Creation (provider authors)
 
 ```go
 import "github.com/projectbeskar/virtrigaud/internal/providers/contracts"
@@ -54,17 +191,19 @@ if providerErr, ok := err.(*contracts.ProviderError); ok {
 }
 ```
 
-## Circuit Breaker Pattern
+## CircuitBreaker — programmatic API
 
-### Configuration
+You generally do **not** need to interact with the CircuitBreaker primitive directly in v0.3.6 — it is wired automatically on the gRPC RPC path. The API below is documented for reference and for advanced reconciler authors who want to wrap a non-gRPC code path.
+
+### Direct construction
 
 ```go
 import "github.com/projectbeskar/virtrigaud/internal/resilience"
 
 config := &resilience.Config{
-    FailureThreshold: 10,              // Open after 10 failures
-    ResetTimeout:     60 * time.Second, // Try again after 60s
-    HalfOpenMaxCalls: 3,               // Allow 3 test calls
+    FailureThreshold: 10,
+    ResetTimeout:     60 * time.Second,
+    HalfOpenMaxCalls: 3,
 }
 
 cb := resilience.NewCircuitBreaker("provider-vsphere", "vsphere", "prod", config)
@@ -84,19 +223,15 @@ if err != nil {
 }
 ```
 
-### States
+### Registry
 
-1. **Closed** - Normal operation, failures are counted
-2. **Open** - Fast-fail mode, requests are rejected immediately  
-3. **Half-Open** - Testing mode, limited requests allowed
+The `Registry` is what the manager uses to allocate breakers per Provider CR. If you need similar per-target isolation in your own code, use the same pattern:
 
-### Metrics
-
-Circuit breaker state is exposed via metrics:
-
-```
-virtrigaud_circuit_breaker_state{provider_type="vsphere",provider="prod"} 0
-virtrigaud_circuit_breaker_failures_total{provider_type="vsphere",provider="prod"} 5
+```go
+registry := resilience.NewRegistry(resilience.DefaultConfig())
+cb := registry.GetOrCreate("my-operation", "vsphere", "vsphere-prod")
+// ... use cb ...
+registry.Remove("my-operation", "vsphere", "vsphere-prod") // on Provider deletion
 ```
 
 ## Retry Strategies
@@ -132,7 +267,7 @@ if Jitter:
 Example delays with `BaseDelay=500ms`, `Multiplier=2.0`:
 - Attempt 0: 500ms
 - Attempt 1: 1s
-- Attempt 2: 2s  
+- Attempt 2: 2s
 - Attempt 3: 4s
 - Attempt 4: 8s
 
@@ -152,83 +287,29 @@ none := resilience.NoRetryConfig()
 // MaxAttempts: 1
 ```
 
-## Combined Resilience Policies
-
-### Policy Builder
-
-```go
-policy := resilience.NewPolicyBuilder("vm-operations").
-    WithRetry(resilience.DefaultRetryConfig()).
-    WithCircuitBreaker(circuitBreaker).
-    Build()
-
-err := policy.Execute(ctx, func(ctx context.Context) error {
-    return provider.Create(ctx, request)
-})
-```
-
-### Integration Example
-
-```go
-// In VirtualMachine controller
-func (r *VirtualMachineReconciler) createVM(ctx context.Context, vm *v1beta1.VirtualMachine) error {
-    // Get circuit breaker for this provider
-    cb := r.CircuitBreakerRegistry.GetOrCreate(
-        "vm-operations", 
-        provider.Spec.Type, 
-        provider.Name,
-    )
-    
-    // Create resilience policy
-    policy := resilience.NewPolicyBuilder("create-vm").
-        WithRetry(&resilience.RetryConfig{
-            MaxAttempts: 3,
-            BaseDelay:   1 * time.Second,
-            MaxDelay:    30 * time.Second,
-            Multiplier:  2.0,
-            Jitter:      true,
-        }).
-        WithCircuitBreaker(cb).
-        Build()
-    
-    // Execute with resilience
-    return policy.Execute(ctx, func(ctx context.Context) error {
-        resp, err := provider.Create(ctx, createReq)
-        if err != nil {
-            return err
-        }
-        
-        vm.Status.ID = resp.ID
-        vm.Status.TaskRef = resp.TaskRef
-        return nil
-    })
-}
-```
-
 ## Timeout Policies
 
-### RPC Timeouts
+### Per-RPC Timeouts
 
-Different operations have different timeout requirements:
+Each RPC in the gRPC client has its own context deadline (`internal/transport/grpc/client.go`):
 
-```go
-// Operation-specific timeouts
-config := &config.RPCConfig{
-    TimeoutDescribe:   30 * time.Second,  // Quick status check
-    TimeoutMutating:   4 * time.Minute,   // Create/Delete/Power
-    TimeoutValidate:   10 * time.Second,  // Provider validation
-    TimeoutTaskStatus: 10 * time.Second,  // Task polling
-}
+| RPC | Default deadline | Rationale |
+|---|---|---|
+| `Validate` | 30s | Cheap health check |
+| `Describe` | 30s | Read-only state query |
+| `Power` | 2 min | State change + provider confirmation |
+| `Delete` | 2 min | Provider cleanup may take time |
+| `Create` | 5 min | Template clone / disk provisioning |
+| `Reconfigure` | 5 min | Hot-plug or restart-required path |
+| `TaskStatus` | 10s | Poll, must be cheap |
+| `SnapshotCreate` | 5 min | Memory + disk capture |
+| `ExportDisk` / `ImportDisk` | 30 min | Large data transfer |
+| `GetDiskInfo` | 2 min | Backing-chain walk |
+| `ListVMs` | 2 min | Full provider enumeration (used by VMAdoption) |
 
-// Usage in gRPC client
-timeout := config.GetRPCTimeout("Create")
-ctx, cancel := context.WithTimeout(ctx, timeout)
-defer cancel()
+When a deadline expires, the gRPC client returns `DeadlineExceeded`, which (a) is mapped to `contracts.RetryableError` for the caller and (b) counts as an infra-class failure toward the CircuitBreaker.
 
-resp, err := client.Create(ctx, request)
-```
-
-### Context Propagation
+### Context Propagation (provider authors)
 
 Always respect context deadlines:
 
@@ -240,7 +321,7 @@ func (p *Provider) Create(ctx context.Context, req CreateRequest) error {
         return ctx.Err()
     default:
     }
-    
+
     // Perform operation with context
     return p.performCreate(ctx, req)
 }
@@ -268,27 +349,7 @@ if !limiter.Allow() {
 return provider.Create(ctx, request)
 ```
 
-### Per-Provider Limits
-
-Each provider instance has its own rate limiter:
-
-```go
-type ProviderManager struct {
-    limiters map[string]*rate.Limiter
-}
-
-func (pm *ProviderManager) getLimiter(providerType, provider string) *rate.Limiter {
-    key := fmt.Sprintf("%s:%s", providerType, provider)
-    if limiter, exists := pm.limiters[key]; exists {
-        return limiter
-    }
-    
-    // Create new limiter
-    limiter := rate.NewLimiter(rate.Limit(10), 20)
-    pm.limiters[key] = limiter
-    return limiter
-}
-```
+`ResourceExhausted` (gRPC code) is *not* an infra-class failure and will not trip the CircuitBreaker — see [Failure classification](#failure-classification--what-trips-the-breaker).
 
 ## Condition Mapping
 
@@ -328,7 +389,7 @@ func mapErrorToCondition(err error) metav1.Condition {
             }
         case contracts.ErrorTypeUnauthorized:
             return metav1.Condition{
-                Type:    "Ready", 
+                Type:    "Ready",
                 Status:  metav1.ConditionFalse,
                 Reason:  "AuthenticationFailed",
                 Message: providerErr.Message,
@@ -337,12 +398,12 @@ func mapErrorToCondition(err error) metav1.Condition {
             return metav1.Condition{
                 Type:    "Ready",
                 Status:  metav1.ConditionFalse,
-                Reason:  "ProviderUnavailable", 
+                Reason:  "ProviderUnavailable",
                 Message: providerErr.Message,
             }
         }
     }
-    
+
     // Default error condition
     return metav1.Condition{
         Type:    "Ready",
@@ -357,31 +418,31 @@ func mapErrorToCondition(err error) metav1.Condition {
 
 ### Error Handling
 
-1. **Always classify errors** - Use appropriate error types
-2. **Preserve context** - Wrap errors with additional context
-3. **Avoid retrying non-retryable errors** - Check error type first
-4. **Set meaningful conditions** - Help users understand state
+1. **Always classify errors** — Use appropriate error types so the breaker can distinguish infra failures from business errors.
+2. **Preserve context** — Wrap errors with additional context.
+3. **Avoid retrying non-retryable errors** — Check error type first.
+4. **Set meaningful conditions** — Help users understand state.
 
-### Circuit Breakers
+### CircuitBreakers
 
-1. **Per-provider instances** - Isolate failures
-2. **Appropriate thresholds** - Balance protection vs availability
-3. **Monitor state changes** - Alert on circuit breaker trips
-4. **Manual override** - Provide way to reset if needed
+1. **Trust the per-Provider default.** v0.3.6 gives you one breaker per Provider CR automatically; don't add a second layer in your reconciler unless you have a measured reason.
+2. **Alert on `virtrigaud_circuit_breaker_state > 0`.** This is your "provider is in trouble" signal.
+3. **Monitor `virtrigaud_circuit_breaker_failures_total` rate.** Sustained non-zero rate even with a closed breaker means you're skating close to the threshold.
+4. **Investigate the provider, not the breaker.** A tripped breaker is a symptom; the root cause is in the provider pod or its hypervisor connectivity.
 
 ### Timeouts
 
-1. **Operation-appropriate** - Different timeouts for different ops
-2. **Propagate context** - Always pass context through
-3. **Handle cancellation** - Check context.Done() regularly
-4. **Resource cleanup** - Ensure resources are freed on timeout
+1. **Operation-appropriate** — Different timeouts for different ops (the defaults above are calibrated; override only with measurement).
+2. **Propagate context** — Always pass context through.
+3. **Handle cancellation** — Check `context.Done()` regularly in long-running operations.
+4. **Resource cleanup** — Ensure resources are freed on timeout.
 
 ### Rate Limiting
 
-1. **Provider protection** - Prevent overwhelming providers
-2. **Burst handling** - Allow reasonable bursts
-3. **Back-pressure** - Surface rate limits to users
-4. **Fair sharing** - Consider tenant isolation
+1. **Provider protection** — Prevent overwhelming providers.
+2. **Burst handling** — Allow reasonable bursts.
+3. **Back-pressure** — Surface rate limits to users.
+4. **Fair sharing** — Consider tenant isolation.
 
 ## Configuration Examples
 
@@ -395,11 +456,11 @@ metadata:
 data:
   # Relaxed timeouts for development
   RPC_TIMEOUT_MUTATING: "10m"
-  
-  # Aggressive retries for flaky dev environments  
+
+  # Aggressive retries for flaky dev environments
   RETRY_MAX_ATTEMPTS: "10"
   RETRY_BASE_DELAY: "100ms"
-  
+
   # Lower circuit breaker threshold
   CB_FAILURE_THRESHOLD: "5"
   CB_RESET_SECONDS: "30s"
@@ -416,17 +477,19 @@ data:
   # Strict timeouts
   RPC_TIMEOUT_MUTATING: "4m"
   RPC_TIMEOUT_DESCRIBE: "30s"
-  
+
   # Conservative retries
   RETRY_MAX_ATTEMPTS: "3"
   RETRY_BASE_DELAY: "1s"
   RETRY_MAX_DELAY: "60s"
-  
+
   # Higher circuit breaker threshold
-  CB_FAILURE_THRESHOLD: "15" 
+  CB_FAILURE_THRESHOLD: "15"
   CB_RESET_SECONDS: "120s"
-  
+
   # Rate limiting
   RATE_LIMIT_QPS: "20"
   RATE_LIMIT_BURST: "50"
 ```
+
+> **Note (v0.3.6):** The CircuitBreaker uses `resilience.DefaultConfig()` unconditionally in v0.3.6. Per-Provider override via the ConfigMap above is on the roadmap; the values shown are the design target. Track progress in the [CHANGELOG](https://github.com/projectbeskar/virtrigaud/blob/main/CHANGELOG.md).
