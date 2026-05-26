@@ -338,8 +338,8 @@ make test
 # Run tests for a specific package
 go test ./internal/controller/...
 
-# Run with coverage
-make test-coverage
+# Run with coverage (no dedicated make target; use go test -cover)
+go test -cover ./...
 ```
 
 ### Integration Tests
@@ -359,10 +359,21 @@ go test -tags=e2e ./test/e2e/... -v -ginkgo.v
 
 ### Provider Conformance Tests
 
+VCTS (VirtRigaud Conformance Test Suite) lives at `cmd/vcts/`. To run it
+against the mock provider:
+
 ```bash
-# Run vcts against a provider (typically mock for local dev)
-make conformance-mock
+# Build the suite + the mock provider
+make build-provider-mock
+go build -o bin/vcts ./cmd/vcts
+
+# Start the mock provider, then point vcts at it
+./bin/provider-mock &
+./bin/vcts run --endpoint=localhost:9090
 ```
+
+CI runs an equivalent flow in the **Conformance Tests** job using the mock
+provider built from the same source tree.
 
 ## Release Process
 
@@ -370,8 +381,10 @@ make conformance-mock
 
 1. **Prepare release**:
    ```bash
-   # Regenerate everything (CRDs, deepcopy, Helm sync)
-   make update-crds
+   # Regenerate deepcopy methods and both CRD locations
+   make generate
+   make gen-crds
+   make gen-helm-crds
 
    # Update version in charts
    vim charts/virtrigaud/Chart.yaml

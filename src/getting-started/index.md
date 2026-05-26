@@ -5,47 +5,49 @@ SPDX-License-Identifier: Apache-2.0
 
 # 15-Minute Quickstart
 
-This guide will get you up and running with VirtRigaud in 15 minutes using both vSphere and Libvirt providers.
+This guide gets you up and running with VirtRigaud v0.3.6 in 15 minutes using either a vSphere or Libvirt provider.
 
 ## Prerequisites
 
-- Kubernetes cluster (1.24+)
-- kubectl configured
-- Helm 3.x
-- Access to a vSphere environment (optional)
-- Access to a Libvirt/KVM host (optional)
+- Kubernetes cluster (1.26+)
+- `kubectl` configured
+- Helm 3.8+
+- Access to a vSphere or Libvirt/KVM host
 
-## API Support
+## API
 
-**Default API**: v1beta1 - The recommended stable API for all new deployments.
-
-**Legacy API**: v1beta1 - Served for compatibility but deprecated. See the [upgrade guide](../upgrade/) for migration instructions.
-
-All resources support seamless conversion between API versions via webhooks.
+All resources use **`infra.virtrigaud.io/v1beta1`**. This is the stable API for all new deployments.
 
 ## Step 1: Install VirtRigaud
 
-### Using Helm (Recommended)
+### Using Helm (recommended)
 
 ```bash
-# Add the VirtRigaud Helm repository
 helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
-helm repo update
+helm repo update virtrigaud
 
-# Install with default settings (CRDs included automatically)
 helm install virtrigaud virtrigaud/virtrigaud \
+  --version 0.3.6 \
   --namespace virtrigaud-system \
   --create-namespace
+```
 
-# Or install with specific providers enabled
+To enable specific providers at install time:
+
+```bash
 helm install virtrigaud virtrigaud/virtrigaud \
+  --version 0.3.6 \
   --namespace virtrigaud-system \
   --create-namespace \
   --set providers.vsphere.enabled=true \
   --set providers.libvirt.enabled=true
+```
 
-# To skip CRDs if already installed separately
+To skip CRDs if you manage them separately:
+
+```bash
 helm install virtrigaud virtrigaud/virtrigaud \
+  --version 0.3.6 \
   --namespace virtrigaud-system \
   --create-namespace \
   --skip-crds
@@ -54,38 +56,37 @@ helm install virtrigaud virtrigaud/virtrigaud \
 ### Using Kustomize
 
 ```bash
-# Clone the repository
 git clone https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
-
-# Apply base installation
-kubectl apply -k deploy/kustomize/base
-
-# Or apply with overlays
-kubectl apply -k deploy/kustomize/overlays/standard
+kubectl apply -k config/default
 ```
 
 ## Step 2: Verify Installation
 
 ```bash
-# Check that the manager is running
+# Manager pod is running
 kubectl get pods -n virtrigaud-system
 
-# Check CRDs are installed
-kubectl get crds | grep virtrigaud
+# All 10 CRDs are installed
+kubectl get crds | grep virtrigaud.io
 
-# Verify API conversion is working (v1beta1 <-> v1beta1)
-kubectl get crd virtualmachines.infra.virtrigaud.io -o yaml | yq '.spec.conversion'
-
-# Check manager logs
-kubectl logs -n virtrigaud-system deployment/virtrigaud-manager
+# Manager is at v0.3.6
+kubectl logs -n virtrigaud-system deployment/virtrigaud-manager | head -5
 ```
+
+After the manager starts, confirm v0.3.6 is running via the metrics endpoint:
+
+```bash
+kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8080:8080 &
+curl -s http://localhost:8080/metrics | grep '^virtrigaud_build_info'
+# virtrigaud_build_info{component="manager",...,version="v0.3.6"} 1
+```
+
+Starting with v0.3.6 you will also see the new `virtrigaud_circuit_breaker_state` and `virtrigaud_provider_tasks_inflight` families on `/metrics` (seeded to 0 at boot for every Provider CR). See the [Observability Guide](../operations/observability.md) for the full v0.3.6 metrics surface.
 
 ## Step 3: Configure a Provider
 
 ### Option A: vSphere Provider
-
-Create a secret with vSphere credentials:
 
 ```bash
 kubectl create secret generic vsphere-credentials \
@@ -95,8 +96,6 @@ kubectl create secret generic vsphere-credentials \
   --from-literal=password=your-password \
   --from-literal=insecure=false
 ```
-
-Create a vSphere provider:
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -109,30 +108,22 @@ spec:
   endpoint: https://vcenter.example.com
   credentialSecretRef:
     name: vsphere-credentials
+    namespace: default
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.2.3"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
     service:
       port: 9090
-  defaults:
-    datastore: "datastore1"
-    cluster: "cluster1"
-    folder: "virtrigaud-vms"
 ```
 
 ### Option B: Libvirt Provider
-
-Create a secret with Libvirt connection details:
 
 ```bash
 kubectl create secret generic libvirt-credentials \
   --namespace default \
   --from-literal=uri=qemu+ssh://root@libvirt-host.example.com/system \
-  --from-literal=username=root \
   --from-literal=privateKey="$(cat ~/.ssh/id_rsa)"
 ```
-
-Create a Libvirt provider:
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -145,27 +136,22 @@ spec:
   endpoint: qemu+ssh://root@libvirt-host.example.com/system
   credentialSecretRef:
     name: libvirt-credentials
+    namespace: default
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.2.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.6"
     service:
       port: 9090
-  defaults:
-    defaultStoragePool: "default"
-    defaultNetwork: "default"
 ```
-
-Apply the provider configuration:
 
 ```bash
 kubectl apply -f provider.yaml
 ```
 
-> 💡 **Behind the scenes**: VirtRigaud automatically converts your Provider resource into the appropriate command-line arguments, environment variables, and secret mounts for the provider pod. See the [configuration flow documentation](../remote-providers.md#configuration-flow-provider-resource--provider-pod) for complete details.
+!!! note "Circuit breaker on first deploy"
+    If the provider pod is unreachable on first deploy (e.g. SSH tunnel not yet up for a libvirt provider), the circuit breaker will trip after 10 failed RPCs and `virtrigaud_circuit_breaker_state{provider="libvirt-lab"}` will read `2` (Open). This is working as designed. See [Resilience](../operations/resilience.md) for the recovery path.
 
 ## Step 4: Create a VM Class
-
-Define resource templates for your VMs:
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -175,14 +161,7 @@ metadata:
   namespace: default
 spec:
   cpu: 2
-  memoryMiB: 2048
-  disks:
-  - name: root
-    sizeGiB: 20
-    type: thin
-  networks:
-  - name: default
-    type: "VM Network"  # vSphere network name
+  memory: 2Gi
 ```
 
 ```bash
@@ -191,45 +170,32 @@ kubectl apply -f vmclass.yaml
 
 ## Step 5: Create a VM Image
 
-Define the base image for your VMs:
-
-### vSphere Image (OVA)
+### vSphere
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMImage
 metadata:
-  name: ubuntu-20-04
-  namespace: virtrigaud-system
+  name: ubuntu-22
+  namespace: default
 spec:
   source:
     vsphere:
-      ovaURL: "https://cloud-images.ubuntu.com/releases/20.04/ubuntu-20.04-server-cloudimg-amd64.ova"
-      checksum: "sha256:abc123..."
-      datastore: "datastore1"
-      folder: "vm-templates"
-  prepare:
-    onMissing: Import
-    timeout: "30m"
+      templateName: ubuntu-22.04-template
 ```
 
-### Libvirt Image (qcow2)
+### Libvirt
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMImage
 metadata:
-  name: ubuntu-20-04
-  namespace: virtrigaud-system
+  name: ubuntu-22
+  namespace: default
 spec:
   source:
     libvirt:
-      qcow2URL: "https://cloud-images.ubuntu.com/releases/20.04/ubuntu-20.04-server-cloudimg-amd64.img"
-      checksum: "sha256:def456..."
-      storagePool: "default"
-  prepare:
-    onMissing: Import
-    timeout: "30m"
+      url: https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img
 ```
 
 ```bash
@@ -246,13 +212,13 @@ metadata:
   namespace: default
 spec:
   providerRef:
-    name: vsphere-prod  # or libvirt-lab
+    name: vsphere-prod   # or libvirt-lab
     namespace: default
   classRef:
     name: small
     namespace: default
   imageRef:
-    name: ubuntu-20-04
+    name: ubuntu-22
     namespace: default
   powerState: "On"
   userData:
@@ -264,9 +230,6 @@ spec:
             sudo: ALL=(ALL) NOPASSWD:ALL
             ssh_authorized_keys:
               - ssh-rsa AAAAB3... your-public-key
-        packages:
-          - curl
-          - vim
   networks:
   - name: default
     networkRef:
@@ -284,15 +247,15 @@ kubectl apply -f vm.yaml
 # Watch VM status
 kubectl get vm my-first-vm -w
 
-# Check detailed status
+# Detailed status including phase and IPs
 kubectl describe vm my-first-vm
 
-# View events
+# Events
 kubectl get events --field-selector involvedObject.name=my-first-vm
-
-# Check provider logs
-kubectl logs -n virtrigaud-system deployment/virtrigaud-provider-vsphere
 ```
+
+!!! note "Phase column"
+    The `phase` status field (`Pending` → `Provisioning` → `Running`) may be empty for VMs that were auto-adopted by the VMAdoption controller (watching Provider CRs annotated `virtrigaud.io/adopt-vms: "true"`). Adopted VMs arrive with `status.ips` already populated; the phase field is a known gap for this path (issue I2).
 
 ## Step 8: Access Your VM
 
@@ -300,14 +263,14 @@ kubectl logs -n virtrigaud-system deployment/virtrigaud-provider-vsphere
 # Get VM IP address
 kubectl get vm my-first-vm -o jsonpath='{.status.ips[0]}'
 
-# Get console URL (if supported)
+# Get console URL (if supported by the provider)
 kubectl get vm my-first-vm -o jsonpath='{.status.consoleURL}'
 
-# SSH to the VM (once it has an IP)
+# SSH once the VM has an IP
 ssh ubuntu@<vm-ip>
 ```
 
-## Step 9: Try Advanced Operations
+## Step 9: Advanced operations
 
 ### Create a Snapshot
 
@@ -322,25 +285,6 @@ spec:
     name: my-first-vm
   nameHint: "pre-update-snapshot"
   memory: true
-```
-
-### Clone the VM
-
-```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClone
-metadata:
-  name: my-vm-clone
-  namespace: default
-spec:
-  sourceRef:
-    name: my-first-vm
-  target:
-    name: cloned-vm
-    classRef:
-      name: small
-      namespace: default
-  linked: true
 ```
 
 ### Scale with VMSet
@@ -362,7 +306,7 @@ spec:
         name: small
         namespace: default
       imageRef:
-        name: ubuntu-20-04
+        name: ubuntu-22
         namespace: default
       powerState: "On"
 ```
@@ -370,12 +314,8 @@ spec:
 ## Step 10: Clean Up
 
 ```bash
-# Delete VM
 kubectl delete vm my-first-vm
-
-# Delete snapshots and clones
 kubectl delete vmsnapshot my-vm-snapshot
-kubectl delete vmclone my-vm-clone
 kubectl delete vmset web-servers
 
 # Uninstall VirtRigaud (optional)
@@ -385,20 +325,14 @@ kubectl delete namespace virtrigaud-system
 
 ## Next Steps
 
-- Browse [Complete Examples](../examples/) for production-ready configurations
-- Explore the [VM Lifecycle Guide](../advanced-lifecycle.md)
-- Learn about [Advanced Networking](../examples/index.md)
-- Set up [Monitoring and Observability](../observability.md)
-- Configure [Security and RBAC](../security.md)
-- Read the [Remote Providers Documentation](../remote-providers.md)
-- Read the [Provider Development Guide](../providers/tutorial.md)
+- [Basic VM Example](basic-vm-example.md) — step-by-step with all four required resources
+- [Observability Guide](../operations/observability.md) — what VirtRigaud emits and how to alert on it
+- [Resilience Guide](../operations/resilience.md) — circuit breaker behaviour and recovery
+- [Provider Capabilities](../providers/providers-capabilities.md) — per-provider feature matrix
 
 ## Troubleshooting
 
-If you encounter issues:
-
-1. Check the [Troubleshooting Guide](../resilience.md)
-2. Verify your provider credentials and connectivity
-3. Check the manager and provider logs
-4. Ensure your Kubernetes cluster meets the requirements
-5. File an issue on [GitHub](https://github.com/projectbeskar/virtrigaud/issues)
+1. Check provider status: `kubectl get providers -A`
+2. Check manager logs: `kubectl logs -n virtrigaud-system deployment/virtrigaud-manager`
+3. Check circuit breaker: `curl -s http://localhost:8080/metrics | grep circuit_breaker_state`
+4. File an issue: [github.com/projectbeskar/virtrigaud/issues](https://github.com/projectbeskar/virtrigaud/issues)
