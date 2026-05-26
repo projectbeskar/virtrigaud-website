@@ -3,533 +3,173 @@ Copyright (c) 2026 VirtRigaud Creators
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Versioning & Breaking Changes
+# Versioning & Compatibility
 
-This document outlines VirtRigaud's approach to versioning, compatibility, and managing breaking changes across the provider ecosystem.
+This page describes the actual versioning model VirtRigaud follows today, the API-stability commitment, and how the project chooses release tags.
 
-## Overview
+It is aligned to **VirtRigaud v0.3.6** (the current latest, released 2026-05-25).
 
-VirtRigaud follows semantic versioning (SemVer) principles and maintains backward compatibility through careful API design and migration strategies. The system has multiple versioning dimensions:
+## TL;DR
 
-- **VirtRigaud Core** - The main platform (API server, manager, CRDs)
-- **Provider SDK** - Go SDK for building providers  
-- **Proto Contracts** - gRPC/protobuf API definitions
-- **Individual Providers** - Each provider has independent versioning
+- **Current latest**: `v0.3.6`. Helm chart `--version 0.3.6`. Provider images tagged `v0.3.6`.
+- **CRD API version**: `infra.virtrigaud.io/v1beta1` is the **stable** API. Breaking changes need an ADR.
+- **Release pattern**: `rc1 → smoke → final` is the established cadence. Used successfully for v0.3.3, v0.3.5, and v0.3.6.
+- **Support**: best-effort on the latest minor. The project does not maintain LTS branches. Upgrade to the latest patch within the current minor to get fixes.
 
-## Semantic Versioning
+## Components and their version dimensions
 
-All VirtRigaud components follow [Semantic Versioning 2.0.0](https://semver.org/):
+VirtRigaud is composed of several artefacts that each carry a version label:
 
-### Version Format: MAJOR.MINOR.PATCH
+| Component | Where it lives | Versioning notes |
+|-----------|----------------|------------------|
+| Manager binary | `cmd/manager` → `ghcr.io/projectbeskar/virtrigaud/manager:v0.3.6` | Tracks the project release tag exactly. |
+| Provider binaries | `cmd/provider-{vsphere,libvirt,proxmox,mock}` → `ghcr.io/projectbeskar/virtrigaud/provider-*:v0.3.6` | Currently released in lockstep with the manager. |
+| Helm chart | `charts/virtrigaud` | Chart version matches the project release (`Chart.yaml: 0.3.6`). |
+| CRD API | `api/infra.virtrigaud.io/v1beta1` | `v1beta1` — stable in the Kubernetes sense; see [API stability](#api-stability-v1beta1) below. |
+| gRPC contract | `proto/provider/v1/provider.proto` | Separate Go module. New RPCs land additively; breaking proto changes would require a major proto-package bump. |
+| Provider SDK | `sdk/` | Separate Go module. Used by external provider authors. |
 
-- **MAJOR** (X.0.0): Breaking changes that require user action
-- **MINOR** (0.X.0): New features that are backward compatible  
-- **PATCH** (0.0.X): Bug fixes and security updates
+All of the above are tagged together as `v0.3.6` for the v0.3.6 release.
 
-### Examples
+## Semantic versioning
+
+VirtRigaud follows [Semantic Versioning 2.0.0](https://semver.org/) for the project as a whole:
+
+- **MAJOR.MINOR.PATCH**
+- MAJOR: reserved for breaking CRD or gRPC contract changes — has not happened on the public release line.
+- MINOR: backward-compatible feature additions (new CRDs, new metric families, new RPCs declared via capabilities).
+- PATCH: bug fixes, security backports, dependency bumps.
+
+## API stability (v1beta1)
+
+The `infra.virtrigaud.io/v1beta1` API is the **stable** CRD surface in the Kubernetes sense:
+
+- Adding new optional fields is allowed and routine (every minor release does this).
+- Removing or renaming fields requires an ADR and an upgrade path. None have been removed on the public release line.
+- Validation tightening (new `kubebuilder:validation:*` markers) must not reject objects that were valid in a prior release.
+
+The v1beta1 contract is enforced project-wide via the `CLAUDE.md` rule that breaking changes need an ADR (see [`development/contributing.md`](../development/contributing.md)).
+
+There is no `v1alpha*` and no `v1` for the `infra.virtrigaud.io` group — operators target `v1beta1` for all CRs.
+
+The 10 CRDs at v0.3.6: `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMMigration`, `VMSnapshot`, `VMSet`, `VMPlacementPolicy`, `VMClone`. `VMAdoption` is a controller, not a CRD.
+
+## Release cadence and pattern
+
+Releases land on a "ship when ready" cadence; the project does not commit to a fixed monthly or quarterly drumbeat. Each release follows a three-step pattern that has now been used successfully for **three consecutive releases**:
 
 ```
-1.0.0 → 1.0.1  # Patch: Bug fixes only
-1.0.1 → 1.1.0  # Minor: New features, backward compatible
-1.1.0 → 2.0.0  # Major: Breaking changes
+rc1  →  smoke on vr1.lab.k8  →  final
 ```
 
-## Component Versioning Strategy
+| Step | Purpose |
+|------|---------|
+| `rc1` (release candidate) | Cut from `main` once all gates are green. Built, signed, and promoted to ghcr.io with an `-rc1` suffix. |
+| smoke | Deployed to the project's lab cluster (`vr1.lab.k8`) and exercised with the field-test scenarios. Any regression bounces back to `main` for a fix and a new rc. |
+| final | Tag promoted to its production name (`v0.3.6`) from the same commit, signed, and shipped to the Helm repo. |
 
-### VirtRigaud Core APIs
+Track record:
 
-Kubernetes-style API versioning with multiple supported versions:
+- **v0.3.3**: took 4 rcs (first usage of the pattern).
+- **v0.3.5**: 1 rc → promoted to final.
+- **v0.3.6**: 1 rc → caught and fixed 3 HIGH-severity otel CVEs during the Trivy gate, re-cut → promoted to final.
 
-```yaml
-# Supported API versions
-apiVersion: infra.virtrigaud.io/v1beta1  # Development/preview
-apiVersion: infra.virtrigaud.io/v1beta1   # Pre-release/testing
-apiVersion: infra.virtrigaud.io/v1        # Stable/production
-```
+If you are choosing a version for production, prefer the latest `v0.3.x` final tag.
 
-**Stability Levels:**
-- **Alpha (v1beta1)**: Experimental, may change or be removed
-- **Beta (v1beta1)**: Well-tested, minimal changes expected
-- **Stable (v1)**: Production-ready, strong backward compatibility
+## Helm chart versioning
 
-**Support Windows:**
-- Alpha: Best effort, no guarantees
-- Beta: Supported for 2 minor releases after stable equivalent
-- Stable: Supported for 12 months after deprecation
+The chart version is identical to the project version. Always pin in production:
 
-### Provider SDK Versioning
-
-SDK versions are independent of core VirtRigaud versions:
-
-```go
-// Go module versioning
-module github.com/projectbeskar/virtrigaud/sdk
-
-// Version tags
-sdk/v0.1.0    # Initial release
-sdk/v0.2.0    # New features
-sdk/v1.0.0    # First stable release
-sdk/v2.0.0    # Breaking changes (new module path: sdk/v2)
-```
-
-**SDK Compatibility Matrix:**
-
-| SDK Version | VirtRigaud Core | Go Version | Status |
-|-------------|-----------------|------------|---------|
-| v0.1.x | 0.1.0 - 0.2.x | 1.23+ | Beta |
-| v1.0.x | 0.2.0 - 1.0.x | 1.23+ | Stable |
-| v1.1.x | 0.3.0 - 1.1.x | 1.23+ | Stable |
-| v2.0.x | 1.0.0+ | 1.24+ | Future |
-
-### Proto Contract Versioning
-
-Protobuf APIs use both module versions and service versions:
-
-```protobuf
-// Service versioning in proto files
-package provider.v1;
-service ProviderService {
-  // API methods
-}
-
-// Module versioning
-module github.com/projectbeskar/virtrigaud/proto
-```
-
-**Proto Evolution Rules:**
-- ✅ Add new fields (with proper defaults)
-- ✅ Add new RPC methods
-- ✅ Add new enum values
-- ❌ Remove fields or methods
-- ❌ Change field types or semantics
-- ❌ Remove enum values
-
-### Provider Versioning
-
-Each provider maintains independent versioning:
-
-```yaml
-# Provider catalog entry
-name: vsphere
-tag: "1.2.3"      # Provider version
-sdk_version: "v1.0.0"  # SDK dependency
-proto_version: "v0.1.0"  # Proto dependency
-```
-
-## Breaking Change Policy
-
-### What Constitutes a Breaking Change
-
-**API Breaking Changes:**
-- Removing or renaming API fields
-- Changing field types or semantics
-- Removing API endpoints or methods
-- Changing required vs optional fields
-- Modifying default behaviors
-- Changing error codes or messages that clients depend on
-
-**SDK Breaking Changes:**
-- Removing public functions, types, or methods
-- Changing function signatures
-- Modifying struct fields (without proper backward compatibility)
-- Changing package import paths
-- Removing or renaming configuration options
-
-**Proto Breaking Changes:**
-- Removing fields or RPC methods
-- Changing field numbers or types
-- Removing enum values
-- Modifying service or method names
-
-### Breaking Change Process
-
-#### 1. Proposal Phase
-```markdown
-# Breaking Change Proposal: [Title]
-
-## Summary
-Brief description of the change and motivation.
-
-## Motivation  
-Why is this change necessary? What problems does it solve?
-
-## Proposed Changes
-Detailed description of the changes.
-
-## Migration Path
-How will users migrate from old to new behavior?
-
-## Timeline
-- Deprecation announcement: v1.1.0
-- Breaking change implementation: v2.0.0
-- Legacy support removal: v3.0.0
-
-## Alternatives Considered
-What other approaches were considered?
-```
-
-#### 2. Deprecation Phase
-```go
-// Deprecated functions include clear migration guidance
-// Deprecated: Use NewCreateVMRequest instead. Will be removed in v2.0.0.
-func CreateVM(name string) *VMRequest {
-    return &VMRequest{Name: name}
-}
-
-// New recommended approach
-func NewCreateVMRequest(spec *VMSpec) *CreateVMRequest {
-    return &CreateVMRequest{Spec: spec}
-}
-```
-
-#### 3. Migration Tools
 ```bash
-# Migration command examples
-vrtg-provider migrate --from v1 --to v2
-vrtg-provider check-compatibility --target-version v2.0.0
-```
-
-#### 4. Communication
-- Release notes with migration guide
-- Blog posts for major changes
-- Community discussions and Q&A
-- Updated documentation
-
-## Compatibility Testing
-
-### Automated Compatibility Checks
-
-```yaml
-# .github/workflows/compatibility.yml
-name: Compatibility Check
-
-jobs:
-  compatibility-matrix:
-    strategy:
-      matrix:
-        sdk_version: [v1.0.0, v1.1.0, current]
-        provider_version: [v1.0.0, v1.1.0, current]
-    
-    steps:
-    - name: Test SDK ${{ matrix.sdk_version }} with Provider ${{ matrix.provider_version }}
-      run: |
-        # Build provider with specific SDK version
-        # Run conformance tests
-        # Report compatibility results
-```
-
-### Buf Proto Compatibility
-
-```yaml
-# proto/buf.yaml
-version: v1
-breaking:
-  use:
-    # Prevent breaking changes
-    - FILE_NO_DELETE
-    - FIELD_NO_DELETE
-    - FIELD_SAME_TYPE
-    - ENUM_VALUE_NO_DELETE
-    - RPC_NO_DELETE
-    - SERVICE_NO_DELETE
-  ignore:
-    # Allowed changes during alpha/beta
-    - "provider/v1beta1"
+helm install virtrigaud virtrigaud/virtrigaud \
+  --version 0.3.6 \
+  --namespace virtrigaud-system \
+  --create-namespace
 ```
 
 ```bash
-# Check for breaking changes
-buf breaking --against 'https://github.com/projectbeskar/virtrigaud.git#branch=main'
+helm upgrade virtrigaud virtrigaud/virtrigaud \
+  --version 0.3.6 \
+  --namespace virtrigaud-system
 ```
 
-### Provider Compatibility Testing
+The chart bundles the CRDs at `charts/virtrigaud/crds/` and includes them at install time. CRDs are **not** auto-upgraded by Helm during `helm upgrade` (this is standard Helm behaviour). See the [Helm CRD upgrades guide](../getting-started/helm-crd-upgrades.md) for the upgrade flow.
 
-```bash
-# Test provider against multiple VirtRigaud versions
-vcts run --provider ./provider --virtrigaud-version 0.1.0
-vcts run --provider ./provider --virtrigaud-version 0.2.0
-vcts run --provider ./provider --virtrigaud-version 1.0.0
-```
+## Provider image tags
 
-## Migration Strategies
+Provider pods run separate images, each tagged to the same version as the manager:
 
-### API Version Migration
-
-#### Example: VirtualMachine v1beta1 → v1beta1
-
-```go
-// Conversion webhook approach
-func (src *v1beta1.VirtualMachine) ConvertTo(dst *v1beta1.VirtualMachine) error {
-    // Convert common fields
-    dst.ObjectMeta = src.ObjectMeta
-    
-    // Handle field migrations
-    if src.Spec.PowerState == "On" {
-        dst.Spec.PowerState = v1beta1.PowerStateOn
-    }
-    
-    // Set new fields with appropriate defaults
-    if dst.Spec.Phase == "" {
-        dst.Spec.Phase = v1beta1.PhaseUnknown
-    }
-    
-    return nil
-}
-```
-
-#### Gradual Migration Process
-
-```bash
-# Phase 1: Dual support (both versions work)
-kubectl apply -f vm-v1beta1.yaml  # Still works
-kubectl apply -f vm-v1beta1.yaml   # Also works
-
-# Phase 2: Deprecation warning
-kubectl apply -f vm-v1beta1.yaml
-# Warning: v1beta1 is deprecated, use v1beta1
-
-# Phase 3: Conversion only (internal storage uses v1beta1)
-kubectl apply -f vm-v1beta1.yaml  # Automatically converted
-
-# Phase 4: Removal (after support window)
-kubectl apply -f vm-v1beta1.yaml  # Error: version not supported
-```
-
-### Provider SDK Migration
-
-#### Example: SDK v1 → v2
-
-**SDK v1 (deprecated):**
-```go
-// Old SDK pattern
-func NewProvider(config Config) *Provider {
-    return &Provider{config: config}
-}
-
-func (p *Provider) CreateVM(name string, cpu int, memory int) error {
-    // Implementation
-}
-```
-
-**SDK v2 (new):**
-```go
-// New SDK pattern with better types
-func NewProvider(config *Config) (*Provider, error) {
-    if err := config.Validate(); err != nil {
-        return nil, err
-    }
-    return &Provider{config: config}, nil
-}
-
-func (p *Provider) CreateVM(ctx context.Context, req *CreateVMRequest) (*CreateVMResponse, error) {
-    // Implementation with proper context and structured types
-}
-```
-
-**Migration Bridge:**
-```go
-// sdk/v2/compat/v1.go - Compatibility layer
-package compat
-
-import (
-    v1 "github.com/projectbeskar/virtrigaud/sdk/provider"
-    v2 "github.com/projectbeskar/virtrigaud/sdk/v2/provider"
-)
-
-// Bridge for gradual migration
-func AdaptV1Provider(v1Provider v1.Provider) v2.Provider {
-    return &v1ProviderAdapter{old: v1Provider}
-}
-
-type v1ProviderAdapter struct {
-    old v1.Provider
-}
-
-func (a *v1ProviderAdapter) CreateVM(ctx context.Context, req *v2.CreateVMRequest) (*v2.CreateVMResponse, error) {
-    // Convert v2 request to v1 format
-    err := a.old.CreateVM(req.Name, int(req.Spec.CPU), int(req.Spec.Memory))
-    
-    // Convert v1 response to v2 format
-    if err != nil {
-        return nil, err
-    }
-    
-    return &v2.CreateVMResponse{
-        Status: "Created",
-    }, nil
-}
-```
-
-### Configuration Migration
-
-#### Example: Configuration Schema Changes
-
-**v1 Configuration:**
 ```yaml
-# provider-config-v1.yaml
-provider:
-  type: "vsphere"
-  server: "vcenter.example.com"
-  username: "admin"
-  password: "secret"
-```
-
-**v2 Configuration:**
-```yaml
-# provider-config-v2.yaml
-apiVersion: config.virtrigaud.io/v2
-kind: ProviderConfig
-metadata:
-  name: vsphere-config
 spec:
-  type: "vsphere"
-  connection:
-    endpoint: "vcenter.example.com"
-    authentication:
-      method: "basic"
-      secretRef:
-        name: "vsphere-credentials"
-  features:
-    snapshots: true
-    cloning: true
+  runtime:
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
 ```
 
-**Migration Command:**
-```bash
-# Automatic migration tool
-vrtg-provider config migrate \
-  --from provider-config-v1.yaml \
-  --to provider-config-v2.yaml \
-  --create-secret vsphere-credentials
-```
+A provider image must be compatible with the manager that drives it. The recommendation is to keep the provider images on the same `v0.3.x` minor as the manager.
 
-## Release Planning
+## What constitutes a breaking change
 
-### Release Cadence
+These categories are treated as breaking and require an ADR + a deprecation cycle:
 
-- **Patch releases**: As needed for critical bugs/security
-- **Minor releases**: Every 2-3 months  
-- **Major releases**: Every 12-18 months
+**CRD breaking**:
 
-### Feature Lifecycle
+- Removing or renaming a field.
+- Changing a field's type or accepted values.
+- Tightening validation in a way that rejects previously-valid objects.
+- Changing required vs optional semantics for an existing field.
 
-```
-Experimental → Alpha → Beta → Stable → Deprecated → Removed
-     |          |       |       |         |          |
-     |          |       |       |         |          +-- After support window
-     |          |       |       |         +-- 2 releases notice
-     |          |       |       +-- Production ready
-     |          |       +-- Pre-release testing
-     |          +-- Public preview
-     +-- Internal/development only
-```
+**gRPC contract breaking**:
 
-### Release Branch Strategy
+- Removing a field number, RPC method, or enum value from `proto/provider/v1/provider.proto`.
+- Changing the semantics of an existing field.
 
-```
-main                    # Current development
-├── release-0.1        # Patch releases for v0.1.x
-├── release-0.2        # Patch releases for v0.2.x
-└── release-1.0        # Patch releases for v1.0.x
-```
+**Capability flag breaking**:
 
-### Support Matrix
+- A provider flipping a capability from `true` to `false` without the operator-facing release notes calling it out — this counts as breaking because the manager's short-circuiting changes behaviour for existing CRs. (Phase 2's v0.3.6 doc alignment corrected two such cells; see [the capability matrix](providers-capabilities.md).)
 
-| Version | Status | Support Level | End of Life |
-|---------|--------|---------------|-------------|
-| 1.0.x | Stable | Full support | 2026-01-01 |
-| 0.2.x | Stable | Security only | 2025-06-01 |
-| 0.1.x | Deprecated | None | 2025-01-01 |
+**Compatibility-safe**:
 
-## Best Practices
+- Adding new optional CRD fields.
+- Adding new RPC methods (must be implemented in all providers, even if as `Unimplemented` declared via capabilities).
+- Adding new metric families.
+- Adding new ADR-blessed CRDs.
 
-### For Provider Developers
+## Backward-compatibility expectations
 
-1. **Version Dependencies Carefully**
-   ```go
-   // Use specific versions, not floating
-   require github.com/projectbeskar/virtrigaud/sdk v1.2.3
-   ```
+| Direction | Expectation |
+|-----------|-------------|
+| Older CR objects on a newer manager | Always valid (additive evolution only). |
+| Newer CR objects on an older manager | Not supported. The older manager will reject the unknown fields. Upgrade the manager first. |
+| Provider image one minor newer than the manager | Best-effort. Do not pin a provider image to a release later than the manager. |
+| Manager one minor newer than provider images | Supported within the current minor (so a v0.3.6 manager works with v0.3.5 provider pods if you stage rollouts). |
 
-2. **Test Compatibility Early**
-   ```bash
-   # Test against multiple SDK versions
-   go mod edit -require=github.com/projectbeskar/virtrigaud/sdk@v1.1.0
-   go test ./...
-   go mod edit -require=github.com/projectbeskar/virtrigaud/sdk@v1.2.0
-   go test ./...
-   ```
+For the canonical step-by-step upgrade (v0.3.5 → v0.3.6 is the current happy path), see the [Upgrade Guide](../operations/upgrade.md).
 
-3. **Handle Deprecations Gracefully**
-   ```go
-   // Check for deprecated features
-   if provider.IsDeprecated("vm.legacy-create") {
-       log.Warn("Using deprecated API, migrate to vm.create")
-   }
-   ```
+## Support window
 
-4. **Document Breaking Changes**
-   ```markdown
-   # CHANGELOG.md
-   ## [2.0.0] - 2025-01-15
-   ### BREAKING CHANGES
-   - Removed deprecated `CreateVM` method, use `CreateVMRequest` instead
-   - Changed configuration format, see migration guide
-   
-   ### Migration Guide
-   Old: `provider.CreateVM("vm1", 2, 4096)`
-   New: `provider.CreateVM(ctx, &CreateVMRequest{...})`
-   ```
+The project does **not** maintain long-term-support branches. Support is best-effort on the latest minor:
 
-### For Users
+- **Latest minor (`v0.3.x`)** — actively supported. Security backports land on `main` and ship in the next `v0.3.x` patch.
+- **Prior minor** — community-only. No proactive backports; fixes accepted via PR.
+- **Older** — not supported. Upgrade.
 
-1. **Pin Versions in Production**
-   ```yaml
-   # Helm values
-   image:
-     tag: "1.2.3"  # Not "latest"
-   ```
+If you operate VirtRigaud in a regulated environment (the project is documented as deployable in regulated banking environments — see the field-testing notes), pin to a specific patch and upgrade on a schedule rather than chasing latest. Each release tag is reproducible: the manager binary emits `virtrigaud_build_info{version="v0.3.x"}` on `/metrics`, and the container image digest is signed and published to ghcr.io.
 
-2. **Test Upgrades in Staging**
-   ```bash
-   # Upgrade strategy
-   helm upgrade provider-test virtrigaud/provider \
-     --version 1.3.0 \
-     --namespace staging
-   ```
+## Where to track releases
 
-3. **Monitor Deprecation Warnings**
-   ```bash
-   # Check for deprecation warnings
-   kubectl logs -l app=provider | grep -i deprecat
-   ```
+- **Releases**: [github.com/projectbeskar/virtrigaud/releases](https://github.com/projectbeskar/virtrigaud/releases) — every final tag has release notes pointing to the `CHANGELOG.md` block.
+- **Changelog**: [`CHANGELOG.md`](https://github.com/projectbeskar/virtrigaud/blob/main/CHANGELOG.md) — every change since v0.1.0 with author attribution.
+- **Roadmap**: tracked in GitHub issues and labels; no separate roadmap document.
 
-4. **Plan Migration Windows**
-   ```yaml
-   # Schedule upgrades during maintenance windows
-   # Have rollback plans ready
-   # Test compatibility thoroughly
-   ```
+## Choosing a version
 
-## Future Considerations
+- **New installs in 2026-05+**: use `v0.3.6`.
+- **Upgrading from `v0.3.5`**: routine, no CRD changes; see the [Upgrade Guide v0.3.5 → v0.3.6](../operations/upgrade.md#v035--v036).
+- **Upgrading from older `v0.3.x`**: same Helm install pattern, but read the intermediate CHANGELOG blocks for new metric families and capability corrections.
+- **Anything pre-`v0.3.0`**: not supported. Migrate to `v0.3.x` directly.
 
-### Long-term Compatibility
+## API reference
 
-- **10-year Support Goal**: Core APIs should remain usable for 10 years
-- **Gradual Evolution**: Prefer gradual evolution over revolutionary changes
-- **Ecosystem Stability**: Consider impact on the entire provider ecosystem
-
-### Emerging Standards
-
-- **OCI Compliance**: Align with OCI runtime and image standards
-- **CNCF Integration**: Follow CNCF project graduation requirements
-- **Industry Standards**: Adopt relevant industry standards as they emerge
-
-### Technology Evolution
-
-- **Go Version Support**: Support 2-3 latest Go versions
-- **Kubernetes Compatibility**: Support 3-4 latest Kubernetes versions
-- **gRPC Evolution**: Adapt to gRPC and protobuf improvements
-
-This versioning strategy ensures VirtRigaud can evolve while maintaining stability and compatibility for the provider ecosystem.
-
+- [Capability matrix](providers-capabilities.md) — the v0.3.6 corrected snapshot.
+- [Generated CRD reference](../references/generated-crd-docs.md).
+- [Provider gRPC contract reference](../references/grpc-api.md).
