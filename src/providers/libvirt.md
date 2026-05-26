@@ -3,209 +3,69 @@ Copyright (c) 2026 VirtRigaud Creators
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LibVirt/KVM Provider
+# Libvirt / KVM Provider
 
-The LibVirt provider enables VirtRigaud to manage virtual machines on KVM/QEMU hypervisors using the LibVirt API. This provider runs as a dedicated pod that communicates with LibVirt daemons locally or remotely, making it ideal for development, on-premises deployments, and cloud environments.
+The Libvirt provider manages VMs on KVM/QEMU via the `libvirt` daemon, talking to it through `virsh` shelled out over SSH. It is the simplest provider to operate against and is widely deployed on-premises.
 
-## Overview
+This page is aligned to **VirtRigaud v0.3.6**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/libvirt/server.go`.
 
-This provider implements the VirtRigaud provider interface to manage VM lifecycle operations on LibVirt/KVM:
+!!! note "Implementation detail: virsh over SSH"
+    Unlike most libvirt integrations that use the C `libvirt-go` bindings (which require cgo), VirtRigaud's libvirt provider shells out to the `virsh` CLI over an SSH tunnel to the remote libvirt host (`internal/providers/libvirt/virsh.go`). This keeps the provider image small (no libvirt-dev runtime) and avoids cgo entirely, at the cost of being more sensitive to SSH-host hygiene. See [Troubleshooting](#troubleshooting) for the SSH-host-issue narrative.
 
-- **Create**: Create VMs from cloud images with comprehensive cloud-init support
-- **Delete**: Remove VMs and associated storage volumes (with cleanup)
-- **Power**: Start, stop, and reboot virtual machines
-- **Describe**: Query VM state, resource usage, guest agent information, and network details
-- **Reconfigure**: Modify VM resources (v0.2.3+ - requires VM restart)
-- **Clone**: Create new VMs based on existing VM configurations
-- **Snapshot**: Create, delete, and revert VM snapshots (storage-dependent)
-- **ConsoleURL**: Generate VNC console URLs for remote access (v0.2.3+)
-- **ImagePrepare**: Download and prepare cloud images from URLs
-- **Storage Management**: Advanced storage pool and volume operations
-- **Cloud-Init**: Full NoCloud datasource support with ISO generation
-- **QEMU Guest Agent**: Integration for enhanced guest OS monitoring
-- **Network Configuration**: Support for various network types and bridges
+## Capabilities at a glance
+
+The libvirt provider advertises the following via `GetCapabilities` (`internal/providers/libvirt/server.go:457-468`):
+
+| Capability flag | Value | What it means |
+|-----------------|-------|---------------|
+| `SupportsReconfigureOnline` | **false** | CPU/memory changes via `virsh setvcpus`/`setmem` are applied with `--config`; full effect typically requires a power cycle. |
+| `SupportsDiskExpansionOnline` | false | Disk grow requires power cycle (qemu-img resize + guest fs grow). |
+| `SupportsSnapshots` | true | `virsh snapshot-create-as` against qcow2 storage. |
+| `SupportsMemorySnapshots` | **false** | The capability flag is false. The code path *does* allow `--disk-only`-off snapshots on running domains, but the contract advertises no memory-snapshot support and the manager short-circuits memory-snapshot requests against this provider. |
+| `SupportsLinkedClones` | **true** | Linked clones via qcow2 backing files. The matrix previously claimed `false` for this — corrected in v0.3.6 docs alignment. |
+| `SupportsImageImport` | true | Image fetched from URL into a storage pool volume. |
+| `SupportedDiskTypes` | `qcow2`, `raw`, `vmdk` | QEMU-supported formats (qcow2 is the recommended default). |
+| `SupportedNetworkTypes` | `virtio`, `e1000`, `rtl8139` | QEMU virtual NIC models advertised by `GetCapabilities`. |
+
+For the full cross-provider matrix and resilience / observability narrative:
+
+- [Provider capabilities matrix](providers-capabilities.md)
+- [Operations — Resilience](../operations/resilience.md) — CircuitBreaker (G6 / v0.3.6) wraps every libvirt RPC.
+- [Operations — Observability](../operations/observability.md)
+
+## RPC support
+
+- **Validate** — `virsh version` over the SSH connection.
+- **Create** — define a libvirt domain XML, attach a qcow2 root disk, attach a NoCloud cloud-init ISO, start the domain.
+- **Delete** — destroy + undefine domain, optionally remove volumes.
+- **Power** — start / shutdown / destroy / reboot.
+- **Describe** — domain state, VNC URL, IPs (via QEMU guest agent or DHCP lease).
+- **Reconfigure** — `virsh setvcpus --config` / `virsh setmem --config`; `--live` is attempted on a best-effort basis but typically needs a restart for persistence.
+- **SnapshotCreate / SnapshotDelete / SnapshotRevert** — `virsh snapshot-*` against qcow2 storage. Synchronous; no `TaskRef` is returned (libvirt operations are blocking from `virsh`'s perspective).
+- **CloneCreate** — `virt-clone` for full clones; qcow2 `backing_file` linkage for linked clones.
+- **ConsoleUrl** — `vnc://<host>:<port>` parsed from `virsh dumpxml`.
 
 ## Prerequisites
 
-The LibVirt provider connects to a LibVirt daemon (libvirtd) which can run locally or remotely. This makes it flexible for both development and production environments.
+- A libvirt host running `libvirtd` with KVM hardware acceleration (or nested virt for dev).
+- SSH access from the provider pod into the libvirt host as a user that can talk to `qemu:///system` (typically a member of the `libvirt` group).
+- Storage pools and networks already defined on the libvirt host. The provider does **not** create pools/networks — only consumes them.
 
-### Connection Options:
-- **Local LibVirt**: Connects to local libvirtd via `qemu:///system` (ideal for development)
-- **Remote LibVirt**: Connects to remote libvirtd over SSH/TLS (production)
-- **Container LibVirt**: Works with containerized libvirt or KubeVirt
+## Authentication
 
-### Requirements:
-- **LibVirt daemon** (libvirtd) running locally or accessible remotely
-- **KVM/QEMU** hypervisor support (hardware virtualization recommended)
-- **Storage pools** configured for VM disk storage  
-- **Network bridges** or interfaces for VM networking
-- **Appropriate permissions** for VM management operations
+The libvirt provider reads credentials from the Secret mounted at `/etc/virtrigaud/credentials` inside the provider pod. The provider also accepts `LIBVIRT_*` env vars as a secondary path (`internal/providers/libvirt/virsh.go:90-140`). **The Secret keys are read as files**; the key names matter:
 
-### Development Setup:
-For local development, you can:
-- **Linux**: Install `libvirt-daemon-system` and `qemu-kvm` packages
-- **macOS/Windows**: Use remote LibVirt or nested virtualization
-- **Testing**: The provider can connect to local libvirtd without complex infrastructure
+| Secret key | File path | Used for |
+|------------|-----------|----------|
+| `username` | `/etc/virtrigaud/credentials/username` | SSH username (also injected into the URI if `qemu+ssh://`) |
+| `password` | `/etc/virtrigaud/credentials/password` | Password auth (fallback; SSH key is strongly preferred) |
+| `ssh-privatekey` | `/etc/virtrigaud/credentials/ssh-privatekey` | SSH private key in PEM (preferred) |
 
-## Authentication & Connection
+The provider needs at least one of password or ssh-privatekey set; if both are present, the SSH key takes precedence.
 
-The LibVirt provider supports multiple connection methods:
-
-### Local LibVirt Connection
-
-For connecting to a LibVirt daemon on the same host as the provider pod:
+### Provider CR + Secret
 
 ```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: Provider
-metadata:
-  name: libvirt-local
-  namespace: default
-spec:
-  type: libvirt
-  endpoint: "qemu:///system"  # Local system connection
-  credentialSecretRef:
-    name: libvirt-local-credentials
-  runtime:
-    mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.2.3"
-    service:
-      port: 9090
-```
-
-**Note**: When using local connections, ensure the provider pod has appropriate permissions to access the LibVirt socket.
-
-### Remote Connection with SSH
-
-For remote LibVirt over SSH:
-
-```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: Provider
-metadata:
-  name: libvirt-remote
-  namespace: default
-spec:
-  type: libvirt
-  endpoint: "qemu+ssh://user@libvirt-host/system"
-  credentialSecretRef:
-    name: libvirt-ssh-credentials
-  runtime:
-    mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.2.3"
-    service:
-      port: 9090
-```
-
-Create SSH credentials secret:
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: libvirt-ssh-credentials
-  namespace: default
-type: Opaque
-stringData:
-  username: "libvirt-user"
-  # For key-based auth (recommended):
-  tls.key: |
-    -----BEGIN PRIVATE KEY-----
-    # Your SSH private key here
-    -----END PRIVATE KEY-----
-  # For password auth (less secure):
-  password: "your-password"
-```
-
-### Remote Connection with TLS
-
-For remote LibVirt over TLS:
-
-```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: Provider
-metadata:
-  name: libvirt-tls
-  namespace: default
-spec:
-  type: libvirt
-  endpoint: "qemu+tls://libvirt-host:16514/system"
-  credentialSecretRef:
-    name: libvirt-tls-credentials
-  runtime:
-    mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.2.3"
-    service:
-      port: 9090
-```
-
-Create TLS credentials secret:
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: libvirt-tls-credentials
-  namespace: default
-type: kubernetes.io/tls
-data:
-  tls.crt: # Base64 encoded client certificate
-  tls.key: # Base64 encoded client private key
-  ca.crt:  # Base64 encoded CA certificate
-```
-
-## Configuration
-
-### Connection URIs
-
-The LibVirt provider supports standard LibVirt connection URIs:
-
-| URI Format | Description | Use Case |
-|------------|-------------|----------|
-| `qemu:///system` | Local system connection | Development, single-host |
-| `qemu+ssh://user@host/system` | SSH connection | Remote access with SSH |
-| `qemu+tls://host:16514/system` | TLS connection | Secure remote access |
-| `qemu+tcp://host:16509/system` | TCP connection | Insecure remote (testing only) |
-
-**⚠️ Note**: All LibVirt URI schemes are now supported in the CRD validation pattern.
-
-### Deployment Configuration
-
-#### Using Helm Values
-
-```yaml
-# values.yaml
-providers:
-  libvirt:
-    enabled: true
-    endpoint: "qemu:///system"  # Adjust for your environment
-    # For remote connections:
-    # endpoint: "qemu+ssh://user@libvirt-host/system"
-    credentialSecretRef:
-      name: libvirt-credentials  # Optional for local connections
-```
-
-#### Development Configuration
-
-```yaml
-# For local development with LibVirt
-providers:
-  libvirt:
-    enabled: true
-    endpoint: "qemu:///system"
-    runtime:
-      # Mount host libvirt socket (for local access)
-      volumes:
-      - name: libvirt-sock
-        hostPath:
-          path: /var/run/libvirt/libvirt-sock
-      volumeMounts:
-      - name: libvirt-sock
-        mountPath: /var/run/libvirt/libvirt-sock
-```
-
-#### Production Configuration
-
-```yaml
-# For production with remote LibVirt
 apiVersion: v1
 kind: Secret
 metadata:
@@ -213,53 +73,67 @@ metadata:
   namespace: virtrigaud-system
 type: Opaque
 stringData:
-  username: "virtrigaud-service"
-  tls.crt: |
-    -----BEGIN CERTIFICATE-----
-    # Client certificate for TLS authentication
-    -----END CERTIFICATE-----
-  tls.key: |
-    -----BEGIN PRIVATE KEY-----
-    # Client private key
-    -----END PRIVATE KEY-----
-  ca.crt: |
-    -----BEGIN CERTIFICATE-----
-    # CA certificate
-    -----END CERTIFICATE-----
-
+  username: "virtrigaud"
+  ssh-privatekey: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    ...
+    -----END OPENSSH PRIVATE KEY-----
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: Provider
 metadata:
-  name: libvirt-production
+  name: libvirt-lab
   namespace: virtrigaud-system
 spec:
   type: libvirt
-  endpoint: "qemu+tls://libvirt.example.com:16514/system"
+  endpoint: "qemu+ssh://virtrigaud@libvirt-host.example.com/system"
   credentialSecretRef:
     name: libvirt-credentials
+  runtime:
+    mode: Remote
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.6"
+    service:
+      port: 9090
 ```
 
-## Storage Configuration
+!!! note "SSH known_hosts"
+    The provider sets `no_verify=1` in the URI query to skip host-key verification (`internal/providers/libvirt/virsh.go:167`). This is convenient for dynamic provider pods but it does mean you should treat the network path between the manager and the libvirt host as trusted (mTLS-protected VPC or equivalent). See the [security pages](security/mtls.md) for the mTLS and supply-chain story.
 
-### Storage Pools
+## Endpoint formats
 
-LibVirt requires storage pools for VM disks. Common configurations:
+| URI | Use case |
+|-----|----------|
+| `qemu+ssh://user@host/system` | Remote libvirt over SSH (production-typical) |
+| `qemu+tls://host:16514/system` | Remote libvirt over TLS (where libvirtd is configured for TLS) |
+| `qemu:///system` | Provider pod co-located with libvirtd (rare; requires socket mount) |
+
+The CRD validates that the endpoint matches one of these schemes.
+
+## Storage
+
+Libvirt VMs live in **storage pools**. The provider does not create pools — they must already exist on the host. Common pool types:
+
+- `dir` — directory on local disk (development, simple setups)
+- `logical` (LVM) — LVM volume group (better performance, online resize is friendlier)
+- `nfs` — shared NFS for multi-host clusters
+- `rbd` — Ceph RBD (production)
+
+Create one on the host before pointing VirtRigaud at it:
 
 ```bash
-# Create directory-based storage pool
+# Directory pool
 virsh pool-define-as default dir --target /var/lib/libvirt/images
 virsh pool-build default
 virsh pool-start default
 virsh pool-autostart default
 
-# Create LVM-based storage pool (performance)
+# LVM pool
 virsh pool-define-as lvm-pool logical --source-name vg-libvirt --target /dev/vg-libvirt
 virsh pool-start lvm-pool
 virsh pool-autostart lvm-pool
 ```
 
-### VMClass Storage Specification
+In the VMClass, point at the pool via `diskDefaults.storageClass`:
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -267,106 +141,71 @@ kind: VMClass
 metadata:
   name: standard
 spec:
-  cpus: 2
+  cpu: 2
   memory: "4Gi"
-  # LibVirt-specific storage settings
-  spec:
-    storage:
-      pool: "default"        # Storage pool name
-      format: "qcow2"        # Disk format (qcow2, raw)
-      cache: "writethrough"  # Cache mode
-      io: "threads"          # I/O mode
+  diskDefaults:
+    type: qcow2
+    size: "40Gi"
+    storageClass: "default"     # maps to libvirt pool name
 ```
 
-## Network Configuration
+## Networking
 
-### Network Setup
+Libvirt supports several network types; the provider models them via `VMNetworkAttachment`:
 
-Configure LibVirt networks for VM connectivity:
+| Pattern | Libvirt construct | Typical use |
+|---------|-------------------|-------------|
+| Bridge | `<interface type='bridge'><source bridge='br0'/>` | Direct host bridge; appears on the physical LAN |
+| Libvirt network | `<interface type='network'><source network='default'/>` | NAT'd virtual network |
+| VLAN | `<interface type='bridge' ... ><vlan><tag id='100'/></vlan>` | Tagged on a host bridge |
+
+Define a network on the host first:
 
 ```bash
-# Create NAT network (default)
 virsh net-define /usr/share/libvirt/networks/default.xml
 virsh net-start default
 virsh net-autostart default
-
-# Create bridge network (for external access)
-cat > /tmp/bridge-network.xml << EOF
-<network>
-  <name>br0</name>
-  <forward mode='bridge'/>
-  <bridge name='br0'/>
-</network>
-EOF
-virsh net-define /tmp/bridge-network.xml
-virsh net-start br0
 ```
 
-### Network Bridge Mapping
-
-| Network Name | LibVirt Network | Use Case |
-|--------------|-----------------|----------|
-| `default`, `nat` | default | NAT networking |
-| `bridge`, `br0` | br0 | Bridged networking |
-| `isolated` | isolated | Host-only networking |
-
-### VM Network Configuration
+Then a VMNetworkAttachment that references it:
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
+kind: VMNetworkAttachment
 metadata:
-  name: web-server
+  name: lan-default
 spec:
-  providerRef:
-    name: libvirt-local
-  networks:
-    # Use default NAT network
-    - name: default
-    # Use bridged network for external access
-    - name: bridge
+  network:
+    libvirt:
+      networkName: default
+  ipAllocation:
+    type: DHCP
+```
+
+For a bridge:
+
+```yaml
+spec:
+  network:
+    libvirt:
       bridge: br0
-      mac: "52:54:00:12:34:56"  # Optional MAC address
+      model: virtio
+  ipAllocation:
+    type: Static
+    address: "192.168.1.100/24"
+    gateway: "192.168.1.1"
+    dns: ["8.8.8.8", "1.1.1.1"]
 ```
 
-## VM Configuration
+## Cloud-init (NoCloud ISO)
 
-### VMClass Specification
+Unlike vSphere's `guestinfo` mechanism, libvirt uses the **NoCloud datasource**: the provider builds an ISO9660 image with `user-data` and `meta-data`, drops it into the storage pool, and attaches it as a virtual CD-ROM. The guest's cloud-init finds it at boot and applies it.
 
-Define hardware resources and LibVirt-specific settings:
+User-data placement, network-data for static IPs, and SSH keys all flow through this ISO — there is no per-VM out-of-band channel. Reference: `internal/providers/libvirt/cloudinit.go`.
 
-```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClass
-metadata:
-  name: development
-spec:
-  cpus: 2
-  memory: "4Gi"
-  # LibVirt-specific configuration
-  spec:
-    machine: "pc-i440fx-2.12"  # Machine type
-    cpu:
-      mode: "host-model"       # CPU mode (host-model, host-passthrough)
-      topology:
-        sockets: 1
-        cores: 2
-        threads: 1
-    features:
-      acpi: true
-      apic: true
-      pae: true
-    clock:
-      offset: "utc"
-      timers:
-        rtc: "catchup"
-        pit: "delay"
-        hpet: false
-```
+Multi-NIC and static IPs are supported as long as the guest cloud-init understands network-config v2 (modern Ubuntu / Debian / RHEL-family cloud images do).
 
-### VMImage Specification
-
-Reference existing disk images or templates:
+## VM example
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -375,58 +214,32 @@ metadata:
   name: ubuntu-22-04
 spec:
   source:
-    # Path to existing image in storage pool
-    disk: "/var/lib/libvirt/images/ubuntu-22.04-base.qcow2"
-    # Or reference by pool and volume
-    # pool: "default"
-    # volume: "ubuntu-22.04-base"
-  format: "qcow2"
-  
-  # Cloud-init preparation
-  cloudInit:
-    enabled: true
-    userDataTemplate: |
-      #cloud-config
-      hostname: {{"{{ .Name }}"}}
-      users:
-        - name: ubuntu
-          sudo: ALL=(ALL) NOPASSWD:ALL
-          ssh_authorized_keys:
-            - {{"{{ .SSHPublicKey }}"}}
-```
-
-### Complete VM Example
-
-```yaml
+    libvirt:
+      url: "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
+      pool: default
+      format: qcow2
+---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
 metadata:
   name: dev-workstation
 spec:
   providerRef:
-    name: libvirt-local
+    name: libvirt-lab
   classRef:
-    name: development
+    name: standard
   imageRef:
     name: ubuntu-22-04
   powerState: On
-  
-  # Disk configuration
   disks:
     - name: root
-      size: "50Gi"
-      storageClass: "fast-ssd"  # Maps to LibVirt storage pool
-  
-  # Network configuration  
+      sizeGiB: 40
+      type: qcow2
+      storageClass: "default"
   networks:
-    - name: default  # NAT network for internet
-    - name: bridge   # Bridge for LAN access
-      staticIP:
-        address: "192.168.1.100/24"
-        gateway: "192.168.1.1"
-        dns: ["8.8.8.8", "1.1.1.1"]
-  
-  # Cloud-init user data
+    - name: lan
+      networkRef:
+        name: lan-default
   userData:
     cloudInit:
       inline: |
@@ -439,417 +252,156 @@ spec:
             ssh_authorized_keys:
               - "ssh-ed25519 AAAA..."
         packages:
-          - build-essential
+          - qemu-guest-agent
           - docker.io
-          - code
         runcmd:
-          - systemctl enable docker
-          - usermod -aG docker developer
+          - systemctl enable --now qemu-guest-agent docker
 ```
 
-## Cloud-Init Integration
+!!! tip "Install `qemu-guest-agent` in the guest"
+    Without it, the provider falls back to DHCP-lease scraping for IP discovery — slower and less reliable, and `Describe` will not report all interfaces.
 
-### Automatic Configuration
+## Snapshots
 
-The LibVirt provider automatically handles cloud-init setup:
+Libvirt snapshots are implemented via `virsh snapshot-create-as` (`internal/providers/libvirt/provider_virsh.go:1381-1444`). The provider:
 
-- **ISO Generation**: Creates cloud-init ISO with user-data and meta-data
-- **Attachment**: Attaches ISO as CD-ROM device to VM
-- **Network Config**: Generates network configuration from VM spec
-- **User Data**: Renders templates with VM-specific values
+1. Checks domain state with `getDomainState`.
+2. Builds a snapshot name (auto-generates one if `nameHint` is empty).
+3. Emits `--atomic` to ensure consistency.
+4. Adds `--disk-only` for stopped domains or when `includeMemory` is false.
 
-### Advanced Cloud-Init
+The `SupportsMemorySnapshots=false` capability flag means the manager will not route memory-snapshot requests to this provider — operators who need memory state should snapshot through `virsh` directly out of band.
 
-```yaml
-userData:
-  cloudInit:
-    inline: |
-      #cloud-config
-      hostname: {{"{{ .Name }}"}}
-      
-      # Network configuration (if not using DHCP)
-      network:
-        version: 2
-        ethernets:
-          ens3:
-            addresses: [192.168.1.100/24]
-            gateway4: 192.168.1.1
-            nameservers:
-              addresses: [8.8.8.8, 1.1.1.1]
-      
-      # Storage configuration
-      disk_setup:
-        /dev/vdb:
-          table_type: gpt
-          layout: true
-      
-      fs_setup:
-        - device: /dev/vdb1
-          filesystem: ext4
-          label: data
-      
-      mounts:
-        - [/dev/vdb1, /data, ext4, defaults]
-      
-      # Package installation
-      packages:
-        - qemu-guest-agent  # Enable guest agent
-        - cloud-init
-        - curl
-      
-      # Enable services
-      runcmd:
-        - systemctl enable qemu-guest-agent
-        - systemctl start qemu-guest-agent
-```
+Snapshots return synchronously (no `TaskRef`). All work has completed by the time the `SnapshotCreate` RPC returns.
 
-## Performance Optimization
+## Linked clones (corrected in v0.3.6)
 
-### KVM Optimization
+`SupportsLinkedClones=true`. Libvirt linked clones are implemented as a new qcow2 volume with `backing_file` pointing at the source disk — the child only stores deltas. The matrix previously claimed `false` for this. The provider's `GetCapabilities` response has always reported `true`; v0.3.6 documentation now agrees.
 
 ```yaml
-# VMClass with performance optimizations
 apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClass
+kind: VMClone
 metadata:
-  name: high-performance
+  name: dev-vm-02-clone
 spec:
-  cpus: 8
-  memory: "16Gi"
-  spec:
-    cpu:
-      mode: "host-passthrough"  # Best performance
-      topology:
-        sockets: 1
-        cores: 8
-        threads: 1
-    # NUMA topology for large VMs
-    numa:
-      cells:
-        - id: 0
-          cpus: "0-7"
-          memory: "16"
-    
-    # Virtio devices for performance
-    devices:
-      disk:
-        bus: "virtio"
-        cache: "none"
-        io: "native"
-      network:
-        model: "virtio"
-      video:
-        model: "virtio"
+  source:
+    vmRef:
+      name: dev-vm-01
+  target:
+    name: dev-vm-02
+  options:
+    type: LinkedClone    # FullClone is also supported (virt-clone full pass)
 ```
 
-### Storage Performance
+Caveat: a linked clone's parent must remain on the same storage pool. Moving or deleting the parent breaks the child.
+
+## Reconfigure (restart-required for full effect)
+
+The provider attempts `virsh setvcpus --live --config` and `virsh setmem --live --config`. The `--live` flag works on a best-effort basis when the guest is running and has the virtio balloon / virtio vcpu drivers; `--config` always succeeds and persists across reboot.
+
+The `SupportsReconfigureOnline=false` capability flag is the contract — the manager won't surprise an operator with an online reconfigure expectation against libvirt. Operators planning capacity changes against this provider should expect a power-cycle window.
+
+Disk expansion currently requires the VM to be powered off (qemu-img resize + guest filesystem grow on next boot).
+
+## Console access
+
+`Describe` populates `status.consoleURL` with a VNC URL extracted from `virsh dumpxml` (`internal/providers/libvirt/server.go`). The URL points at the libvirt host's VNC display port:
 
 ```bash
-# Create high-performance storage pool
-virsh pool-define-as ssd-pool logical --source-name vg-ssd --target /dev/vg-ssd
-virsh pool-start ssd-pool
-
-# Use raw format for better performance (larger disk usage)
-virsh vol-create-as ssd-pool vm-disk 100G --format raw
-
-# Enable native AIO and disable cache for direct I/O
-# (configured automatically by provider based on VMClass)
+kubectl get vm dev-workstation -o jsonpath='{.status.consoleURL}'
+# vnc://libvirt-host.example.com:5900
 ```
+
+Connect with any VNC client (`vncviewer`, TigerVNC, RealVNC, noVNC).
+
+!!! warning "VNC over the public internet"
+    The libvirt VNC port is unauthenticated by default. Either firewall it to the operator network or front it with a TLS-terminating proxy. Do not expose 5900-590x to the open internet.
 
 ## Troubleshooting
 
-### Common Issues
+### CircuitBreaker open on first deploy
 
-#### ❌ Connection Failed
+This is the v0.3.6 G6 / I1 narrative — and it is genuinely useful.
 
-**Symptom**: `failed to connect to Libvirt: <error>`
+If you see:
 
-**Causes & Solutions**:
-
-1. **Local connection issues**:
-   ```bash
-   # Check libvirtd status
-   sudo systemctl status libvirtd
-   
-   # Start if not running
-   sudo systemctl start libvirtd
-   sudo systemctl enable libvirtd
-   
-   # Test connection
-   virsh -c qemu:///system list
-   ```
-
-2. **Remote SSH connection**:
-   ```bash
-   # Test SSH connectivity
-   ssh user@libvirt-host virsh list
-   
-   # Check SSH key permissions
-   chmod 600 ~/.ssh/id_rsa
-   ```
-
-3. **Remote TLS connection**:
-   ```bash
-   # Verify certificates
-   openssl x509 -in client-cert.pem -text -noout
-   
-   # Test TLS connection
-   virsh -c qemu+tls://host:16514/system list
-   ```
-
-#### ❌ Permission Denied
-
-**Symptom**: `authentication failed` or `permission denied`
-
-**Solutions**:
-```bash
-# Add user to libvirt group
-sudo usermod -a -G libvirt $USER
-
-# Check libvirt group membership
-groups $USER
-
-# Verify permissions on libvirt socket
-ls -la /var/run/libvirt/libvirt-sock
-
-# For containerized providers, ensure socket is mounted
+```promql
+virtrigaud_circuit_breaker_state{provider_type="libvirt", provider="libvirt-lab"} == 2
 ```
 
-#### ❌ Storage Pool Not Found
+immediately after a fresh `helm install`, the breaker is doing exactly what it was wired to do (G6 / PR #112): it has detected repeated RPC failures against the libvirt provider pod and has fast-failed further requests rather than spam the SSH endpoint.
 
-**Symptom**: `storage pool 'default' not found`
+The most common root cause in practice is an SSH-host issue on the libvirt side. The v0.3.6-rc1 smoke on the `vr1.lab.k8` lab cluster hit this with a `kex_exchange_identification: Connection closed by remote host` against the libvirt host — sshd was up but refusing the new connection (rate-limit / per-IP block / MaxStartups exhausted). The CircuitBreaker surfaced it immediately on `/metrics`; previous releases would have just spammed the manager log.
 
-**Solution**:
-```bash
-# List available pools
-virsh pool-list --all
+**Triage steps**:
 
-# Create default pool if missing
-virsh pool-define-as default dir --target /var/lib/libvirt/images
-virsh pool-build default
-virsh pool-start default
-virsh pool-autostart default
+1. Open a shell on the libvirt host (out of band — don't try over the failing SSH path).
+2. Inspect `sshd` logs (`journalctl -u ssh` or `/var/log/auth.log`).
+3. Check for `MaxStartups` exhaustion, `fail2ban` bans on the provider pod's source IP, or AllowUsers/AllowGroups restrictions that the `virtrigaud` user does not satisfy.
+4. Once SSH is healthy, the breaker self-recovers (default 30s reset; see [Resilience](../operations/resilience.md#circuitbreaker-on-the-provider-grpc-path-v036)). No manual intervention required.
 
-# Verify pool is active
-virsh pool-info default
-```
+### `qemu-guest-agent` not reporting IPs
 
-#### ❌ Network Not Available
+`Describe` queries `virsh qemu-agent-command --domain <name> '{"execute":"guest-network-get-interfaces"}'`. If the guest does not have the agent installed and running, the provider falls back to libvirt's DHCP lease database, which is incomplete and slow.
 
-**Symptom**: `network 'default' not found`
-
-**Solution**:
-```bash
-# List networks
-virsh net-list --all
-
-# Start default network
-virsh net-start default
-virsh net-autostart default
-
-# Create bridge network if needed
-virsh net-define /usr/share/libvirt/networks/default.xml
-```
-
-#### ❌ KVM Not Available
-
-**Symptom**: `KVM is not available` or `hardware acceleration not available`
-
-**Solutions**:
-1. **Check virtualization support**:
-   ```bash
-   # Check CPU virtualization features
-   egrep -c '(vmx|svm)' /proc/cpuinfo
-   
-   # Check KVM modules
-   lsmod | grep kvm
-   
-   # Load KVM modules if missing
-   sudo modprobe kvm
-   sudo modprobe kvm_intel  # or kvm_amd
-   ```
-
-2. **BIOS/UEFI settings**: Enable Intel VT-x or AMD-V
-3. **Nested virtualization**: If running in a VM, enable nested virtualization
-
-### Validation Commands
-
-Test your LibVirt setup before deploying:
+Fix in the guest:
 
 ```bash
-# 1. Test LibVirt connection
-virsh -c qemu:///system list
-
-# 2. Check storage pools
-virsh pool-list --all
-
-# 3. Check networks
-virsh net-list --all
-
-# 4. Test VM creation (simple test)
-virt-install --name test-vm --memory 512 --vcpus 1 \
-  --disk size=1 --network network=default \
-  --boot cdrom --noautoconsole --dry-run
-
-# 5. From within Kubernetes pod
-kubectl run debug --rm -i --tty --image=ubuntu:22.04 -- bash
-# Then test virsh commands if socket is mounted
+apt-get install qemu-guest-agent
+systemctl enable --now qemu-guest-agent
 ```
 
-### Debug Logging
+Also confirm the VM XML includes the channel device for the agent (it should be auto-added by VirtRigaud at create time).
 
-Enable verbose logging for the LibVirt provider:
+### "storage pool 'default' not found"
+
+The provider does not create pools — list available pools on the host with `virsh pool-list --all`. If the VMClass's `storageClass` refers to a pool that does not exist, the provider returns `InvalidSpec` and the VM lands in `Pending` with a clear error in `status.conditions`.
+
+### "permission denied" on the libvirt socket / SSH user can't talk to libvirt
+
+The SSH user on the libvirt host must be in the `libvirt` group (Debian/Ubuntu) or have polkit rules granting access (RHEL/Fedora). Verify with:
+
+```bash
+ssh virtrigaud@libvirt-host virsh -c qemu:///system list
+```
+
+If that command fails, no amount of provider config will fix it.
+
+### Snapshot fails on running domain
+
+If the storage is not qcow2 (e.g., raw on LVM), `virsh snapshot-create-as` against a running domain may fail. Either:
+
+- power off and snapshot offline, or
+- switch the disk format to qcow2 (the recommended default in VirtRigaud's libvirt provider).
+
+### Debug logging
 
 ```yaml
-providers:
-  libvirt:
+spec:
+  runtime:
+    logLevel: debug
     env:
-      - name: LOG_LEVEL
-        value: "debug"
       - name: LIBVIRT_DEBUG
         value: "1"
-    endpoint: "qemu:///system"
 ```
 
-## Advanced Features
+`LIBVIRT_DEBUG=1` enables verbose tracing of every `virsh` invocation and the SSH transport.
 
-### VM Reconfiguration (v0.2.3+)
+## Performance tips
 
-The Libvirt provider supports VM reconfiguration for CPU, memory, and disk resources:
+- **virtio everywhere**: `disk.bus=virtio`, `network.model=virtio`, `vga` only when you need a console.
+- **`cache=none` + `io=native` + `aio=native`** for production storage; the provider's default for qcow2 is `writeback` which is OK for dev.
+- **CPU mode `host-passthrough`**: best raw performance, breaks live migration between dissimilar hosts. Use `host-model` if you need migration portability.
+- **Hot-add is best-effort**: budget a power-cycle window for capacity changes.
 
-```yaml
-# Reconfigure VM resources
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
-metadata:
-  name: web-server
-spec:
-  vmClassRef: medium  # Change from small to medium
-  powerState: "On"
-```
+## API reference
 
-**Capabilities**:
-- **Online CPU Changes**: Modify CPU count using `virsh setvcpus --live` for running VMs
-- **Online Memory Changes**: Modify memory using `virsh setmem --live` for running VMs
-- **Disk Resizing**: Expand disk volumes via storage provider integration
-- **Offline Configuration**: Updates persistent config for stopped VMs via `--config` flag
-
-**Important Notes**:
-- Most changes require VM restart for full effect
-- Online changes apply to running VM but may need restart for persistence
-- Disk shrinking not supported for safety
-- Memory format parsing supports bytes, KiB, MiB, GiB
-
-**Implementation Details**:
-- Uses `virsh setvcpus --live --config` for CPU changes
-- Uses `virsh setmem --live --config` for memory changes  
-- Parses current VM configuration with `virsh dominfo`
-- Integrates with storage provider for volume resizing
-
-### VNC Console Access (v0.2.3+)
-
-Generate VNC console URLs for direct VM access:
-
-```yaml
-# Access provided in VM status
-kubectl get vm web-server -o yaml
-
-status:
-  consoleURL: "vnc://libvirt-host.example.com:5900"
-  phase: Running
-```
-
-**Features**:
-- Automatic VNC port extraction from domain XML
-- Direct connection URLs for VNC clients
-- Support for standard VNC viewers (TigerVNC, RealVNC, etc.)
-- Web-based VNC viewers compatible (noVNC)
-
-**VNC Client Usage**:
-```bash
-# Using vncviewer
-vncviewer libvirt-host.example.com:5900
-
-# Using TigerVNC
-tigervnc libvirt-host.example.com:5900
-
-# Web browser (with noVNC)
-# Access through web-based VNC proxy
-```
-
-**Configuration**:
-VNC is automatically configured during VM creation. The provider:
-1. Extracts VNC configuration from domain XML using `virsh dumpxml`
-2. Parses the graphics port number  
-3. Constructs the VNC URL with host and port
-4. Returns URL in Describe operations
-
-## Advanced Configuration
-
-### High Availability Setup
-
-```yaml
-# Multiple LibVirt hosts for HA
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: Provider
-metadata:
-  name: libvirt-cluster
-spec:
-  type: libvirt
-  # Use load balancer or failover endpoint
-  endpoint: "qemu+tls://libvirt-cluster.example.com:16514/system"
-  runtime:
-    replicas: 2  # Multiple provider instances
-    affinity:
-      podAntiAffinity:
-        preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                app: libvirt-provider
-            topologyKey: kubernetes.io/hostname
-```
-
-### GPU Passthrough
-
-```yaml
-# VMClass with GPU passthrough
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClass
-metadata:
-  name: gpu-workstation
-spec:
-  cpus: 8
-  memory: "32Gi"
-  spec:
-    devices:
-      hostdev:
-        - type: "pci"
-          source:
-            address:
-              domain: "0x0000"
-              bus: "0x01"
-              slot: "0x00"
-              function: "0x0"
-          managed: true
-```
-
-## API Reference
-
-For complete API reference, see the [Provider API Documentation](../api-reference/).
-
-## Contributing
-
-To contribute to the LibVirt provider:
-
-1. See the [Provider Development Guide](tutorial.md)
-2. Check the [GitHub repository](https://github.com/projectbeskar/virtrigaud)
-3. Review [open issues](https://github.com/projectbeskar/virtrigaud/labels/provider%2Flibvirt)
+- Full CRD field reference: [Generated CRD docs](../references/generated-crd-docs.md).
+- Provider gRPC contract: [Generated gRPC docs](../references/grpc-api.md).
+- Capability matrix (all providers): [Capabilities](providers-capabilities.md).
 
 ## Support
 
-- **Documentation**: [VirtRigaud Docs](https://projectbeskar.github.io/virtrigaud/)
-- **Issues**: [GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues)
-- **Community**: [Discord](https://discord.gg/projectbeskar)
-- **LibVirt**: [libvirt.org](https://libvirt.org/docs.html)
+- Documentation: [VirtRigaud Docs](https://projectbeskar.github.io/virtrigaud/)
+- Issues: [GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues) — label `provider/libvirt`
+- libvirt docs: [libvirt.org](https://libvirt.org/docs.html)

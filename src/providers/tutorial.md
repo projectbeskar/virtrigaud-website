@@ -3,1336 +3,389 @@ Copyright (c) 2026 VirtRigaud Creators
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Provider Developer Tutorial
+# Provider Onboarding Tutorial
 
-This comprehensive tutorial walks you through creating a complete VirtRigaud provider from scratch. By the end, you'll have a fully functional provider that can create, manage, and delete virtual machines.
+This page walks you through bringing a `Provider` CR online end-to-end on a VirtRigaud v0.3.6 cluster. It uses the vSphere provider as the running example because that is the most common starting point; the same shape applies to libvirt and Proxmox with provider-type-specific tweaks called out inline.
+
+If you are looking to build a **new** provider (a fresh hypervisor like Firecracker, Cloud-Hypervisor, or KubeVirt), that material lives in the developer-facing [provider development guide](../development/providers.md) — this page is for operators wiring up an existing provider against a real hypervisor.
 
 ## Prerequisites
 
-Before starting this tutorial, ensure you have:
+- A Kubernetes cluster with VirtRigaud v0.3.6 installed. If you do not have one yet, follow the [Helm-only install guide](../getting-started/install-helm-only.md).
+- `kubectl` configured against the cluster.
+- Cluster admin (or namespace admin in `virtrigaud-system`) — you need to create `Secret`s, `Provider`s, and at least one `VirtualMachine`.
+- Access to the hypervisor you are wiring up (vCenter / libvirt host / PVE cluster) with credentials of an account that can lifecycle VMs.
 
-- Go 1.23 or later installed
-- Docker installed for containerization
-- kubectl and a Kubernetes cluster (Kind/minikube for local development)
-- Helm 3.x installed
-- Basic understanding of gRPC and protobuf
-
-## Tutorial Overview
-
-We'll build a **File Provider** that manages "virtual machines" as JSON files on disk. While not practical for production, this provider demonstrates all the core concepts without requiring actual hypervisor access.
-
-**What we'll build:**
-- A complete provider implementation using the VirtRigaud SDK
-- Conformance tests that pass VCTS core profile
-- A Helm chart for deployment
-- CI/CD integration
-- Publication to the provider catalog
-
-## Step 1: Initialize Your Provider Project
-
-### 1.1 Create Project Structure
+## Step 1 — Install VirtRigaud (skip if already installed)
 
 ```bash
-# Create project directory
-mkdir virtrigaud-provider-file
-cd virtrigaud-provider-file
+helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
+helm repo update
 
-# Initialize the provider project
-vrtg-provider init file
+helm install virtrigaud virtrigaud/virtrigaud \
+  --version 0.3.6 \
+  --namespace virtrigaud-system \
+  --create-namespace
 ```
 
-The `vrtg-provider init` command creates the following structure:
-
-```
-virtrigaud-provider-file/
-├── cmd/
-│   └── provider-file/
-│       ├── main.go
-│       └── Dockerfile
-├── internal/
-│   └── provider/
-│       ├── provider.go
-│       ├── capabilities.go
-│       └── provider_test.go
-├── charts/
-│   └── provider-file/
-│       ├── Chart.yaml
-│       ├── values.yaml
-│       └── templates/
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-├── Makefile
-├── go.mod
-├── go.sum
-├── .gitignore
-└── README.md
-```
-
-### 1.2 Examine Generated Files
-
-**main.go** - Entry point that sets up the gRPC server:
-```go
-package main
-
-import (
-    "log"
-    
-    "github.com/projectbeskar/virtrigaud/sdk/provider/server"
-    "github.com/projectbeskar/virtrigaud/proto/rpc/provider/v1"
-    "virtrigaud-provider-file/internal/provider"
-)
-
-func main() {
-    // Create provider instance
-    p, err := provider.New()
-    if err != nil {
-        log.Fatalf("Failed to create provider: %v", err)
-    }
-    
-    // Configure server
-    config := &server.Config{
-        Port:        9443,
-        HealthPort:  8080,
-        EnableTLS:   false,
-    }
-    
-    srv, err := server.New(config)
-    if err != nil {
-        log.Fatalf("Failed to create server: %v", err)
-    }
-    
-    // Register provider service
-    providerv1.RegisterProviderServiceServer(srv.GRPCServer(), p)
-    
-    // Start server
-    log.Println("Starting file provider on port 9443...")
-    if err := srv.Serve(); err != nil {
-        log.Fatalf("Server failed: %v", err)
-    }
-}
-```
-
-**go.mod** - Module definition with SDK dependency:
-```go
-module virtrigaud-provider-file
-
-go 1.23
-
-require (
-    github.com/projectbeskar/virtrigaud/sdk v0.1.0
-    github.com/projectbeskar/virtrigaud/proto v0.1.0
-)
-```
-
-## Step 2: Implement the Core Provider
-
-### 2.1 Design the File Provider
-
-Our file provider will:
-- Store VM metadata as JSON files in `/var/lib/virtrigaud/vms/`
-- Use filename as VM ID
-- Simulate power operations with state files
-- Support basic CRUD operations
-
-### 2.2 Define the VM Model
-
-Create `internal/provider/vm.go`:
-
-```go
-package provider
-
-import (
-    "encoding/json"
-    "fmt"
-    "io/ioutil"
-    "os"
-    "path/filepath"
-    "time"
-    
-    "github.com/projectbeskar/virtrigaud/proto/rpc/provider/v1"
-)
-
-type VirtualMachine struct {
-    ID          string                 `json:"id"`
-    Name        string                 `json:"name"`
-    Spec        *providerv1.VMSpec     `json:"spec"`
-    Status      *providerv1.VMStatus   `json:"status"`
-    CreatedAt   time.Time              `json:"created_at"`
-    UpdatedAt   time.Time              `json:"updated_at"`
-}
-
-type FileStore struct {
-    baseDir string
-}
-
-func NewFileStore(baseDir string) *FileStore {
-    return &FileStore{baseDir: baseDir}
-}
-
-func (fs *FileStore) Save(vm *VirtualMachine) error {
-    if err := os.MkdirAll(fs.baseDir, 0755); err != nil {
-        return fmt.Errorf("failed to create directory: %w", err)
-    }
-    
-    vm.UpdatedAt = time.Now()
-    data, err := json.MarshalIndent(vm, "", "  ")
-    if err != nil {
-        return fmt.Errorf("failed to marshal VM: %w", err)
-    }
-    
-    filename := filepath.Join(fs.baseDir, vm.ID+".json")
-    return ioutil.WriteFile(filename, data, 0644)
-}
-
-func (fs *FileStore) Load(id string) (*VirtualMachine, error) {
-    filename := filepath.Join(fs.baseDir, id+".json")
-    data, err := ioutil.ReadFile(filename)
-    if err != nil {
-        if os.IsNotExist(err) {
-            return nil, fmt.Errorf("VM not found: %s", id)
-        }
-        return nil, fmt.Errorf("failed to read VM file: %w", err)
-    }
-    
-    var vm VirtualMachine
-    if err := json.Unmarshal(data, &vm); err != nil {
-        return nil, fmt.Errorf("failed to unmarshal VM: %w", err)
-    }
-    
-    return &vm, nil
-}
-
-func (fs *FileStore) Delete(id string) error {
-    filename := filepath.Join(fs.baseDir, id+".json")
-    if err := os.Remove(filename); err != nil && !os.IsNotExist(err) {
-        return fmt.Errorf("failed to delete VM file: %w", err)
-    }
-    return nil
-}
-
-func (fs *FileStore) List() ([]*VirtualMachine, error) {
-    files, err := ioutil.ReadDir(fs.baseDir)
-    if err != nil {
-        if os.IsNotExist(err) {
-            return []*VirtualMachine{}, nil
-        }
-        return nil, fmt.Errorf("failed to read directory: %w", err)
-    }
-    
-    var vms []*VirtualMachine
-    for _, file := range files {
-        if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
-            id := file.Name()[:len(file.Name())-5] // Remove .json extension
-            vm, err := fs.Load(id)
-            if err != nil {
-                continue // Skip invalid files
-            }
-            vms = append(vms, vm)
-        }
-    }
-    
-    return vms, nil
-}
-```
-
-### 2.3 Implement the Provider Interface
-
-Update `internal/provider/provider.go`:
-
-```go
-package provider
-
-import (
-    "context"
-    "fmt"
-    "os"
-    "path/filepath"
-    "time"
-    
-    "github.com/google/uuid"
-    "google.golang.org/grpc/codes"
-    "google.golang.org/grpc/status"
-    
-    "github.com/projectbeskar/virtrigaud/proto/rpc/provider/v1"
-    "github.com/projectbeskar/virtrigaud/sdk/provider/capabilities"
-    "github.com/projectbeskar/virtrigaud/sdk/provider/errors"
-)
-
-type Provider struct {
-    store *FileStore
-    caps  *capabilities.ProviderCapabilities
-}
-
-func New() (*Provider, error) {
-    // Get storage directory from environment or use default
-    baseDir := os.Getenv("PROVIDER_STORAGE_DIR")
-    if baseDir == "" {
-        baseDir = "/var/lib/virtrigaud/vms"
-    }
-    
-    // Create capabilities
-    caps := &capabilities.ProviderCapabilities{
-        ProviderInfo: &providerv1.ProviderInfo{
-            Name:        "file",
-            Version:     "0.1.0",
-            Description: "File-based virtual machine provider for development and testing",
-        },
-        SupportedCapabilities: []capabilities.Capability{
-            capabilities.CapabilityCore,
-            capabilities.CapabilitySnapshot,
-            capabilities.CapabilityClone,
-        },
-    }
-    
-    return &Provider{
-        store: NewFileStore(baseDir),
-        caps:  caps,
-    }, nil
-}
-
-// GetCapabilities returns provider capabilities
-func (p *Provider) GetCapabilities(ctx context.Context, req *providerv1.GetCapabilitiesRequest) (*providerv1.GetCapabilitiesResponse, error) {
-    return &providerv1.GetCapabilitiesResponse{
-        ProviderId: "file-provider",
-        Capabilities: []*providerv1.Capability{
-            {
-                Name:        "vm.create",
-                Supported:   true,
-                Description: "Create virtual machines",
-            },
-            {
-                Name:        "vm.read",
-                Supported:   true,
-                Description: "Read virtual machine information",
-            },
-            {
-                Name:        "vm.update",
-                Supported:   true,
-                Description: "Update virtual machine configuration",
-            },
-            {
-                Name:        "vm.delete",
-                Supported:   true,
-                Description: "Delete virtual machines",
-            },
-            {
-                Name:        "vm.power",
-                Supported:   true,
-                Description: "Control virtual machine power state",
-            },
-            {
-                Name:        "vm.snapshot",
-                Supported:   true,
-                Description: "Create and manage VM snapshots",
-            },
-            {
-                Name:        "vm.clone",
-                Supported:   true,
-                Description: "Clone virtual machines",
-            },
-        },
-    }, nil
-}
-
-// CreateVM creates a new virtual machine
-func (p *Provider) CreateVM(ctx context.Context, req *providerv1.CreateVMRequest) (*providerv1.CreateVMResponse, error) {
-    // Validate request
-    if req.Name == "" {
-        return nil, errors.NewInvalidSpec("VM name is required")
-    }
-    
-    if req.Spec == nil {
-        return nil, errors.NewInvalidSpec("VM spec is required")
-    }
-    
-    // Generate unique ID
-    vmID := uuid.New().String()
-    
-    // Create VM object
-    vm := &VirtualMachine{
-        ID:   vmID,
-        Name: req.Name,
-        Spec: req.Spec,
-        Status: &providerv1.VMStatus{
-            State:   "Creating",
-            Message: "VM is being created",
-        },
-        CreatedAt: time.Now(),
-        UpdatedAt: time.Now(),
-    }
-    
-    // Save to store
-    if err := p.store.Save(vm); err != nil {
-        return nil, status.Errorf(codes.Internal, "failed to save VM: %v", err)
-    }
-    
-    // Simulate creation time
-    go func() {
-        time.Sleep(2 * time.Second)
-        vm.Status.State = "Running"
-        vm.Status.Message = "VM is running"
-        p.store.Save(vm)
-    }()
-    
-    return &providerv1.CreateVMResponse{
-        VmId:   vmID,
-        Status: vm.Status,
-    }, nil
-}
-
-// GetVM retrieves virtual machine information
-func (p *Provider) GetVM(ctx context.Context, req *providerv1.GetVMRequest) (*providerv1.GetVMResponse, error) {
-    if req.VmId == "" {
-        return nil, errors.NewInvalidSpec("VM ID is required")
-    }
-    
-    vm, err := p.store.Load(req.VmId)
-    if err != nil {
-        return nil, errors.NewNotFound("VM not found: %s", req.VmId)
-    }
-    
-    return &providerv1.GetVMResponse{
-        VmId:   vm.ID,
-        Name:   vm.Name,
-        Spec:   vm.Spec,
-        Status: vm.Status,
-    }, nil
-}
-
-// UpdateVM updates virtual machine configuration
-func (p *Provider) UpdateVM(ctx context.Context, req *providerv1.UpdateVMRequest) (*providerv1.UpdateVMResponse, error) {
-    if req.VmId == "" {
-        return nil, errors.NewInvalidSpec("VM ID is required")
-    }
-    
-    vm, err := p.store.Load(req.VmId)
-    if err != nil {
-        return nil, errors.NewNotFound("VM not found: %s", req.VmId)
-    }
-    
-    // Update spec if provided
-    if req.Spec != nil {
-        vm.Spec = req.Spec
-        vm.Status.Message = "VM configuration updated"
-        
-        if err := p.store.Save(vm); err != nil {
-            return nil, status.Errorf(codes.Internal, "failed to save VM: %v", err)
-        }
-    }
-    
-    return &providerv1.UpdateVMResponse{
-        Status: vm.Status,
-    }, nil
-}
-
-// DeleteVM deletes a virtual machine
-func (p *Provider) DeleteVM(ctx context.Context, req *providerv1.DeleteVMRequest) (*providerv1.DeleteVMResponse, error) {
-    if req.VmId == "" {
-        return nil, errors.NewInvalidSpec("VM ID is required")
-    }
-    
-    // Check if VM exists
-    _, err := p.store.Load(req.VmId)
-    if err != nil {
-        return nil, errors.NewNotFound("VM not found: %s", req.VmId)
-    }
-    
-    // Delete VM
-    if err := p.store.Delete(req.VmId); err != nil {
-        return nil, status.Errorf(codes.Internal, "failed to delete VM: %v", err)
-    }
-    
-    return &providerv1.DeleteVMResponse{
-        Success: true,
-        Message: "VM deleted successfully",
-    }, nil
-}
-
-// PowerVM controls virtual machine power state
-func (p *Provider) PowerVM(ctx context.Context, req *providerv1.PowerVMRequest) (*providerv1.PowerVMResponse, error) {
-    if req.VmId == "" {
-        return nil, errors.NewInvalidSpec("VM ID is required")
-    }
-    
-    vm, err := p.store.Load(req.VmId)
-    if err != nil {
-        return nil, errors.NewNotFound("VM not found: %s", req.VmId)
-    }
-    
-    // Update power state based on operation
-    switch req.PowerOp {
-    case providerv1.PowerOp_POWER_OP_ON:
-        vm.Status.State = "Running"
-        vm.Status.Message = "VM is running"
-    case providerv1.PowerOp_POWER_OP_OFF:
-        vm.Status.State = "Stopped"
-        vm.Status.Message = "VM is stopped"
-    case providerv1.PowerOp_POWER_OP_REBOOT:
-        vm.Status.State = "Rebooting"
-        vm.Status.Message = "VM is rebooting"
-        // Simulate reboot
-        go func() {
-            time.Sleep(3 * time.Second)
-            vm.Status.State = "Running"
-            vm.Status.Message = "VM is running"
-            p.store.Save(vm)
-        }()
-    default:
-        return nil, errors.NewInvalidSpec("unsupported power operation: %v", req.PowerOp)
-    }
-    
-    if err := p.store.Save(vm); err != nil {
-        return nil, status.Errorf(codes.Internal, "failed to save VM: %v", err)
-    }
-    
-    return &providerv1.PowerVMResponse{
-        Status: vm.Status,
-    }, nil
-}
-
-// ListVMs lists all virtual machines
-func (p *Provider) ListVMs(ctx context.Context, req *providerv1.ListVMsRequest) (*providerv1.ListVMsResponse, error) {
-    vms, err := p.store.List()
-    if err != nil {
-        return nil, status.Errorf(codes.Internal, "failed to list VMs: %v", err)
-    }
-    
-    var vmInfos []*providerv1.VMInfo
-    for _, vm := range vms {
-        vmInfos = append(vmInfos, &providerv1.VMInfo{
-            VmId:   vm.ID,
-            Name:   vm.Name,
-            Status: vm.Status,
-        })
-    }
-    
-    return &providerv1.ListVMsResponse{
-        Vms: vmInfos,
-    }, nil
-}
-
-// CreateSnapshot creates a VM snapshot
-func (p *Provider) CreateSnapshot(ctx context.Context, req *providerv1.CreateSnapshotRequest) (*providerv1.CreateSnapshotResponse, error) {
-    if req.VmId == "" {
-        return nil, errors.NewInvalidSpec("VM ID is required")
-    }
-    
-    vm, err := p.store.Load(req.VmId)
-    if err != nil {
-        return nil, errors.NewNotFound("VM not found: %s", req.VmId)
-    }
-    
-    // Create snapshot (simulate by copying VM file)
-    snapshotID := uuid.New().String()
-    snapshotPath := filepath.Join(filepath.Dir(p.store.baseDir), "snapshots")
-    
-    if err := os.MkdirAll(snapshotPath, 0755); err != nil {
-        return nil, status.Errorf(codes.Internal, "failed to create snapshot directory: %v", err)
-    }
-    
-    // Copy VM data to snapshot
-    snapshotVM := *vm
-    snapshotVM.ID = snapshotID
-    snapshotStore := NewFileStore(snapshotPath)
-    
-    if err := snapshotStore.Save(&snapshotVM); err != nil {
-        return nil, status.Errorf(codes.Internal, "failed to save snapshot: %v", err)
-    }
-    
-    return &providerv1.CreateSnapshotResponse{
-        SnapshotId: snapshotID,
-        Status: &providerv1.TaskStatus{
-            State:   "Completed",
-            Message: "Snapshot created successfully",
-        },
-    }, nil
-}
-
-// CloneVM clones a virtual machine
-func (p *Provider) CloneVM(ctx context.Context, req *providerv1.CloneVMRequest) (*providerv1.CloneVMResponse, error) {
-    if req.SourceVmId == "" {
-        return nil, errors.NewInvalidSpec("Source VM ID is required")
-    }
-    
-    if req.CloneName == "" {
-        return nil, errors.NewInvalidSpec("Clone name is required")
-    }
-    
-    // Load source VM
-    sourceVM, err := p.store.Load(req.SourceVmId)
-    if err != nil {
-        return nil, errors.NewNotFound("Source VM not found: %s", req.SourceVmId)
-    }
-    
-    // Create clone
-    cloneID := uuid.New().String()
-    cloneVM := &VirtualMachine{
-        ID:   cloneID,
-        Name: req.CloneName,
-        Spec: sourceVM.Spec, // Copy spec from source
-        Status: &providerv1.VMStatus{
-            State:   "Stopped",
-            Message: "Clone created successfully",
-        },
-        CreatedAt: time.Now(),
-        UpdatedAt: time.Now(),
-    }
-    
-    if err := p.store.Save(cloneVM); err != nil {
-        return nil, status.Errorf(codes.Internal, "failed to save clone: %v", err)
-    }
-    
-    return &providerv1.CloneVMResponse{
-        CloneVmId: cloneID,
-        Status: &providerv1.TaskStatus{
-            State:   "Completed",
-            Message: "VM cloned successfully",
-        },
-    }, nil
-}
-```
-
-## Step 3: Add Tests and Validation
-
-### 3.1 Create Unit Tests
-
-Create `internal/provider/provider_test.go`:
-
-```go
-package provider
-
-import (
-    "context"
-    "os"
-    "path/filepath"
-    "testing"
-    "time"
-    
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
-    
-    "github.com/projectbeskar/virtrigaud/proto/rpc/provider/v1"
-)
-
-func TestProvider_CreateVM(t *testing.T) {
-    // Create temporary directory for testing
-    tmpDir, err := os.MkdirTemp("", "file-provider-test")
-    require.NoError(t, err)
-    defer os.RemoveAll(tmpDir)
-    
-    // Set storage directory
-    os.Setenv("PROVIDER_STORAGE_DIR", tmpDir)
-    defer os.Unsetenv("PROVIDER_STORAGE_DIR")
-    
-    // Create provider
-    p, err := New()
-    require.NoError(t, err)
-    
-    // Test VM creation
-    req := &providerv1.CreateVMRequest{
-        Name: "test-vm",
-        Spec: &providerv1.VMSpec{
-            Cpu:    2,
-            Memory: 4096,
-            Image:  "ubuntu:20.04",
-        },
-    }
-    
-    resp, err := p.CreateVM(context.Background(), req)
-    require.NoError(t, err)
-    assert.NotEmpty(t, resp.VmId)
-    assert.Equal(t, "Creating", resp.Status.State)
-    
-    // Verify VM file was created
-    vmFile := filepath.Join(tmpDir, resp.VmId+".json")
-    assert.FileExists(t, vmFile)
-}
-
-func TestProvider_GetVM(t *testing.T) {
-    tmpDir, err := os.MkdirTemp("", "file-provider-test")
-    require.NoError(t, err)
-    defer os.RemoveAll(tmpDir)
-    
-    os.Setenv("PROVIDER_STORAGE_DIR", tmpDir)
-    defer os.Unsetenv("PROVIDER_STORAGE_DIR")
-    
-    p, err := New()
-    require.NoError(t, err)
-    
-    // Create VM first
-    createReq := &providerv1.CreateVMRequest{
-        Name: "test-vm",
-        Spec: &providerv1.VMSpec{
-            Cpu:    2,
-            Memory: 4096,
-        },
-    }
-    
-    createResp, err := p.CreateVM(context.Background(), createReq)
-    require.NoError(t, err)
-    
-    // Get VM
-    getReq := &providerv1.GetVMRequest{
-        VmId: createResp.VmId,
-    }
-    
-    getResp, err := p.GetVM(context.Background(), getReq)
-    require.NoError(t, err)
-    assert.Equal(t, createResp.VmId, getResp.VmId)
-    assert.Equal(t, "test-vm", getResp.Name)
-    assert.Equal(t, int32(2), getResp.Spec.Cpu)
-}
-
-func TestProvider_PowerVM(t *testing.T) {
-    tmpDir, err := os.MkdirTemp("", "file-provider-test")
-    require.NoError(t, err)
-    defer os.RemoveAll(tmpDir)
-    
-    os.Setenv("PROVIDER_STORAGE_DIR", tmpDir)
-    defer os.Unsetenv("PROVIDER_STORAGE_DIR")
-    
-    p, err := New()
-    require.NoError(t, err)
-    
-    // Create VM
-    createReq := &providerv1.CreateVMRequest{
-        Name: "test-vm",
-        Spec: &providerv1.VMSpec{Cpu: 1, Memory: 1024},
-    }
-    
-    createResp, err := p.CreateVM(context.Background(), createReq)
-    require.NoError(t, err)
-    
-    // Power off VM
-    powerReq := &providerv1.PowerVMRequest{
-        VmId:    createResp.VmId,
-        PowerOp: providerv1.PowerOp_POWER_OP_OFF,
-    }
-    
-    powerResp, err := p.PowerVM(context.Background(), powerReq)
-    require.NoError(t, err)
-    assert.Equal(t, "Stopped", powerResp.Status.State)
-    
-    // Power on VM
-    powerReq.PowerOp = providerv1.PowerOp_POWER_OP_ON
-    powerResp, err = p.PowerVM(context.Background(), powerReq)
-    require.NoError(t, err)
-    assert.Equal(t, "Running", powerResp.Status.State)
-}
-
-func TestProvider_GetCapabilities(t *testing.T) {
-    p, err := New()
-    require.NoError(t, err)
-    
-    req := &providerv1.GetCapabilitiesRequest{}
-    resp, err := p.GetCapabilities(context.Background(), req)
-    require.NoError(t, err)
-    
-    assert.Equal(t, "file-provider", resp.ProviderId)
-    assert.NotEmpty(t, resp.Capabilities)
-    
-    // Check for core capabilities
-    capNames := make(map[string]bool)
-    for _, cap := range resp.Capabilities {
-        capNames[cap.Name] = cap.Supported
-    }
-    
-    assert.True(t, capNames["vm.create"])
-    assert.True(t, capNames["vm.read"])
-    assert.True(t, capNames["vm.delete"])
-    assert.True(t, capNames["vm.power"])
-}
-
-func TestProvider_CloneVM(t *testing.T) {
-    tmpDir, err := os.MkdirTemp("", "file-provider-test")
-    require.NoError(t, err)
-    defer os.RemoveAll(tmpDir)
-    
-    os.Setenv("PROVIDER_STORAGE_DIR", tmpDir)
-    defer os.Unsetenv("PROVIDER_STORAGE_DIR")
-    
-    p, err := New()
-    require.NoError(t, err)
-    
-    // Create source VM
-    createReq := &providerv1.CreateVMRequest{
-        Name: "source-vm",
-        Spec: &providerv1.VMSpec{
-            Cpu:    4,
-            Memory: 8192,
-            Image:  "centos:8",
-        },
-    }
-    
-    createResp, err := p.CreateVM(context.Background(), createReq)
-    require.NoError(t, err)
-    
-    // Clone VM
-    cloneReq := &providerv1.CloneVMRequest{
-        SourceVmId: createResp.VmId,
-        CloneName:  "cloned-vm",
-    }
-    
-    cloneResp, err := p.CloneVM(context.Background(), cloneReq)
-    require.NoError(t, err)
-    assert.NotEmpty(t, cloneResp.CloneVmId)
-    assert.NotEqual(t, createResp.VmId, cloneResp.CloneVmId)
-    
-    // Verify clone has same specs as source
-    getReq := &providerv1.GetVMRequest{
-        VmId: cloneResp.CloneVmId,
-    }
-    
-    getResp, err := p.GetVM(context.Background(), getReq)
-    require.NoError(t, err)
-    assert.Equal(t, "cloned-vm", getResp.Name)
-    assert.Equal(t, int32(4), getResp.Spec.Cpu)
-    assert.Equal(t, int32(8192), getResp.Spec.Memory)
-    assert.Equal(t, "centos:8", getResp.Spec.Image)
-}
-```
-
-### 3.2 Add Build and Test Targets
-
-Update the `Makefile`:
-
-```makefile
-# File Provider Makefile
-
-.PHONY: help build test lint clean run docker-build docker-push
-
-help: ## Show this help message
-	@echo 'Usage: make [target]'
-	@echo ''
-	@echo 'Targets:'
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-
-build: ## Build the provider binary
-	go build -o bin/provider-file ./cmd/provider-file
-
-test: ## Run tests
-	go test -v ./...
-
-test-coverage: ## Run tests with coverage
-	go test -v -coverprofile=coverage.out ./...
-	go tool cover -html=coverage.out -o coverage.html
-
-lint: ## Run linters
-	golangci-lint run ./...
-
-clean: ## Clean build artifacts
-	rm -rf bin/
-	rm -f coverage.out coverage.html
-
-run: build ## Run the provider locally
-	PROVIDER_STORAGE_DIR=/tmp/virtrigaud-file ./bin/provider-file
-
-docker-build: ## Build Docker image
-	docker build -f cmd/provider-file/Dockerfile -t provider-file:latest .
-
-docker-push: docker-build ## Build and push Docker image
-	docker tag provider-file:latest ghcr.io/yourorg/provider-file:latest
-	docker push ghcr.io/yourorg/provider-file:latest
-
-# Development targets
-dev-setup: ## Set up development environment
-	go mod download
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
-integration-test: build ## Run integration tests
-	./scripts/integration-test.sh
-```
-
-## Step 4: Test with VCTS (VirtRigaud Conformance Test Suite)
-
-### 4.1 Install VCTS
+Verify the manager is healthy:
 
 ```bash
-# Build VCTS from the main repository
-go install github.com/projectbeskar/virtrigaud/cmd/vcts@latest
+kubectl get pods -n virtrigaud-system
+# NAME                                  READY   STATUS    RESTARTS   AGE
+# virtrigaud-manager-7d4b8c9d5b-xyz12   1/1     Running   0          1m
 ```
 
-### 4.2 Create VCTS Configuration
+`/metrics` should already expose the v0.3.6 baseline. Port-forward and confirm:
 
-Create `vcts-config.yaml`:
+```bash
+kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8081:8081 &
+curl -s http://localhost:8081/metrics | grep ^virtrigaud_build_info
+# virtrigaud_build_info{component="manager", ...version="v0.3.6"} 1
+```
+
+If you see `virtrigaud_build_info{version="v0.3.6"} 1`, the manager is up and the metric surface is wired. See [Observability](../operations/observability.md) for the full metric catalog.
+
+## Step 2 — Create the credentials Secret
+
+Each hypervisor has a different set of Secret keys. The keys are read as **files** mounted at `/etc/virtrigaud/credentials` inside the provider pod, so the key names matter.
+
+=== "vSphere"
+
+    ```yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: vsphere-credentials
+      namespace: virtrigaud-system
+    type: Opaque
+    stringData:
+      username: "virtrigaud@vsphere.local"
+      password: "REPLACE_ME"
+    ```
+
+=== "Libvirt"
+
+    ```yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: libvirt-credentials
+      namespace: virtrigaud-system
+    type: Opaque
+    stringData:
+      username: "virtrigaud"
+      ssh-privatekey: |
+        -----BEGIN OPENSSH PRIVATE KEY-----
+        ...
+        -----END OPENSSH PRIVATE KEY-----
+    ```
+
+=== "Proxmox"
+
+    ```yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: proxmox-credentials
+      namespace: virtrigaud-system
+    type: Opaque
+    stringData:
+      token_id: "virtrigaud@pve!vrtg-token"
+      token_secret: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    ```
+
+Apply the Secret:
+
+```bash
+kubectl apply -f secret.yaml
+```
+
+## Step 3 — Create the Provider CR
+
+The `Provider` CR tells VirtRigaud how to launch the provider pod and how to reach the hypervisor.
+
+=== "vSphere"
+
+    ```yaml
+    apiVersion: infra.virtrigaud.io/v1beta1
+    kind: Provider
+    metadata:
+      name: vsphere-lab
+      namespace: virtrigaud-system
+    spec:
+      type: vsphere
+      endpoint: https://vcenter.example.com/sdk
+      credentialSecretRef:
+        name: vsphere-credentials
+      insecureSkipVerify: false       # set true ONLY in dev
+      runtime:
+        mode: Remote
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
+        service:
+          port: 9443
+    ```
+
+=== "Libvirt"
+
+    ```yaml
+    apiVersion: infra.virtrigaud.io/v1beta1
+    kind: Provider
+    metadata:
+      name: libvirt-lab
+      namespace: virtrigaud-system
+    spec:
+      type: libvirt
+      endpoint: "qemu+ssh://virtrigaud@libvirt-host.example.com/system"
+      credentialSecretRef:
+        name: libvirt-credentials
+      runtime:
+        mode: Remote
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.6"
+        service:
+          port: 9090
+    ```
+
+=== "Proxmox"
+
+    ```yaml
+    apiVersion: infra.virtrigaud.io/v1beta1
+    kind: Provider
+    metadata:
+      name: proxmox-cluster
+      namespace: virtrigaud-system
+    spec:
+      type: proxmox
+      endpoint: "https://pve.example.com:8006"
+      credentialSecretRef:
+        name: proxmox-credentials
+      insecureSkipVerify: false
+      runtime:
+        mode: Remote
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.6"
+        service:
+          port: 9443
+    ```
+
+Apply:
+
+```bash
+kubectl apply -f provider.yaml
+```
+
+Watch the provider pod come up:
+
+```bash
+kubectl get pods -n virtrigaud-system -l app.kubernetes.io/component=provider -w
+```
+
+A successful state looks like:
+
+```
+NAME                                            READY   STATUS    RESTARTS   AGE
+virtrigaud-provider-vsphere-lab-7c8b4d-abc12    1/1     Running   0          30s
+```
+
+Verify the Provider CR status:
+
+```bash
+kubectl get provider vsphere-lab -n virtrigaud-system -o jsonpath='{.status.conditions[?(@.type=="Ready")]}'
+```
+
+Expect `status: "True"`, reason `Connected`.
+
+## Step 4 — Verify on `/metrics`
+
+This is the part the v0.3.6 observability surface unlocks. After the provider pod has come up and the manager has dialed it, several metric families should populate immediately:
+
+```bash
+curl -s http://localhost:8081/metrics | grep -E '^(virtrigaud_circuit_breaker_state|virtrigaud_provider_tasks_inflight|virtrigaud_build_info)' | head
+```
+
+Expected (your provider name will differ):
+
+```
+virtrigaud_build_info{component="manager", ...version="v0.3.6"} 1
+virtrigaud_circuit_breaker_state{provider_type="vsphere", provider="vsphere-lab"} 0
+virtrigaud_provider_tasks_inflight{provider_type="vsphere", provider="vsphere-lab"} 0
+```
+
+What each tells you:
+
+| Metric | Meaning |
+|--------|---------|
+| `virtrigaud_build_info` | Manager booted and registered metrics. |
+| `virtrigaud_circuit_breaker_state{provider="..."} 0` | The G6 CircuitBreaker around this Provider's gRPC is `Closed` (healthy). A value of `2` (Open) means the manager has fast-failed enough RPCs to stop talking to this provider — that is the signal to investigate the hypervisor side. |
+| `virtrigaud_provider_tasks_inflight 0` | No async tasks in flight. Will rise above 0 as soon as you start creating VMs that require server-side task completion. |
+
+The `_total` counter families (`virtrigaud_provider_rpc_requests_total`, `virtrigaud_vm_operations_total`, `virtrigaud_circuit_breaker_failures_total`) appear after the first relevant event — RPC, VM operation, or breaker trip. See [Observability](../operations/observability.md) for the full catalog.
+
+!!! tip "Breaker open on first dial?"
+    If `virtrigaud_circuit_breaker_state` is `2` immediately after install, the manager could not reach the provider pod / the provider pod could not reach the hypervisor. Check the provider pod's logs (`kubectl logs -n virtrigaud-system <provider-pod>`) and the `Provider` CR's `status.conditions`. The libvirt provider in particular is sensitive to SSH-host hygiene — see [libvirt troubleshooting](libvirt.md#troubleshooting).
+
+## Step 5 — Create a minimal VMClass and VMImage
+
+Both CRs are referenced by every `VirtualMachine`. Define them once per common workload shape.
 
 ```yaml
-provider:
-  name: "file"
-  endpoint: "localhost:9443"
-  tls: false
-  
-profiles:
-  core:
-    enabled: true
-    vm_specs:
-      - name: "basic"
-        cpu: 1
-        memory: 1024
-        image: "test:latest"
-      - name: "medium"
-        cpu: 2
-        memory: 4096
-        image: "ubuntu:20.04"
-        
-  snapshot:
-    enabled: true
-    
-  clone:
-    enabled: true
-
-tests:
-  timeout: "30s"
-  parallel: false
-  cleanup: true
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClass
+metadata:
+  name: small
+  namespace: virtrigaud-system
+spec:
+  cpu: 2
+  memory: "4Gi"
+  firmware: UEFI
+  diskDefaults:
+    type: thin            # use qcow2 for libvirt/proxmox
+    size: "20Gi"
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMImage
+metadata:
+  name: ubuntu-22-04
+  namespace: virtrigaud-system
+spec:
+  source:
+    template: "ubuntu-22.04-template"   # vSphere template name
+  guestOS: "ubuntu64Guest"
 ```
 
-### 4.3 Run Conformance Tests
+(For libvirt / proxmox the `source` block looks different — see the respective provider pages.)
 
-```bash
-# Start the provider
-make run &
-PROVIDER_PID=$!
-
-# Wait for provider to start
-sleep 3
-
-# Run VCTS core profile
-vcts run --config vcts-config.yaml --profile core
-
-# Run all enabled profiles
-vcts run --config vcts-config.yaml --profile all
-
-# Stop the provider
-kill $PROVIDER_PID
-```
-
-Expected output:
-```
-✅ Core Profile Tests
-  ✅ Provider.GetCapabilities
-  ✅ Provider.CreateVM
-  ✅ Provider.GetVM
-  ✅ Provider.UpdateVM
-  ✅ Provider.DeleteVM
-  ✅ Provider.PowerVM
-  ✅ Provider.ListVMs
-
-✅ Snapshot Profile Tests
-  ✅ Provider.CreateSnapshot
-
-✅ Clone Profile Tests
-  ✅ Provider.CloneVM
-
-🎉 All tests passed! Provider is conformant.
-```
-
-## Step 5: Create Helm Chart for Deployment
-
-### 5.1 Chart Structure
-
-The generated chart in `charts/provider-file/` includes:
-
-```
-charts/provider-file/
-├── Chart.yaml
-├── values.yaml
-├── templates/
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   ├── serviceaccount.yaml
-│   ├── rbac.yaml
-│   └── _helpers.tpl
-└── examples/
-    └── values-development.yaml
-```
-
-### 5.2 Customize Chart Values
-
-Update `charts/provider-file/values.yaml`:
+## Step 6 — Create your first VirtualMachine
 
 ```yaml
-# Default values for provider-file
-
-replicaCount: 1
-
-image:
-  repository: ghcr.io/yourorg/provider-file
-  pullPolicy: IfNotPresent
-  tag: "0.1.0"
-
-nameOverride: ""
-fullnameOverride: ""
-
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
-
-podAnnotations: {}
-
-podSecurityContext:
-  fsGroup: 2000
-  runAsNonRoot: true
-  runAsUser: 1000
-
-securityContext:
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop:
-    - ALL
-  readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 1000
-
-service:
-  type: ClusterIP
-  port: 9443
-  healthPort: 8080
-
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
-
-# Provider-specific configuration
-provider:
-  storageDir: "/var/lib/virtrigaud/vms"
-  logLevel: "info"
-
-# Persistent storage for VM data
-persistence:
-  enabled: true
-  accessMode: ReadWriteOnce
-  size: 10Gi
-  storageClass: ""
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: lan
+  namespace: virtrigaud-system
+spec:
+  network:
+    vsphere:
+      portgroup: "VM Network"
+  ipAllocation:
+    type: DHCP
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VirtualMachine
+metadata:
+  name: hello-world
+  namespace: virtrigaud-system
+spec:
+  providerRef:
+    name: vsphere-lab
+  classRef:
+    name: small
+  imageRef:
+    name: ubuntu-22-04
+  powerState: On
+  networks:
+    - name: lan
+      networkRef:
+        name: lan
+  userData:
+    cloudInit:
+      inline: |
+        #cloud-config
+        hostname: hello-world
+        users:
+          - name: ubuntu
+            sudo: ALL=(ALL) NOPASSWD:ALL
+            ssh_authorized_keys:
+              - "ssh-ed25519 AAAA..."
+        packages:
+          - open-vm-tools     # use qemu-guest-agent on libvirt/proxmox
+        runcmd:
+          - systemctl enable --now open-vm-tools
 ```
 
-### 5.3 Test Helm Chart
+Apply and watch:
 
 ```bash
-# Lint the chart
-helm lint charts/provider-file/
-
-# Template the chart
-helm template provider-file charts/provider-file/ \
-  --values charts/provider-file/values.yaml
-
-# Install to local cluster
-helm install provider-file charts/provider-file/ \
-  --namespace provider-file \
-  --create-namespace \
-  --values charts/provider-file/examples/values-development.yaml
+kubectl apply -f vm.yaml
+kubectl get vm hello-world -n virtrigaud-system -w
 ```
 
-## Step 6: Set Up CI/CD
+Expected progression:
 
-### 6.1 GitHub Actions Workflow
-
-The generated `.github/workflows/ci.yml` includes:
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
-
-env:
-  GO_VERSION: '1.23'
-
-jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ env.GO_VERSION }}
-    
-    - name: Run tests
-      run: make test
-
-    - name: Run linting
-      run: make lint
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ env.GO_VERSION }}
-    
-    - name: Build binary
-      run: make build
-
-    - name: Build Docker image
-      run: make docker-build
-
-  conformance:
-    name: Conformance Tests
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ env.GO_VERSION }}
-    
-    - name: Build provider
-      run: make build
-
-    - name: Install VCTS
-      run: go install github.com/projectbeskar/virtrigaud/cmd/vcts@latest
-
-    - name: Run conformance tests
-      run: |
-        # Start provider in background
-        PROVIDER_STORAGE_DIR=/tmp/vcts-test ./bin/provider-file &
-        PROVIDER_PID=$!
-        
-        # Wait for startup
-        sleep 5
-        
-        # Run VCTS
-        vcts run --config vcts-config.yaml --profile core
-        
-        # Clean up
-        kill $PROVIDER_PID
-
-  release:
-    name: Release
-    runs-on: ubuntu-latest
-    needs: [test, build, conformance]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Build and push Docker image
-      run: |
-        echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-        make docker-push
-
-    - name: Package Helm chart
-      run: |
-        helm package charts/provider-file/ -d dist/
-        
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-artifacts
-        path: |
-          bin/
-          dist/
+```
+NAME          PHASE       AGE   POWER   IP
+hello-world   Pending     5s
+hello-world   Creating    10s
+hello-world   Running     45s   On      192.168.100.50
 ```
 
-## Step 7: Publish to Provider Catalog
+## Step 7 — Confirm everything end-to-end
 
-### 7.1 Run Provider Verification
+After the VM lands in `Running`, several things should now be observable:
 
 ```bash
-# Verify the provider meets all requirements
-vrtg-provider verify --profile all
+# 1. The VM has an IP (via cloud-init or guest tools)
+kubectl get vm hello-world -n virtrigaud-system -o jsonpath='{.status.ips}'
+
+# 2. The console URL is populated
+kubectl get vm hello-world -n virtrigaud-system -o jsonpath='{.status.consoleURL}'
+
+# 3. The Provider's CircuitBreaker is still closed
+curl -s http://localhost:8081/metrics | grep 'circuit_breaker_state.*vsphere-lab'
+# virtrigaud_circuit_breaker_state{provider_type="vsphere", provider="vsphere-lab"} 0
+
+# 4. RPC counter shows real traffic
+curl -s http://localhost:8081/metrics | grep virtrigaud_provider_rpc_requests_total | head
+# virtrigaud_provider_rpc_requests_total{method="Create", provider="vsphere-lab", ...} 1
+# virtrigaud_provider_rpc_requests_total{method="Describe", provider="vsphere-lab", ...} 12
+
+# 5. VM operations counter populated (G7.1)
+curl -s http://localhost:8081/metrics | grep virtrigaud_vm_operations_total | head
+# virtrigaud_vm_operations_total{operation="create", provider="vsphere-lab"} 1
+# virtrigaud_vm_operations_total{operation="describe", provider="vsphere-lab"} 12
+
+# 6. IP-discovery histogram populated (G7.2)
+curl -s http://localhost:8081/metrics | grep virtrigaud_ip_discovery_duration_seconds_count
+# virtrigaud_ip_discovery_duration_seconds_count{provider="vsphere-lab"} 1
 ```
 
-### 7.2 Publish to Catalog
+SSH into the guest with the IP from step 1 to verify the cloud-init applied:
 
 ```bash
-# Publish to the VirtRigaud provider catalog
-vrtg-provider publish \
-  --name file \
-  --image ghcr.io/yourorg/provider-file \
-  --tag 0.1.0 \
-  --repo https://github.com/yourorg/virtrigaud-provider-file \
-  --maintainer your-email@example.com \
-  --license Apache-2.0
+ssh ubuntu@<vm-ip>
 ```
 
-This command will:
-1. Run VCTS conformance tests
-2. Generate a provider badge
-3. Create a catalog entry
-4. Open a pull request to the main VirtRigaud repository
+## Step 8 — Clean up
 
-### 7.3 Example Catalog Entry
-
-The generated catalog entry will look like:
-
-```yaml
-- name: file
-  displayName: "File Provider"
-  description: "File-based virtual machine provider for development and testing"
-  repo: "https://github.com/yourorg/virtrigaud-provider-file"
-  image: "ghcr.io/yourorg/provider-file"
-  tag: "0.1.0"
-  capabilities:
-    - core
-    - snapshot
-    - clone
-  conformance:
-    profiles:
-      core: pass
-      snapshot: pass
-      clone: pass
-      image-prepare: skip
-      advanced: skip
-    report_url: "https://github.com/yourorg/virtrigaud-provider-file/actions"
-    badge_url: "https://img.shields.io/badge/conformance-pass-green"
-    last_tested: "2025-08-26T15:00:00Z"
-  maintainer: "your-email@example.com"
-  license: "Apache-2.0"
-  maturity: "beta"
-  tags:
-    - file
-    - development
-    - testing
-  documentation: "https://github.com/yourorg/virtrigaud-provider-file/blob/main/README.md"
+```bash
+kubectl delete vm hello-world -n virtrigaud-system
+kubectl delete vmnetworkattachment lan -n virtrigaud-system
+kubectl delete vmimage ubuntu-22-04 -n virtrigaud-system
+kubectl delete vmclass small -n virtrigaud-system
+kubectl delete provider vsphere-lab -n virtrigaud-system
+kubectl delete secret vsphere-credentials -n virtrigaud-system
 ```
 
-## Step 8: Production Considerations
+The provider pod is deleted by the controller when the `Provider` CR is removed (it is an owned resource).
 
-### 8.1 Security Hardening
+## What to read next
 
-```yaml
-# Production values.yaml
-securityContext:
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop:
-    - ALL
-  readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 65534
+- The [capability matrix](providers-capabilities.md) — what each provider can and cannot do, and where the matrix has been corrected in v0.3.6 docs alignment.
+- The deep-dive pages for the provider you are operating:
+  - [vSphere](vsphere.md) — guestinfo cloud-init, SCSI controller specs, StoragePod selection.
+  - [Libvirt](libvirt.md) — virsh-over-SSH internals, qcow2 linked clones, the I1 / SSH-host narrative.
+  - [Proxmox](proxmox.md) — token vs password auth, memory snapshots, ConsoleURL nuance.
+- [Operations — Resilience](../operations/resilience.md) — the v0.3.6 CircuitBreaker, including how to read the metrics.
+- [Operations — Observability](../operations/observability.md) — the full metric catalog and example Prometheus alerts.
+- [Generated CRD reference](../references/generated-crd-docs.md) — every field on every CRD.
 
-podSecurityContext:
-  fsGroup: 65534
-  runAsNonRoot: true
-  runAsUser: 65534
-  seccompProfile:
-    type: RuntimeDefault
+## Building a new provider (SDK path)
 
-networkPolicy:
-  enabled: true
-  ingress:
-    fromNamespaces:
-      - virtrigaud-system
-  egress:
-    - to: []
-      ports:
-        - protocol: UDP
-          port: 53
-```
+If you want to add a hypervisor that does not exist in the tree yet (KubeVirt, Firecracker, Cloud-Hypervisor, direct QEMU, ...) the workflow is different:
 
-### 8.2 Observability
+1. Read the [provider development guide](../development/providers.md) and the [provider gRPC contract](../references/grpc-api.md).
+2. Use the in-tree mock provider (`internal/providers/mock/`) as the minimum-implementation reference.
+3. Scaffold a new provider with `vrtg-provider init <name>` (or copy the proxmox layout, which has the cleanest separation between the gRPC server and the REST client).
+4. Register the new capability set via the SDK builder (`sdk/provider/capabilities/`).
+5. Run the conformance suite (`go test ./test/conformance/...`) against your provider pod.
 
-Add monitoring and logging:
-
-```go
-// Add to provider.go
-import (
-    "github.com/prometheus/client_golang/prometheus"
-    "github.com/prometheus/client_golang/prometheus/promauto"
-)
-
-var (
-    vmOperations = promauto.NewCounterVec(
-        prometheus.CounterOpts{
-            Name: "file_provider_vm_operations_total",
-            Help: "Total number of VM operations",
-        },
-        []string{"operation", "status"},
-    )
-    
-    vmOperationDuration = promauto.NewHistogramVec(
-        prometheus.HistogramOpts{
-            Name: "file_provider_vm_operation_duration_seconds",
-            Help: "Duration of VM operations",
-        },
-        []string{"operation"},
-    )
-)
-
-func (p *Provider) CreateVM(ctx context.Context, req *providerv1.CreateVMRequest) (*providerv1.CreateVMResponse, error) {
-    start := time.Now()
-    defer func() {
-        vmOperationDuration.WithLabelValues("create").Observe(time.Since(start).Seconds())
-    }()
-    
-    // ... existing implementation ...
-    
-    vmOperations.WithLabelValues("create", "success").Inc()
-    return resp, nil
-}
-```
-
-### 8.3 Performance Optimization
-
-- Add connection pooling for gRPC clients
-- Implement caching for frequently accessed VMs
-- Use background workers for long-running operations
-- Add rate limiting and request validation
-
-### 8.4 Error Handling and Resilience
-
-- Implement circuit breakers for external dependencies
-- Add retry logic with exponential backoff
-- Use structured logging with correlation IDs
-- Implement graceful shutdown handling
-
-## Conclusion
-
-You've successfully created a complete VirtRigaud provider! This tutorial covered:
-
-✅ **Provider Implementation** - Full gRPC service with all core operations  
-✅ **SDK Integration** - Using VirtRigaud SDK for server setup and utilities  
-✅ **Testing** - Unit tests and VCTS conformance validation  
-✅ **Containerization** - Docker images and Helm charts  
-✅ **CI/CD** - Automated testing and publishing  
-✅ **Catalog Integration** - Publishing to the provider ecosystem  
-
-## Next Steps
-
-1. **Explore Advanced Features**:
-   - Add image management capabilities
-   - Implement networking configuration
-   - Add storage volume management
-
-2. **Integration Examples**:
-   - Connect to real hypervisors (libvirt, vSphere, etc.)
-   - Add authentication and authorization
-   - Implement backup and disaster recovery
-
-3. **Community Contribution**:
-   - Submit your provider to the catalog
-   - Contribute improvements to the SDK
-   - Help other developers with provider development
-
-4. **Production Deployment**:
-   - Set up monitoring and alerting
-   - Implement proper security measures
-   - Plan for scaling and high availability
-
-For more information, visit the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/) or join our community discussions.
-
+That work is outside the scope of this operator onboarding page; see the developer documentation referenced above.

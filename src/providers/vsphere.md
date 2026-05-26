@@ -5,254 +5,214 @@ SPDX-License-Identifier: Apache-2.0
 
 # vSphere Provider
 
-The vSphere provider enables VirtRigaud to manage virtual machines on VMware vSphere environments, including vCenter Server and standalone ESXi hosts. This provider is designed for enterprise production environments with comprehensive support for vSphere features.
+The vSphere provider manages virtual machines on VMware vSphere (vCenter Server and standalone ESXi) via the `govmomi` SDK. It is the most mature provider in the VirtRigaud tree and powers production deployments.
 
-## Overview
+This page is aligned to **VirtRigaud v0.3.6**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/vsphere/server.go`.
 
-This provider implements the VirtRigaud provider interface to manage VM lifecycle operations on VMware vSphere:
+## Capabilities at a glance
 
-- **Create**: Create VMs from templates, content libraries, or OVF/OVA files
-- **Delete**: Remove VMs and associated storage (with configurable retention)
-- **Power**: Start, stop, restart, and suspend virtual machines
-- **Describe**: Query VM state, resource usage, guest info, and vSphere properties
-- **Reconfigure**: Hot-add CPU/memory, resize disks, modify network adapters (v0.2.3+)
-- **Clone**: Create full or linked clones from existing VMs or templates (v0.2.3+)
-- **Snapshot**: Create, delete, and revert VM snapshots with memory state
-- **TaskStatus**: Track asynchronous operations with progress monitoring (v0.2.3+)
-- **ConsoleURL**: Generate vSphere web client console URLs (v0.2.3+)
-- **ImagePrepare**: Import OVF/OVA, deploy from content library, or ensure template existence
+The vSphere provider advertises the following via `GetCapabilities` (`internal/providers/vsphere/server.go:372-383`):
+
+| Capability flag | Value | What it means |
+|-----------------|-------|---------------|
+| `SupportsReconfigureOnline` | true | Hot-add CPU / memory when the guest supports it; falls back to offline otherwise. |
+| `SupportsDiskExpansionOnline` | true | Disks can be grown without powering off. |
+| `SupportsSnapshots` | true | Standard vSphere snapshots (disk state + config). |
+| `SupportsMemorySnapshots` | **false** | vSphere snapshots in this provider do **not** capture RAM state. Memory snapshots must be taken through vCenter directly. |
+| `SupportsLinkedClones` | true | Delta-disk clones sharing a parent VMDK. |
+| `SupportsImageImport` | true | OVF/OVA import + content library deploy. Direct URL-based cloud-image fetch is not yet implemented in v0.3.6 — see the [capability matrix](providers-capabilities.md). |
+| `SupportedDiskTypes` | `thin`, `thick`, `eager-zeroed` | Native VMDK provisioning modes. |
+| `SupportedNetworkTypes` | `standard`, `distributed` | Standard vSwitch portgroups and Distributed Virtual Switch portgroups. |
+
+!!! warning "Memory snapshots on vSphere"
+    The matrix and prior docs incorrectly claimed memory snapshots worked. v0.3.6 docs are corrected: `SupportsMemorySnapshots=false` is the source of truth. Operators who need a memory-state snapshot must capture it through vCenter directly today.
+
+For the full cross-provider matrix and resilience / observability story, see:
+
+- [Provider capabilities matrix](providers-capabilities.md) — every capability across all providers.
+- [Operations — Resilience](../operations/resilience.md) — the v0.3.6 CircuitBreaker wraps every outbound RPC to this provider.
+- [Operations — Observability](../operations/observability.md) — metric families that surface vSphere-side state.
+
+## RPC support
+
+The provider implements the full v0.3.6 gRPC contract (`proto/provider/v1/provider.proto`):
+
+- **Validate** — connectivity + credential check against vCenter.
+- **Create** — clone from a template/VM **or** import disk via OVF/OVA.
+- **Delete** — VM teardown with disk cleanup.
+- **Power** — On / Off / Reboot / Shutdown-Graceful.
+- **Describe** — current state, IPs (via VMware Tools), `ConsoleUrl`, raw vSphere properties.
+- **Reconfigure** — CPU / memory / disk changes (hot when possible).
+- **SnapshotCreate / SnapshotDelete / SnapshotRevert** — disk-only.
+- **CloneCreate** — full or linked.
+- **TaskStatus** — polls the underlying govmomi `Task` until terminal. Counts toward the v0.3.6 `virtrigaud_provider_tasks_inflight` gauge.
+- **ConsoleUrl** — vSphere web client URL with VM instance UUID.
+- **ImagePrepare** — OVF/OVA import and content-library deploy.
 
 ## Prerequisites
 
-**⚠️ IMPORTANT: Active vSphere Environment Required**
-
-The vSphere provider connects to VMware vSphere infrastructure and requires active vCenter Server or ESXi hosts.
-
-### Requirements:
-- **vCenter Server 7.0+** or **ESXi 7.0+** (running and accessible)
-- **User account** with appropriate privileges for VM management
-- **Network connectivity** from VirtRigaud to vCenter/ESXi (HTTPS/443)
-- **vSphere infrastructure**:
-  - Configured datacenters, clusters, and hosts
-  - Storage (datastores) for VM files
-  - Networks (port groups) for VM connectivity
-  - Resource pools for VM placement (optional)
-
-### Testing/Development:
-For development environments:
-- Use **VMware vSphere Hypervisor (ESXi)** free version
-- **vCenter Server Appliance** evaluation license
-- **VMware Workstation/Fusion** with nested ESXi
-- **EVE-NG** or **GNS3** with vSphere emulation
+- vCenter Server **7.0+** or ESXi **7.0+**, reachable over HTTPS (port 443).
+- A service account or API session token with rights for VM lifecycle, datastore, network, and resource management. See [Service account permissions](#service-account-permissions) below.
+- TLS: a valid CA-issued cert for vCenter, or `insecureSkipVerify: true` during development.
 
 ## Authentication
 
-The vSphere provider supports multiple authentication methods:
+The vSphere provider reads credentials from a Kubernetes Secret referenced via `Provider.spec.credentialSecretRef`. The provider controller mounts that Secret read-only at `/etc/virtrigaud/credentials` inside the provider pod. **The Secret keys are read as files** (`internal/providers/vsphere/server.go:129-140`), so the key names matter:
 
-### Username/Password Authentication (Common)
+| Secret key | File path | Required |
+|-----------|-----------|----------|
+| `username` | `/etc/virtrigaud/credentials/username` | Yes |
+| `password` | `/etc/virtrigaud/credentials/password` | Yes |
 
-Standard vSphere user authentication:
+TLS verification is controlled by the `Provider.spec.insecureSkipVerify` field, which the controller exports to the pod as the `TLS_INSECURE_SKIP_VERIFY` env var. Leave it `false` in production.
+
+### Provider CR + Secret
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vsphere-credentials
+  namespace: virtrigaud-system
+type: Opaque
+stringData:
+  username: "virtrigaud@vsphere.local"
+  password: "REPLACE_ME"
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: Provider
+metadata:
+  name: vsphere-prod
+  namespace: virtrigaud-system
+spec:
+  type: vsphere
+  endpoint: https://vcenter.example.com/sdk
+  credentialSecretRef:
+    name: vsphere-credentials
+  insecureSkipVerify: false
+  runtime:
+    mode: Remote
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
+    service:
+      port: 9443
+```
+
+### Service account permissions
+
+Create a dedicated vSphere user with these privileges:
+
+- **Datastore**: AllocateSpace, Browse, FileManagement
+- **Network**: Assign
+- **Resource**: AssignVMToPool
+- **Virtual machine**: full set (or a tailored subset covering Inventory, Interaction, Configuration, Provisioning, Snapshot management)
+- **Global**: EnableMethods, DisableMethods, Licenses
+
+## Endpoint formats
+
+| Endpoint | Use case |
+|----------|----------|
+| `https://vcenter.example.com/sdk` | vCenter (recommended for multi-host) |
+| `https://192.168.1.10/sdk` | Direct IP, useful when DNS is the problem you are debugging |
+| `https://esxi-01.example.com/sdk` | Standalone ESXi (single-host environments) |
+
+The `Provider.spec.endpoint` is exposed to the provider pod as `PROVIDER_ENDPOINT`.
+
+## Cloud-init on vSphere
+
+vSphere does **not** use a NoCloud ISO. The provider injects cloud-init via VMware's `guestinfo` OVF properties (`internal/providers/vsphere/server.go:1321-1380`). The keys it sets are:
+
+| Property | Value |
+|----------|-------|
+| `guestinfo.userdata` | base64-encoded user-data |
+| `guestinfo.userdata.encoding` | `base64` |
+| `guestinfo.metadata` | base64-encoded meta-data (or a sensible fallback) |
+| `guestinfo.metadata.encoding` | `base64` |
+
+The guest must have a recent cloud-init that supports the VMware datasource (Ubuntu cloud images and most distro cloud images do).
+
+## Datastore selection (precedence)
+
+VirtRigaud supports three ways to choose a datastore. Precedence is strict — higher entries win:
+
+| Priority | Source | When it applies |
+|----------|--------|-----------------|
+| 1 (highest) | `VirtualMachine.spec.placement.datastore` | Explicit per-VM override |
+| 2 | `VirtualMachine.spec.placement.storagePod` | Per-VM Datastore Cluster (StoragePod) |
+| 3 | `PROVIDER_DEFAULT_STORAGE_POD` (or `Provider.spec.defaults.storagePod`) | Provider-level Datastore Cluster default |
+| 4 (lowest) | `PROVIDER_DEFAULT_DATASTORE` (or `Provider.spec.defaults.datastore`) | Provider-level fixed-datastore default |
+
+### StoragePod (Datastore Cluster) auto-selection
+
+When a StoragePod is configured, the provider enumerates the cluster's member datastores via the vSphere API, retrieves the `FreeSpace` summary for each, and picks the member with the most free space (`internal/providers/vsphere/server.go:205-262`, `resolveDatastoreFromStoragePod`). This is a lightweight alternative to Storage DRS and does **not** require SDRS to be enabled.
+
+!!! info "Datastore-name resolution bug fixed in v0.3.3"
+    A v0.3.3 fix (March 2026) resolves "Invalid configuration for device '0'" errors that previously surfaced when a StoragePod-selected datastore was reattached to additional disks. The fix replaces a stale `object.NewDatastore()` construction with `p.finder.Datastore(ctx, best.Name)` so the returned object carries the full inventory path. If you see this error on older versions, upgrade.
+
+#### Configuring a default StoragePod
+
+Via the Provider CR:
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: Provider
 metadata:
   name: vsphere-prod
-  namespace: default
 spec:
   type: vsphere
   endpoint: https://vcenter.example.com/sdk
   credentialSecretRef:
     name: vsphere-credentials
-  # Optional: Skip TLS verification (development only)
-  insecureSkipVerify: false
-  runtime:
-    mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.3"
-    service:
-      port: 9443
+  defaults:
+    storagePod: "DatastoreCluster-SSD"
+    cluster: "Compute-Cluster"
+    folder: "/vm/applications"
 ```
 
-Create credentials secret:
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: vsphere-credentials
-  namespace: default
-type: Opaque
-stringData:
-  username: "virtrigaud@vsphere.local"
-  password: "SecurePassword123!"
-```
-
-### Session Token Authentication (Advanced)
-
-For environments using external authentication:
+#### Per-VM placement
 
 ```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: vsphere-token
-  namespace: default
-type: Opaque
-stringData:
-  token: "vmware-api-session-id:abcd1234..."
-```
-
-### Service Account Authentication (Recommended)
-
-Create a dedicated service account with minimal required privileges:
-
-```yaml
-# vSphere privileges for VirtRigaud service account:
-# - Datastore: Allocate space, Browse datastore, Low level file operations
-# - Network: Assign network  
-# - Resource: Assign virtual machine to resource pool
-# - Virtual machine: All privileges (or subset based on requirements)
-# - Global: Enable methods, Disable methods, Licenses
-```
-
-## Configuration
-
-### Connection Endpoints
-
-| Endpoint Type | Format | Use Case |
-|---------------|--------|----------|
-| vCenter Server | `https://vcenter.example.com/sdk` | Multi-host management (recommended) |
-| vCenter FQDN | `https://vcenter.corp.local/sdk` | Internal domain environments |
-| vCenter IP | `https://192.168.1.10/sdk` | Direct IP access |
-| ESXi Host | `https://esxi-host.example.com` | Single host environments |
-
-### Deployment Configuration
-
-#### Using Helm Values
-
-```yaml
-# values.yaml
-providers:
-  vsphere:
-    enabled: true
-    endpoint: "https://vcenter.example.com/sdk"
-    insecureSkipVerify: false  # Set to true for self-signed certificates
-    credentialSecretRef:
-      name: vsphere-credentials
-      namespace: virtrigaud-system
-```
-
-#### Production Configuration with TLS
-
-```yaml
-# Create secret with credentials and TLS certificates
-apiVersion: v1
-kind: Secret
-metadata:
-  name: vsphere-secure-credentials
-  namespace: virtrigaud-system
-type: Opaque
-stringData:
-  username: "svc-virtrigaud@vsphere.local"
-  password: "SecurePassword123!"
-  # Optional: Custom CA certificate for vCenter
-  ca.crt: |
-    -----BEGIN CERTIFICATE-----
-    # Your vCenter CA certificate here
-    -----END CERTIFICATE-----
-
----
 apiVersion: infra.virtrigaud.io/v1beta1
-kind: Provider
+kind: VirtualMachine
 metadata:
-  name: vsphere-production
-  namespace: virtrigaud-system
+  name: web-application
 spec:
-  type: vsphere
-  endpoint: https://vcenter.prod.example.com/sdk
-  credentialSecretRef:
-    name: vsphere-secure-credentials
-  insecureSkipVerify: false
+  providerRef:
+    name: vsphere-prod
+  # ... classRef, imageRef, networks, etc.
+  placement:
+    cluster: "Compute-Cluster"
+    resourcePool: "Production"
+    folder: "/vm/applications"
+    storagePod: "DatastoreCluster-SSD"   # ignored if datastore: is set
+    # datastore: "datastore-ssd"          # explicit override wins
 ```
 
-#### Development Configuration
+## SCSI controller configuration (vSphere only)
+
+v0.3.6 ships an explicit `SCSIControllerSpec` on each disk entry. It is vSphere-only — libvirt and proxmox ignore it. Reference: `api/infra.virtrigaud.io/v1beta1/virtualmachine_types.go:422-442`.
 
 ```yaml
-# For development with self-signed certificates
-providers:
-  vsphere:
-    enabled: true
-    endpoint: "https://esxi-dev.local"
-    insecureSkipVerify: true  # Only for development!
-    credentialSecretRef:
-      name: vsphere-dev-credentials
+disks:
+  - name: data
+    sizeGiB: 500
+    type: thin
+    scsi:
+      controller: 1                # bus 0-3 (default: first available)
+      controllerType: pvscsi       # pvscsi | lsilogic | lsilogic-sas | buslogic
+      sharedBus: virtualSharing    # noSharing | virtualSharing | physicalSharing
 ```
 
-#### Multi-vCenter Configuration
+When to use the `scsi` block:
 
-```yaml
-# Deploy multiple providers for different vCenters
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: Provider
-metadata:
-  name: vsphere-datacenter-a
-spec:
-  type: vsphere
-  endpoint: https://vcenter-a.example.com/sdk
-  credentialSecretRef:
-    name: vsphere-credentials-a
+- **RDM (raw device mapping) or shared cluster disks**: `pvscsi` with `sharedBus: virtualSharing` (for in-cluster shared) or `physicalSharing` (for cross-host shared).
+- **More than 15 disks on a single VM**: each SCSI controller holds up to 15 devices; spread disks across multiple controllers (`controller: 0`, `controller: 1`, ...) for >15.
+- **Legacy guests**: drop to `lsilogic` or `buslogic` for guests that lack the pvscsi driver.
 
----
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: Provider
-metadata:
-  name: vsphere-datacenter-b
-spec:
-  type: vsphere
-  endpoint: https://vcenter-b.example.com/sdk
-  credentialSecretRef:
-    name: vsphere-credentials-b
-```
+If you do not set `scsi`, the provider creates a single `pvscsi` controller with `noSharing` and attaches every disk to it.
 
-## vSphere Infrastructure Setup
+## VMClass
 
-### Required vSphere Objects
-
-The provider expects the following vSphere infrastructure to be configured:
-
-#### Datacenters and Clusters
-```bash
-# Example vSphere hierarchy:
-Datacenter: "Production"
-├── Cluster: "Compute-Cluster"
-│   ├── ESXi Host: esxi-01.example.com
-│   ├── ESXi Host: esxi-02.example.com
-│   └── ESXi Host: esxi-03.example.com
-├── Datastores:
-│   ├── "datastore-ssd"     # High-performance storage
-│   ├── "datastore-hdd"     # Standard storage
-│   └── "datastore-backup"  # Backup storage
-└── Networks:
-    ├── "VM Network"        # Default VM network
-    ├── "DMZ-Network"       # DMZ port group
-    └── "Management"        # Management network
-```
-
-#### Resource Pools (Optional)
-```bash
-# Create resource pools for workload isolation
-Datacenter: "Production"
-└── Cluster: "Compute-Cluster"
-    └── Resource Pools:
-        ├── "Development"    # Dev workloads (lower priority)
-        ├── "Production"     # Prod workloads (high priority)
-        └── "Testing"        # Test workloads (medium priority)
-```
-
-## VM Configuration
-
-### VMClass Specification
-
-Define CPU, memory, and vSphere-specific settings:
+`VMClass` defines CPU/memory/firmware defaults and vSphere-specific tuning via `extraConfig`:
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -276,16 +236,16 @@ spec:
     tpmEnabled: true
   resourceLimits:
     cpuReservation: 1000             # MHz
-    cpuLimit: 4000                   # MHz
     memoryReservation: "2Gi"
-  # vSphere-specific extra config
   extraConfig:
     "numvcpus.coresPerSocket": "2"   # CPU topology hint
 ```
 
-### VMImage Specification
+See [the full CRD reference](../references/generated-crd-docs.md#vmclass) for every field.
 
-Reference vSphere templates, content library items, or OVF files:
+## VMImage
+
+Reference vSphere templates, content library items, or OVF/OVA:
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -293,34 +253,15 @@ kind: VMImage
 metadata:
   name: ubuntu-22-04-template
 spec:
-  # Template from vSphere inventory
   source:
     template: "ubuntu-22.04-template"
-    datacenter: "Production"
     folder: "/vm/templates"
-  
-  # Or from content library
-  # source:
-  #   contentLibrary: "OS Templates"
-  #   item: "ubuntu-22.04-cloud"
-  
-  # Or from OVF/OVA URL
-  # source:
-  #   ovf: "https://releases.ubuntu.com/22.04/ubuntu-22.04-server-cloudimg-amd64.ova"
-  
-  # Guest OS identification
   guestOS: "ubuntu64Guest"
-  
-  # Customization specification
-  customization:
-    type: "cloudInit"              # cloudInit, sysprep, or linux
-    spec: "ubuntu-cloud-init"      # Reference to customization spec
 ```
 
-### Complete VM Example
+## Complete VM example
 
 ```yaml
-# First, define the network attachments
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMNetworkAttachment
 metadata:
@@ -334,19 +275,6 @@ spec:
     address: "192.168.100.50/24"
     gateway: "192.168.100.1"
     dns: ["192.168.1.10", "8.8.8.8"]
-
----
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMNetworkAttachment
-metadata:
-  name: mgmt-network
-spec:
-  network:
-    vsphere:
-      portgroup: "Management"
-  ipAllocation:
-    type: DHCP
-
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
@@ -360,34 +288,21 @@ spec:
   imageRef:
     name: ubuntu-22-04-template
   powerState: On
-
-  # Disk configuration
   disks:
     - name: data
       sizeGiB: 500
       type: thin
-      storageClass: "hdd-storage"
       scsi:
         controllerType: pvscsi
-
-  # Network configuration (references VMNetworkAttachment resources)
   networks:
-    - name: app-network
+    - name: app
       networkRef:
         name: app-network
-    - name: mgmt-network
-      networkRef:
-        name: mgmt-network
-
-  # vSphere placement (no 'datacenter' field — datacenter is derived from the provider endpoint)
   placement:
     cluster: "Compute-Cluster"
     resourcePool: "Production"
     folder: "/vm/applications"
-    datastore: "datastore-ssd"      # explicit datastore
-    host: "esxi-01.example.com"     # pin to specific host (optional)
-
-  # Guest customization
+    storagePod: "DatastoreCluster-SSD"
   userData:
     cloudInit:
       inline: |
@@ -400,620 +315,141 @@ spec:
               - "ssh-ed25519 AAAA..."
         packages:
           - nginx
-          - docker.io
-          - open-vm-tools          # VMware tools for guest integration
+          - open-vm-tools
         runcmd:
-          - systemctl enable nginx
-          - systemctl enable docker
-          - systemctl enable open-vm-tools
+          - systemctl enable --now nginx open-vm-tools
 ```
 
-## Advanced Features
+## Async task tracking
 
-### VM Reconfiguration (v0.2.3+)
+vSphere operations that are long-running (clone, snapshot, reconfigure-with-large-disk-add) return a `govmomi.Task` reference. VirtRigaud wraps that as a proto `TaskRef` in the gRPC response and the manager polls `TaskStatus` until terminal.
 
-The vSphere provider supports online VM reconfiguration for CPU, memory, and disk resources:
+Since v0.3.6, every in-flight task is counted by the `virtrigaud_provider_tasks_inflight{provider_type="vsphere", provider="<name>"}` gauge (G7.3 / PR #130). The gauge is seeded to `0` at boot so it appears on `/metrics` from the first scrape; useful for catching stuck tasks. See [Observability](../operations/observability.md#11-virtrigaud_provider_tasks_inflight).
 
-```yaml
-# Reconfigure VM resources by changing classRef
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
-metadata:
-  name: web-server
-spec:
-  classRef:
-    name: medium    # Changed from small to medium
-  powerState: On
+## Console access
+
+`Describe` populates `status.consoleURL` with a vSphere web client deep link that includes the VM's instance UUID. Open it in a browser; vCenter prompts for authentication and lands you on the VM's summary tab.
+
+```bash
+kubectl get vm web-application -n my-app -o jsonpath='{.status.consoleURL}'
+# https://vcenter.example.com/ui/app/vm;nav=h/urn:vmomi:VirtualMachine:vm-123:xxxxx/summary
 ```
 
-**Capabilities**:
-- **Online CPU Changes**: Hot-add CPUs to running VMs (requires guest OS support)
-- **Online Memory Changes**: Hot-add memory to running VMs (requires guest OS support)
-- **Disk Resizing**: Expand disks online (shrinking not supported for safety)
-- **Automatic Fallback**: Falls back to offline changes if hot-add not supported
-- **Intelligent Detection**: Only applies changes when needed
+## Multi-vCenter
 
-**Memory Format Support**:
-- Standard units: `2Gi`, `4096Mi`, `2048MiB`, `2GiB`
-- Parser handles multiple memory unit formats
-
-**Limitations**:
-- Disk shrinking prevented to avoid data loss
-- Some guest operating systems require special configuration for hot-add
-- BIOS firmware VMs have limited hot-add support (use EFI firmware)
-
-### VM Cloning (v0.2.3+)
-
-Create full or linked clones of existing VMs and templates:
-
-```yaml
-# Clone from existing VM via VMClone resource
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClone
-metadata:
-  name: web-server-02-clone
-spec:
-  source:
-    vmRef:
-      name: web-server-01
-  target:
-    name: web-server-02
-    classRef:
-      name: small
-  options:
-    type: LinkedClone   # or FullClone
-    powerOn: true
-```
-
-**Clone Types**:
-- **Full Clone**: Independent copy with separate storage
-- **Linked Clone**: Space-efficient copy using snapshots
-  - Automatically creates snapshot if none exists
-  - Requires less storage and faster creation
-  - Parent VM must remain available
-
-**Use Cases**:
-- Rapid test environment provisioning
-- Development environment duplication
-- Template-based deployments
-- Disaster recovery scenarios
-
-### Task Status Tracking (v0.2.3+)
-
-Monitor asynchronous vSphere operations in real-time:
-
-```yaml
-# VirtRigaud automatically tracks long-running operations
-# No manual configuration needed
-
-# Task tracking provides:
-# - Real-time task state (queued, running, success, error)
-# - Progress percentage
-# - Error messages for failed tasks
-# - Integration with vSphere task manager
-```
-
-**Features**:
-- Automatic tracking of all async operations
-- Progress monitoring via govmomi task manager
-- Detailed error reporting
-- Task history visibility in vCenter
-
-### Console Access (v0.2.3+)
-
-Generate direct vSphere web client console URLs:
-
-```yaml
-# Access provided in VM status
-kubectl get vm web-server -o yaml
-
-status:
-  consolURL: "https://vcenter.example.com/ui/app/vm;nav=h/urn:vmomi:VirtualMachine:vm-123:xxxxx/summary"
-  phase: Running
-```
-
-**Features**:
-- Direct browser-based VM console access
-- No additional tools required
-- Works with vSphere web client
-- Includes VM instance UUID for reliable identification
-- Generated automatically in Describe operations
-
-### Template Management
-
-#### Creating Templates
-
-```yaml
-# Convert existing VM to template
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMTemplate
-metadata:
-  name: create-ubuntu-template
-spec:
-  sourceVM: "ubuntu-base-vm"
-  datacenter: "Production"
-  targetFolder: "/vm/templates"
-  templateName: "ubuntu-22.04-template"
-  
-  # Template metadata
-  annotation: |
-    Ubuntu 22.04 LTS Template
-    Created: 2024-01-15
-    Includes: cloud-init, open-vm-tools
-  
-  # Template customization
-  powerOff: true                   # Power off before conversion
-  removeSnapshots: true           # Clean up snapshots
-  updateTools: true               # Update VMware tools
-```
-
-#### Content Library Integration
-
-```yaml
-# Deploy from content library
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMImage  
-metadata:
-  name: centos-stream-9
-spec:
-  source:
-    contentLibrary: "OS Templates"
-    item: "CentOS-Stream-9"
-    datacenter: "Production"
-  
-  # Content library item properties
-  properties:
-    version: "9.0"
-    provider: "CentOS"
-    osType: "linux"
-```
-
-### StoragePod Support (Datastore Cluster Auto-Selection)
-
-VirtRigaud supports automatic datastore selection from a vSphere Datastore Cluster (StoragePod). When a StoragePod is configured, the provider picks the member datastore with the most free space at VM creation time. This is a lightweight alternative to Storage DRS and does **not** require Storage DRS to be enabled on the cluster.
-
-#### Precedence Order
-
-| Priority | Source | When Used |
-|----------|--------|-----------|
-| 1 (highest) | `placement.datastore` on the VM | Explicit datastore always wins |
-| 2 | `placement.storagePod` on the VM | Per-VM Datastore Cluster override |
-| 3 | `PROVIDER_DEFAULT_STORAGE_POD` env var | Provider-level default Datastore Cluster |
-| 4 (lowest) | `PROVIDER_DEFAULT_DATASTORE` env var | Final fallback to a fixed datastore |
-
-#### Configuring a Default StoragePod
-
-Set the environment variable on the vSphere provider deployment:
-
-```yaml
-providers:
-  vsphere:
-    env:
-      - name: PROVIDER_DEFAULT_STORAGE_POD
-        value: "DatastoreCluster-SSD"
-```
-
-#### Per-VM StoragePod Placement
-
-Override at the VM level via the `placement` field:
+Deploy one `Provider` CR per vCenter. Each gets its own provider pod, its own gRPC port, and its own CircuitBreaker series in metrics:
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
+kind: Provider
 metadata:
-  name: web-application
+  name: vsphere-dc-a
 spec:
-  providerRef:
-    name: vsphere-prod
-  classRef:
-    name: standard-vm
-  imageRef:
-    name: ubuntu-22-04-template
-  powerState: On
-  placement:
-    datacenter: "Production"
-    cluster: "Compute-Cluster"
-    storagePod: "DatastoreCluster-SSD"   # picks member with most free space
-    folder: "/vm/applications"
-```
-
-#### How It Works
-
-1. VirtRigaud enumerates all datastores that are members of the named StoragePod via the vSphere API.
-2. It retrieves the `FreeSpace` summary for each member datastore.
-3. The datastore with the highest free space is selected.
-4. If multiple datastores are tied, the first one in the list is chosen (stable selection).
-
-!!! note
-    If `placement.datastore` is also set on the same VM, it takes priority and the StoragePod is ignored.
-
-### Storage Policies
-
-```yaml
-# VMClass with vSAN storage policy (use extraConfig for vSphere-specific storage policies)
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClass
-metadata:
-  name: high-performance
-spec:
-  cpu: 8
-  memory: "32Gi"
-  diskDefaults:
-    type: eagerzeroedthick
-    size: "50Gi"
-  extraConfig:
-    # vSAN storage policies (provider-specific keys)
-    "storage.homePolicy": "VM Storage Policy - Performance"
-    "storage.diskPolicy": "VM Storage Policy - SSD Only"
-```
-
-### Network Advanced Configuration
-
-```yaml
-# Distributed switch port group
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMNetworkAttachment
-metadata:
-  name: frontend-network
-spec:
-  network:
-    vsphere:
-      portgroup: "DPG-Frontend-VLAN100"
-      distributedSwitch:
-        name: "DSwitch-Production"
-      vlan:
-        type: vlan
-        vlanID: 100
-    type: external
-
+  type: vsphere
+  endpoint: https://vcenter-a.example.com/sdk
+  credentialSecretRef:
+    name: vsphere-credentials-a
 ---
-# Backend network attachment
 apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMNetworkAttachment
+kind: Provider
 metadata:
-  name: backend-network
+  name: vsphere-dc-b
 spec:
-  network:
-    vsphere:
-      portgroup: "LS-Backend-App"
-    type: external
-
----
-# Reference them from the VM
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
-metadata:
-  name: multi-nic-vm
-spec:
-  # ...
-  networks:
-    - name: frontend
-      networkRef:
-        name: frontend-network
-    - name: backend
-      networkRef:
-        name: backend-network
-```
-
-### High Availability
-
-```yaml
-# VM with HA/DRS settings
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
-metadata:
-  name: critical-application
-spec:
-  providerRef:
-    name: vsphere-prod
-  # ... other config ...
-  
-  # High availability configuration
-  availability:
-    # HA restart priority
-    restartPriority: "high"          # disabled, low, medium, high
-    isolationResponse: "powerOff"    # none, powerOff, shutdown
-    vmMonitoring: "vmMonitoringOnly" # vmMonitoringDisabled, vmMonitoringOnly, vmAndAppMonitoring
-    
-    # DRS configuration
-    drsAutomationLevel: "fullyAutomated"  # manual, partiallyAutomated, fullyAutomated
-    drsVmBehavior: "fullyAutomated"       # manual, partiallyAutomated, fullyAutomated
-    
-    # Anti-affinity rules
-    antiAffinityGroups: ["web-tier", "database-tier"]
-    
-    # Host affinity (pin to specific hosts)
-    hostAffinityGroups: ["production-hosts"]
-```
-
-### Snapshot Management
-
-```yaml
-# Advanced snapshot configuration
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMSnapshot
-metadata:
-  name: pre-upgrade-snapshot
-spec:
-  vmRef:
-    name: web-application
-  
-  # Snapshot settings
-  name: "Pre-upgrade snapshot"
-  description: "Snapshot before application upgrade"
-  memory: true                    # Include memory state
-  quiesce: true                   # Quiesce guest filesystem
-  
-  # Retention policy
-  retention:
-    maxSnapshots: 3               # Keep max 3 snapshots
-    maxAge: "7d"                  # Delete after 7 days
-    
-  # Schedule (optional)
-  schedule: "0 2 * * 0"          # Weekly at 2 AM Sunday
+  type: vsphere
+  endpoint: https://vcenter-b.example.com/sdk
+  credentialSecretRef:
+    name: vsphere-credentials-b
 ```
 
 ## Troubleshooting
 
-### Common Issues
+### CircuitBreaker open for the vSphere provider
 
-#### ❌ Connection Failed
+Check `/metrics`:
 
-**Symptom**: `failed to connect to vSphere: connection refused`
-
-**Causes & Solutions**:
-
-1. **Network connectivity**:
-   ```bash
-   # Test connectivity to vCenter
-   telnet vcenter.example.com 443
-   
-   # Test from Kubernetes pod
-   kubectl run debug --rm -i --tty --image=curlimages/curl -- \
-     curl -k https://vcenter.example.com
-   ```
-
-2. **DNS resolution**:
-   ```bash
-   # Test DNS resolution
-   nslookup vcenter.example.com
-   
-   # Use IP address if DNS fails
-   ```
-
-3. **Firewall rules**: Ensure port 443 is accessible from Kubernetes cluster
-
-#### ❌ Authentication Failed
-
-**Symptom**: `Login failed: incorrect user name or password`
-
-**Solutions**:
-
-1. **Verify credentials**:
-   ```bash
-   # Test credentials manually
-   kubectl get secret vsphere-credentials -o yaml
-   
-   # Decode and verify
-   echo "base64-password" | base64 -d
-   ```
-
-2. **Check user permissions**:
-   - Verify user exists in vCenter
-   - Check assigned roles and privileges
-   - Ensure user is not locked out
-
-3. **Test login via vSphere Client**: Verify credentials work in the GUI
-
-#### ❌ Insufficient Privileges
-
-**Symptom**: `operation requires privilege 'VirtualMachine.Interact.PowerOn'`
-
-**Solution**: Grant required privileges to the service account:
-
-```bash
-# Required privileges for VirtRigaud:
-# - Datastore privileges:
-#   * Datastore.AllocateSpace
-#   * Datastore.Browse  
-#   * Datastore.FileManagement
-# - Network privileges:
-#   * Network.Assign
-# - Resource privileges:
-#   * Resource.AssignVMToPool
-# - Virtual machine privileges:
-#   * VirtualMachine.* (all) or specific subset
-# - Global privileges:
-#   * Global.EnableMethods
-#   * Global.DisableMethods
+```promql
+virtrigaud_circuit_breaker_state{provider_type="vsphere", provider="vsphere-prod"} == 2
 ```
 
-#### ❌ Template Not Found
+When this fires, the manager has fast-failed enough RPCs to the vCenter that it has opened the breaker (default 5 consecutive failures with 30s reset; see [Resilience](../operations/resilience.md#circuitbreaker-on-the-provider-grpc-path-v036)). Investigate the underlying vCenter — credentials, certificate, network — rather than restarting the manager.
 
-**Symptom**: `template 'ubuntu-template' not found`
+### "Invalid configuration for device '0'" on disk attach
 
-**Solutions**:
+Older releases hit this when a StoragePod-resolved datastore was reattached to additional disks; the returned `object.Datastore` was missing its inventory path. Fixed in v0.3.3 by routing through `p.finder.Datastore(ctx, best.Name)`. Upgrade.
+
+### "Login failed: incorrect user name or password"
+
+The username in `Provider.spec.credentialSecretRef` Secret must match the **principal name** expected by vCenter — usually `user@vsphere.local`, not bare `user`. Also check whether the user is locked out via Single Sign-On.
+
+### Template not found
+
+The `VMImage.spec.source.template` value is resolved via the `govmomi` finder. List templates with:
+
 ```bash
-# List available templates
-govc ls /datacenter/vm/templates/
-
-# Check template path and permissions
-govc object.collect -s vm/templates/ubuntu-template summary.config.name
-
-# Verify template is properly marked as template
-govc object.collect -s vm/templates/ubuntu-template config.template
+govc ls /Datacenter/vm/templates/
 ```
 
-#### ❌ Datastore Issues
+If the template lives in a sub-folder, set `VMImage.spec.source.folder` to the inventory path of the parent folder.
 
-**Symptom**: `insufficient disk space` or `datastore not accessible`
+### Datastore issues
 
-**Solutions**:
 ```bash
-# Check datastore capacity
+# Datastore capacity
 govc datastore.info datastore-name
 
-# List accessible datastores
-govc datastore.ls
+# All datastores
+govc ls /Datacenter/datastore/
 
-# Check datastore cluster configuration
-govc cluster.ls
+# StoragePod (Datastore Cluster) members
+govc object.collect -s /Datacenter/datastore/DatastoreCluster-SSD childEntity
 ```
 
-#### ❌ Network Configuration
+If a StoragePod-selected datastore exists but the create still fails, check whether the storage policy assigned to the VMClass conflicts with the member datastores in the cluster.
 
-**Symptom**: `network 'VM Network' not found`
-
-**Solutions**:
-```bash
-# List available networks
-govc ls /datacenter/network/
-
-# Check distributed port groups
-govc dvs.portgroup.info
-
-# Verify network accessibility from cluster
-govc cluster.network.info
-```
-
-### Validation Commands
-
-Test your vSphere setup before deploying:
+### Validation walkthrough with `govc`
 
 ```bash
-# 1. Install and configure govc CLI tool
 export GOVC_URL='https://vcenter.example.com'
 export GOVC_USERNAME='administrator@vsphere.local'
 export GOVC_PASSWORD='password'
-export GOVC_INSECURE=1  # for self-signed certificates
+export GOVC_INSECURE=1        # only for dev
 
-# 2. Test connectivity
-govc about
-
-# 3. List datacenters
-govc ls
-
-# 4. List clusters and hosts
-govc ls /datacenter/host/
-
-# 5. List datastores
-govc ls /datacenter/datastore/
-
-# 6. List networks
-govc ls /datacenter/network/
-
-# 7. List templates
-govc ls /datacenter/vm/templates/
-
-# 8. Test VM creation (dry run)
-govc vm.create -c 1 -m 1024 -g ubuntu64Guest -net "VM Network" test-vm
-govc vm.destroy test-vm
+govc about                    # connectivity + credentials
+govc ls                       # datacenters
+govc ls /Datacenter/host/     # clusters & hosts
+govc ls /Datacenter/datastore/
+govc ls /Datacenter/network/
+govc ls /Datacenter/vm/templates/
 ```
 
-### Debug Logging
-
-Enable verbose logging for the vSphere provider:
+### Debug logging
 
 ```yaml
-providers:
-  vsphere:
-    env:
-      - name: LOG_LEVEL
-        value: "debug"
-      - name: GOVMOMI_DEBUG
-        value: "true"
-    endpoint: "https://vcenter.example.com"
+# in Provider.spec.runtime
+runtime:
+  logLevel: debug
+  env:
+    - name: GOVMOMI_DEBUG
+      value: "true"
 ```
 
-Monitor vSphere tasks:
-```bash
-# Monitor recent tasks in vCenter
-govc task.ls
+`GOVMOMI_DEBUG=true` dumps every SOAP/REST exchange against vCenter — useful for diagnosing permission errors and unexpected task failures, but verbose; gate it behind a maintenance window.
 
-# Get details of specific task
-govc task.info task-123
-```
+## Performance tips
 
-## Performance Optimization
+- **Hot-add disabled for latency-sensitive VMs**: hot-add CPU/memory adds a thin layer of indirection. For real-time / VoIP / HFT workloads, set `cpuHotAddEnabled: false` and `memoryHotAddEnabled: false`.
+- **Eager-zeroed thick for IOPS-heavy disks**: trade space for predictable write latency.
+- **pvscsi everywhere**: unless your guest is ancient, `pvscsi` outperforms the LSI variants for any sustained I/O.
+- **Multiple SCSI controllers**: spread disks across controllers (`scsi.controller: 0`, `scsi.controller: 1`, ...) to parallelise queue depth.
 
-### Resource Allocation
+## API reference
 
-```yaml
-# High-performance VMClass
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClass
-metadata:
-  name: performance-optimized
-spec:
-  cpu: 16
-  memory: "64Gi"
-  performanceProfile:
-    cpuHotAddEnabled: false        # Disable for better performance
-    memoryHotAddEnabled: false     # Disable for better performance
-    latencySensitivity: high
-    hyperThreadingPolicy: prefer
-  resourceLimits:
-    cpuReservation: 8000           # MHz — guarantee CPU resources
-    memoryReservation: "64Gi"      # Guarantee full memory
-  extraConfig:
-    "numvcpus.coresPerSocket": "8" # Align with NUMA topology
-```
-
-### Storage Optimization
-
-```yaml
-# Storage-optimized configuration
-spec:
-  storage:
-    diskFormat: "eagerZeroedThick"  # Best performance, more space usage
-    controllerType: "pvscsi"        # Paravirtual SCSI for better performance
-    multiwriter: false              # Disable unless needed
-    
-    # vSAN optimization
-    storagePolicy: "Performance-Tier"
-    cachingPolicy: "writethrough"   # or "writeback" for better performance
-    
-    # Multiple controllers for high IOPS
-    scsiControllers:
-      - type: "pvscsi"
-        busNumber: 0
-        maxDevices: 15
-      - type: "pvscsi" 
-        busNumber: 1
-        maxDevices: 15
-```
-
-### Network Optimization
-
-```yaml
-# High-performance networking
-networks:
-  - name: high-performance
-    portGroup: "DPG-HighPerf-SR-IOV"
-    adapter: "vmxnet3"             # Best performance adapter
-    sriov: true                    # SR-IOV for near-native performance
-    bandwidth:
-      reservation: 1000            # Guaranteed bandwidth (Mbps)
-      limit: 10000                 # Maximum bandwidth (Mbps)
-      shares: 100                  # Priority level
-```
-
-## API Reference
-
-For complete API reference, see the [Provider API Documentation](../api-reference/).
-
-## Contributing
-
-To contribute to the vSphere provider:
-
-1. See the [Provider Development Guide](tutorial.md)
-2. Check the [GitHub repository](https://github.com/projectbeskar/virtrigaud)
-3. Review [open issues](https://github.com/projectbeskar/virtrigaud/labels/provider%2Fvsphere)
+- Full CRD field reference: [Generated CRD docs](../references/generated-crd-docs.md).
+- Provider gRPC contract: [Generated gRPC docs](../references/grpc-api.md).
+- Capability matrix (all providers): [Capabilities](providers-capabilities.md).
 
 ## Support
 
-- **Documentation**: [VirtRigaud Docs](https://projectbeskar.github.io/virtrigaud/)
-- **Issues**: [GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues)
-- **Community**: [Discord](https://discord.gg/projectbeskar)
-- **VMware**: [vSphere API Documentation](https://developer.vmware.com/apis/vsphere-automation/)
-- **govc**: [govc CLI Tool](https://github.com/vmware/govmomi/tree/master/govc)
+- Documentation: [VirtRigaud Docs](https://projectbeskar.github.io/virtrigaud/)
+- Issues: [GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues) — label `provider/vsphere`
+- govmomi reference: [`vmware/govmomi`](https://github.com/vmware/govmomi)

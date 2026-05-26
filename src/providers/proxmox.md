@@ -5,371 +5,213 @@ SPDX-License-Identifier: Apache-2.0
 
 # Proxmox VE Provider
 
-The Proxmox VE provider enables VirtRigaud to manage virtual machines on Proxmox Virtual Environment (PVE) clusters using the native Proxmox API.
+The Proxmox provider manages VMs on Proxmox Virtual Environment (PVE) via the native PVE REST API. It is the newest production-grade provider in the VirtRigaud tree and is currently maturing toward general availability.
 
-## Overview
+This page is aligned to **VirtRigaud v0.3.6**. Capability claims trace back to the provider's `GetCapabilities` builder in `internal/providers/proxmox/capabilities.go` and the REST client in `internal/providers/proxmox/pveapi/`.
 
-This provider implements the VirtRigaud provider interface to manage VM lifecycle operations on Proxmox VE:
+## Status
 
-- **Create**: Create VMs from templates or ISO images with cloud-init support
-- **Delete**: Remove VMs and associated resources
-- **Power**: Start, stop, and reboot virtual machines
-- **Describe**: Query VM state, IPs, and console access
-- **Guest Agent Integration**: Enhanced IP detection via QEMU guest agent (v0.2.3+)
-- **Reconfigure**: Hot-plug CPU/memory changes, disk expansion
-- **Clone**: Create linked or full clones of existing VMs
-- **Snapshot**: Create, delete, and revert VM snapshots with memory state
-- **ImagePrepare**: Import and prepare VM templates from URLs or ensure existence
+The Proxmox provider is listed as **Production-beta** in the [capability matrix](providers-capabilities.md). It implements the full v0.3.6 RPC surface, but ConsoleURL is web-UI-deep-link only (not a standalone VNC ticket — see below), and the production-burn-in time is shorter than for vSphere/libvirt.
+
+## Capabilities at a glance
+
+Built via `capabilities.NewBuilder()` in `internal/providers/proxmox/capabilities.go`:
+
+| Capability flag | Value | What it means |
+|-----------------|-------|---------------|
+| Core (Create/Delete/Power/Describe) | yes | Standard VM lifecycle |
+| `Snapshots` | yes | PVE snapshots via the API. |
+| `MemorySnapshots` | **yes** | Wired by passing `vmstate=1` to the snapshot API (`internal/providers/proxmox/pveapi/client.go:794-828`). The only provider that truly captures RAM state in v0.3.6. |
+| `LinkedClones` | yes | Native PVE linked clones (qcow2 / zfs snapshot-backed). |
+| `OnlineReconfigure` | yes | Hot-plug CPU and memory via the config endpoint (guest agent / balloon driver required). |
+| `OnlineDiskExpansion` | yes | Online disk grow via the config endpoint; filesystem grow inside the guest is separate. |
+| `ImageImport` | yes | PVE templates + cloud-image import. |
+| `DiskTypes` | `raw`, `qcow2` | Storage-type-dependent: `qcow2` only works on file-backed storage; `raw` works on LVM/ZFS/Ceph. |
+| `NetworkTypes` | `bridge`, `vlan` | Linux bridges (`vmbr0`...) with optional 802.1Q tag. |
+
+The "ConsoleURL" claim deserves nuance — see [Console access](#console-access) below.
+
+For the full cross-provider matrix and resilience / observability story:
+
+- [Provider capabilities matrix](providers-capabilities.md)
+- [Operations — Resilience](../operations/resilience.md) — CircuitBreaker (G6 / v0.3.6) wraps every Proxmox RPC.
+- [Operations — Observability](../operations/observability.md)
+
+## RPC support
+
+- **Validate** — `client.FindNode()` against the cluster.
+- **Create** — `POST /api2/json/nodes/{node}/qemu` or clone from a template VMID. Cloud-init is attached as IDE2 cloudinit drive.
+- **Delete** — `DELETE /api2/json/nodes/{node}/qemu/{vmid}`.
+- **Power** — `POST /api2/json/nodes/{node}/qemu/{vmid}/status/{start|stop|reset|shutdown}`.
+- **Describe** — VM state + guest-agent-derived IPs + console URL deep link + raw PVE provider details.
+- **Reconfigure** — `PUT /api2/json/nodes/{node}/qemu/{vmid}/config` for hot-plug CPU/memory.
+- **SnapshotCreate / SnapshotDelete / SnapshotRevert** — `/snapshot` subtree of the VMID; honours `includeMemory` via `vmstate=1`.
+- **CloneCreate** — `POST /api2/json/nodes/{node}/qemu/{vmid}/clone`. Both `full=0` (linked) and `full=1` (full clone) supported.
+- **TaskStatus** — polls the PVE task UPID (`internal/providers/proxmox/pveapi/`). Counts toward `virtrigaud_provider_tasks_inflight`.
+- **ConsoleUrl** — web-UI deep link (see below).
 
 ## Prerequisites
 
-**⚠️ IMPORTANT: Active Proxmox VE Server Required**
-
-The Proxmox provider requires a running Proxmox VE server to function. Unlike some providers that can operate in simulation mode, this provider performs actual API calls to Proxmox VE during startup and operation.
-
-### Requirements:
-- **Proxmox VE 7.0 or later** (running and accessible)
-- **API token or user account** with appropriate privileges  
-- **Network connectivity** from VirtRigaud to Proxmox API (port 8006/HTTPS)
-- **Valid TLS configuration** (production) or skip verification (development)
-
-### Testing/Development:
-If you don't have a Proxmox VE server available:
-- Use [Proxmox VE in a VM](https://pve.proxmox.com/wiki/Installation) for testing
-- Consider alternative providers (libvirt, vSphere) for local development  
-- The provider will fail startup validation without a reachable Proxmox endpoint
+- Proxmox VE **7.0 or later**, reachable from the manager / provider pod on port `8006/HTTPS`.
+- Either an API token *or* a username + password.
+- Storage and bridges configured on the PVE nodes — the provider does not create them.
 
 ## Authentication
 
-The Proxmox provider supports two authentication methods:
+The Proxmox provider reads credentials from the Secret mounted at `/etc/virtrigaud/credentials` inside the provider pod, falling back to environment variables (`internal/providers/proxmox/server.go:60-112`). **Both API tokens and username/password are supported**; tokens are strongly preferred for production.
 
-### API Token Authentication (Recommended)
+**The Secret keys are read as files**; the key names matter:
 
-API tokens provide secure, scope-limited access without exposing user passwords.
+| Secret key | File path | Auth method |
+|------------|-----------|-------------|
+| `token_id` | `/etc/virtrigaud/credentials/token_id` | API token (e.g. `virtrigaud@pve!vrtg-token`) |
+| `token_secret` | `/etc/virtrigaud/credentials/token_secret` | API token secret value |
+| `username` | `/etc/virtrigaud/credentials/username` | Username (e.g. `virtrigaud@pve`) — used only if no `token_id` |
+| `password` | `/etc/virtrigaud/credentials/password` | Password — used only if no `token_id` |
 
-1. **Create API Token in Proxmox**:
-   ```bash
-   # In Proxmox web UI: Datacenter -> Permissions -> API Tokens
-   # Or via CLI:
-   pveum user token add <USER@REALM> <TOKENID> --privsep 0
-   ```
+If a `token_id` + `token_secret` pair is present, the provider uses token auth. Otherwise it falls back to username/password and acquires a session ticket. Mixed credentials in the same Secret are tolerated (token wins).
 
-2. **Configure Provider**:
-   ```yaml
-   apiVersion: infra.virtrigaud.io/v1beta1
-   kind: Provider
-   metadata:
-     name: proxmox-prod
-     namespace: default
-   spec:
-     type: proxmox
-     endpoint: https://pve.example.com:8006
-     credentialSecretRef:
-       name: pve-credentials
-     runtime:
-       mode: Remote
-       image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.3"
-       service:
-         port: 9443
-   ```
+### API token (recommended)
 
-3. **Create Credentials Secret**:
-   ```yaml
-   apiVersion: v1
-   kind: Secret
-   metadata:
-     name: pve-credentials
-     namespace: default
-   type: Opaque
-   stringData:
-     token_id: "virtrigaud@pve!vrtg-token"
-     token_secret: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-   ```
+Create the token in PVE:
 
-### Session Cookie Authentication (Optional)
+```bash
+# As root@pam on a PVE node
+pveum user add virtrigaud@pve --comment "VirtRigaud"
+pveum user token add virtrigaud@pve vrtg-token --privsep 1
+# Grant permissions (see "Minimum permissions" below)
+pveum acl modify / --users virtrigaud@pve --roles PVEVMAdmin
+# Or use a tighter custom role:
+# pveum role add VirtRigaud --privs "VM.Allocate,VM.Audit,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.Options,VM.Monitor,VM.PowerMgmt,VM.Snapshot,VM.Clone,Datastore.AllocateSpace,Datastore.Audit"
+# pveum acl modify / --users virtrigaud@pve --roles VirtRigaud
+```
 
-For environments that cannot use API tokens:
+Provider CR + Secret:
 
 ```yaml
 apiVersion: v1
 kind: Secret
 metadata:
-  name: pve-credentials
-  namespace: default
+  name: proxmox-credentials
+  namespace: virtrigaud-system
 type: Opaque
 stringData:
-  username: "virtrigaud@pve"
-  password: "secure-password"
+  token_id: "virtrigaud@pve!vrtg-token"
+  token_secret: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: Provider
+metadata:
+  name: proxmox-cluster
+  namespace: virtrigaud-system
+spec:
+  type: proxmox
+  endpoint: "https://pve.example.com:8006"
+  credentialSecretRef:
+    name: proxmox-credentials
+  insecureSkipVerify: false
+  runtime:
+    mode: Remote
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.6"
+    service:
+      port: 9443
 ```
 
-## Deployment Configuration
-
-### Required Environment Variables
-
-The Proxmox provider **requires** environment variables to connect to your Proxmox VE server. Configure these variables in your Helm values file:
-
-| Variable | Fallback | Required | Description | Example |
-|----------|----------|----------|-------------|---------|
-| `PROVIDER_ENDPOINT` | `PVE_ENDPOINT` | ✅ **Yes** | Proxmox VE API endpoint URL | `https://pve.example.com:8006` |
-| `PROVIDER_USERNAME` | `PVE_USERNAME` | ✅ **Yes**\* | Username for password auth | `root@pam` or `user@realm` |
-| `PROVIDER_PASSWORD` | `PVE_PASSWORD` | ✅ **Yes**\* | Password for username | `secure-password` |
-| `PROVIDER_TOKEN_ID` | `PVE_TOKEN_ID` | ✅ **Yes**\*\* | API token ID (alternative) | `user@realm!tokenid` |
-| `PROVIDER_TOKEN_SECRET` | `PVE_TOKEN_SECRET` | ✅ **Yes**\*\* | API token secret (alternative) | `xxxxxxxx-xxxx-xxxx-xxxxxxxxxxxx` |
-| `PROVIDER_NODE_SELECTOR` | `PVE_NODE_SELECTOR` | 🔵 Optional | Preferred nodes (comma-separated) | `pve-node-1,pve-node-2` |
-| `PROVIDER_CA_BUNDLE` | `PVE_CA_BUNDLE` | 🔵 Optional | Custom CA certificate (PEM) | `-----BEGIN CERTIFICATE-----...` |
-| `TLS_INSECURE_SKIP_VERIFY` | `PVE_INSECURE_SKIP_VERIFY` | 🔵 Optional | Skip TLS verification | `true` (dev only) |
-
-> **\*** Either username/password OR token authentication is required
-> **\*\*** API token authentication is recommended for production
-> The `PROVIDER_*` names take precedence; `PVE_*` names are accepted for backwards compatibility.
-
-### Helm Configuration Examples
-
-#### Username/Password Authentication
+### Username / password
 
 ```yaml
-# values.yaml
-providers:
-  proxmox:
-    enabled: true
-    env:
-      - name: PVE_ENDPOINT
-        value: "https://your-proxmox-server.example.com:8006"
-      - name: PVE_USERNAME
-        value: "root@pam"
-      - name: PVE_PASSWORD
-        value: "your-secure-password"
-```
-
-#### API Token Authentication (Recommended)
-
-```yaml
-# values.yaml  
-providers:
-  proxmox:
-    enabled: true
-    env:
-      - name: PVE_ENDPOINT
-        value: "https://your-proxmox-server.example.com:8006"
-      - name: PVE_TOKEN_ID
-        value: "virtrigaud@pve!automation"
-      - name: PVE_TOKEN_SECRET
-        value: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-```
-
-#### Using Kubernetes Secrets (Production)
-
-For production environments, use Kubernetes secrets:
-
-```yaml
-# Create secret first
 apiVersion: v1
 kind: Secret
 metadata:
   name: proxmox-credentials
 type: Opaque
 stringData:
-  PVE_ENDPOINT: "https://your-proxmox-server.example.com:8006"
-  PVE_TOKEN_ID: "virtrigaud@pve!automation"  
-  PVE_TOKEN_SECRET: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-
----
-# values.yaml - Reference the secret
-providers:
-  proxmox:
-    enabled: true
-    env:
-      - name: PVE_ENDPOINT
-        valueFrom:
-          secretKeyRef:
-            name: proxmox-credentials
-            key: PVE_ENDPOINT
-      - name: PVE_TOKEN_ID
-        valueFrom:
-          secretKeyRef:
-            name: proxmox-credentials
-            key: PVE_TOKEN_ID
-      - name: PVE_TOKEN_SECRET
-        valueFrom:
-          secretKeyRef:
-            name: proxmox-credentials
-            key: PVE_TOKEN_SECRET
+  username: "virtrigaud@pve"
+  password: "REPLACE_ME"
 ```
 
-### Configuration Validation
+## Minimum permissions
 
-The provider validates configuration at startup and will **fail to start** if:
+For an API token using a custom role:
 
-- ✅ `PVE_ENDPOINT` is missing or invalid
-- ✅ Neither username/password nor token credentials are provided
-- ✅ Proxmox server is unreachable
-- ✅ Authentication fails
+| Permission | Required for |
+|------------|-------------|
+| `VM.Allocate` | Create VMs |
+| `VM.Audit` | Read VM config (used by every `Describe`) |
+| `VM.Config.CPU` | Reconfigure CPU |
+| `VM.Config.Memory` | Reconfigure memory |
+| `VM.Config.Disk` | Disk add / resize |
+| `VM.Config.Network` | NIC modifications |
+| `VM.Config.Options` | Misc config (boot order, agent, etc.) |
+| `VM.Monitor` | Guest agent queries via the API |
+| `VM.PowerMgmt` | Start/stop/reset/shutdown |
+| `VM.Snapshot` | Snapshot operations |
+| `VM.Clone` | Clone operations |
+| `Datastore.AllocateSpace` | Provision VM disks |
+| `Datastore.Audit` | List storage |
 
-#### Error Examples
+Apply at the path you scope (typically `/`).
 
-```bash
-# Missing endpoint
-ERROR Failed to create PVE client error="endpoint is required"
+## Endpoint formats
 
-# Invalid endpoint format  
-ERROR Failed to create PVE client error="invalid endpoint URL"
+| Endpoint | Notes |
+|----------|-------|
+| `https://pve.example.com:8006` | Cluster-wide endpoint (recommended) — the API auto-routes to the correct node. |
+| `https://pve-node-1.example.com:8006` | Single-node endpoint; loses HA if that node goes down. |
 
-# Authentication failure
-ERROR Failed to authenticate error="authentication failed: invalid credentials"
+The CRD validates HTTPS scheme.
 
-# Connection failure
-ERROR Failed to connect error="dial tcp: no route to host"
-```
+## Node selection
 
-### Development vs Production
-
-| Environment | Endpoint | Authentication | TLS | Notes |
-|-------------|----------|---------------|-----|-------|
-| **Development** | `https://pve-test.local:8006` | Username/Password | Skip verify | Use `PVE_INSECURE_SKIP_VERIFY=true` |
-| **Staging** | `https://pve-staging.company.com:8006` | API Token | Custom CA | Configure CA bundle |
-| **Production** | `https://pve.company.com:8006` | API Token | Valid cert | Use Kubernetes secrets |
-
-## TLS Configuration
-
-### Self-Signed Certificates (Development)
-
-For test environments with self-signed certificates:
+By default the provider selects a node automatically. To pin to specific nodes (e.g., for HA constraints or licensing), set `PROVIDER_NODE_SELECTOR`:
 
 ```yaml
 spec:
   runtime:
     env:
-      - name: PVE_INSECURE_SKIP_VERIFY
-        value: "true"
+      - name: PROVIDER_NODE_SELECTOR
+        value: "pve-node-1,pve-node-2"
 ```
 
-### Custom CA Certificate (Production)
+## Storage
 
-For production with custom CA:
+PVE storage is referenced by ID (e.g., `local-lvm`, `local-zfs`, `cephfs-pool`). The `qcow2` disk type requires file-backed storage; `raw` works on block-backed storage (LVM, ZFS, Ceph). Mismatches return `400 Bad Request` from the PVE API — see [Troubleshooting](#troubleshooting).
 
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: pve-credentials
-type: Opaque
-stringData:
-  ca.crt: |
-    -----BEGIN CERTIFICATE-----
-    MIIDXTCCAkWgAwIBAgIJAL...
-    -----END CERTIFICATE-----
-```
-
-## Reconfiguration Support
-
-### Online Reconfiguration
-
-The Proxmox provider supports online (hot-plug) reconfiguration for:
-
-- **CPU**: Add/remove vCPUs while VM is running (guest OS support required)
-- **Memory**: Increase memory using balloon driver (guest tools required)
-- **Disk Expansion**: Expand disks online (disk shrinking not supported)
-
-### Reconfigure Matrix
-
-| Operation | Online Support | Requirements | Notes |
-|-----------|---------------|--------------|-------|
-| CPU increase | ✅ Yes | Guest OS support | Most modern Linux/Windows |
-| CPU decrease | ✅ Yes | Guest OS support | May require guest cooperation |
-| Memory increase | ✅ Yes | Balloon driver | Install qemu-guest-agent |
-| Memory decrease | ⚠️ Limited | Balloon driver + guest | May require power cycle |
-| Disk expand | ✅ Yes | Online resize support | Filesystem resize separate |
-| Disk shrink | ❌ No | Not supported | Security/data protection |
-
-### Example Reconfiguration
+In the VMImage, point at the storage by ID:
 
 ```yaml
-# Scale up VM resources by pointing to a larger class
 apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClass
+kind: VMImage
 metadata:
-  name: large
+  name: ubuntu-22-template
 spec:
-  cpu: 8
-  memory: "16Gi"
-
----
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
-metadata:
-  name: web-server
-spec:
-  classRef:
-    name: large    # Changed from 'small' — triggers reconfiguration
+  source:
+    proxmox:
+      templateName: "ubuntu-22-template"
+      storage: "local-lvm"
 ```
 
-## Snapshot Management
+## Networking
 
-### Snapshot Features
-
-- **Memory Snapshots**: Include VM memory state for consistent restore
-- **Crash-Consistent**: Without memory for faster snapshots
-- **Snapshot Trees**: Nested snapshots with parent-child relationships
-- **Metadata**: Description and timestamp tracking
-
-### Snapshot Operations
+PVE networking maps to Linux bridges (`vmbr0`, `vmbr1`, ...) with optional 802.1Q VLAN tags:
 
 ```yaml
-# Create snapshot with memory
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMSnapshot
-metadata:
-  name: before-upgrade
-spec:
-  vmRef:
-    name: web-server
-  description: "Pre-maintenance snapshot"
-  includeMemory: true  # Include running memory state
-```
-
-```bash
-# Create snapshot via kubectl
-kubectl create vmsnapshot before-upgrade \
-  --vm=web-server \
-  --description="Before major upgrade" \
-  --include-memory=true
-```
-
-## Multi-NIC Networking
-
-### Network Configuration
-
-The provider supports multiple network interfaces with:
-
-- **Bridge Assignment**: Map to Proxmox bridges (vmbr0, vmbr1, etc.)
-- **VLAN Tagging**: 802.1Q VLAN support
-- **Static IPs**: Cloud-init integration for network configuration
-- **MAC Addresses**: Custom MAC assignment
-
-### Example Multi-NIC VM
-
-```yaml
-# Define network attachments
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMNetworkAttachment
 metadata:
-  name: lan-net
+  name: lan-vmbr0
 spec:
   network:
     proxmox:
       bridge: vmbr0
       model: virtio
   ipAllocation:
-    type: Static
-    address: "192.168.1.100/24"
-    gateway: "192.168.1.1"
-    dns: ["8.8.8.8", "1.1.1.1"]
-
+    type: DHCP
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMNetworkAttachment
 metadata:
-  name: dmz-net
+  name: dmz-vlan100
 spec:
   network:
     proxmox:
@@ -379,167 +221,41 @@ spec:
   ipAllocation:
     type: Static
     address: "10.0.100.50/24"
+```
 
----
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMNetworkAttachment
-metadata:
-  name: mgmt-net
+Multi-NIC, mixed DHCP/static, and per-NIC MAC pinning are all supported via cloud-init.
+
+## Cloud-init (cicustom + per-NIC ipconfig)
+
+PVE has a native cloud-init implementation. VirtRigaud uses two complementary paths:
+
+1. **`cicustom`** — the provider uploads a custom user-data snippet to PVE storage and references it on the VM config (`cicustom: user=local:snippets/...`).
+2. **`ipconfig0`, `ipconfig1`, ...** — for static IP configuration, generated from the `VMNetworkAttachment.ipAllocation` field. These are PVE's per-NIC cloud-init network config.
+
+The IDE2 cloudinit drive is attached automatically at VM creation; the VM picks it up at first boot.
+
+```yaml
 spec:
-  network:
-    proxmox:
-      bridge: vmbr2
-      model: virtio
-  ipAllocation:
-    type: DHCP
-
----
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VirtualMachine
-metadata:
-  name: multi-nic-vm
-spec:
-  providerRef:
-    name: proxmox-prod
-  classRef:
-    name: medium
-  imageRef:
-    name: ubuntu-22
-  networks:
-    - name: lan
-      networkRef:
-        name: lan-net
-    - name: dmz
-      networkRef:
-        name: dmz-net
-    - name: mgmt
-      networkRef:
-        name: mgmt-net
-      macAddress: "02:00:00:aa:bb:cc"    # optional static MAC
+  userData:
+    cloudInit:
+      inline: |
+        #cloud-config
+        hostname: web-server
+        users:
+          - name: ubuntu
+            sudo: ALL=(ALL) NOPASSWD:ALL
+            ssh_authorized_keys:
+              - "ssh-ed25519 AAAA..."
+        packages:
+          - qemu-guest-agent
+        runcmd:
+          - systemctl enable --now qemu-guest-agent
 ```
 
-### Network Bridge Mapping
+!!! tip "Install qemu-guest-agent in the guest"
+    Without it, `Describe` cannot retrieve IP addresses from the running VM. The provider falls back gracefully but the VM's `status.ips` will be empty until you install + enable the agent.
 
-| Network Name | Default Bridge | Use Case |
-|--------------|---------------|----------|
-| `lan`, `default` | vmbr0 | General LAN connectivity |
-| `dmz` | vmbr1 | DMZ/public services |
-| `mgmt`, `management` | vmbr2 | Management network |
-| `vmbr*` | Same name | Direct bridge reference |
-
-## Configuration
-
-### Required Environment Variables
-
-**⚠️ The provider requires environment variables to connect to Proxmox VE:**
-
-| Variable | Fallback | Required | Default | Example |
-|----------|----------|----------|---------|---------|
-| `PROVIDER_ENDPOINT` | `PVE_ENDPOINT` | **Yes** | — | `https://pve.example.com:8006` |
-| `PROVIDER_TOKEN_ID` | `PVE_TOKEN_ID` | Yes\* | — | `virtrigaud@pve!vrtg-token` |
-| `PROVIDER_TOKEN_SECRET` | `PVE_TOKEN_SECRET` | Yes\* | — | `xxxxxxxx-xxxx-xxxx-xxxxxxxxxxxx` |
-| `PROVIDER_USERNAME` | `PVE_USERNAME` | Yes\* | — | `virtrigaud@pve` |
-| `PROVIDER_PASSWORD` | `PVE_PASSWORD` | Yes\* | — | `secure-password` |
-| `PROVIDER_NODE_SELECTOR` | `PVE_NODE_SELECTOR` | No | Auto-detect | `pve-node-1,pve-node-2` |
-| `PROVIDER_CA_BUNDLE` | `PVE_CA_BUNDLE` | No | — | `-----BEGIN CERTIFICATE-----...` |
-| `TLS_INSECURE_SKIP_VERIFY` | `PVE_INSECURE_SKIP_VERIFY` | No | `false` | `true` |
-| `LOG_LEVEL` | — | No | `info` | `debug`, `info`, `warn`, `error` |
-| `LOG_FORMAT` | — | No | `text` | `text`, `json` |
-
-\* Either token (`PROVIDER_TOKEN_ID` + `PROVIDER_TOKEN_SECRET`) or username/password (`PROVIDER_USERNAME` + `PROVIDER_PASSWORD`) is required
-
-### Deployment Configuration
-
-The provider needs environment variables to connect to Proxmox. Here are complete deployment examples:
-
-#### Using Helm Values
-
-```yaml
-# values.yaml
-providers:
-  proxmox:
-    enabled: true
-    env:
-      - name: PVE_ENDPOINT
-        value: "https://pve.example.com:8006/api2"
-      - name: PVE_TOKEN_ID
-        value: "virtrigaud@pve!vrtg-token"
-      - name: PVE_TOKEN_SECRET
-        value: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-      - name: PVE_INSECURE_SKIP_VERIFY
-        value: "true"  # Only for development!
-      - name: PVE_NODE_SELECTOR
-        value: "pve-node-1,pve-node-2"  # Optional
-```
-
-#### Using Kubernetes Secrets (Recommended)
-
-```yaml
-# Create secret with credentials
-apiVersion: v1
-kind: Secret
-metadata:
-  name: proxmox-credentials
-  namespace: virtrigaud-system
-type: Opaque
-stringData:
-  PVE_ENDPOINT: "https://pve.example.com:8006/api2"
-  PVE_TOKEN_ID: "virtrigaud@pve!vrtg-token"
-  PVE_TOKEN_SECRET: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-  PVE_INSECURE_SKIP_VERIFY: "false"
-
----
-# Reference secret in deployment
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: virtrigaud-provider-proxmox
-spec:
-  template:
-    spec:
-      containers:
-      - name: provider-proxmox
-        image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.3
-        envFrom:
-        - secretRef:
-            name: proxmox-credentials
-```
-
-#### Development/Testing Configuration
-
-```yaml
-# For development with a local Proxmox VE instance
-providers:
-  proxmox:
-    enabled: true
-    env:
-      - name: PVE_ENDPOINT
-        value: "https://192.168.1.100:8006/api2"
-      - name: PVE_USERNAME
-        value: "root@pam"
-      - name: PVE_PASSWORD
-        value: "your-password"
-      - name: PVE_INSECURE_SKIP_VERIFY
-        value: "true"
-```
-
-### Node Selection
-
-The provider can be configured to prefer specific nodes:
-
-```yaml
-env:
-  - name: PVE_NODE_SELECTOR
-    value: "pve-node-1,pve-node-2"
-```
-
-If not specified, the provider will automatically select nodes based on availability.
-
-## VM Configuration
-
-### VMClass Specification
-
-Define CPU and memory resources:
+## VM example
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -551,40 +267,13 @@ spec:
   memory: "4Gi"
   firmware: UEFI
   diskDefaults:
-    type: thin
+    type: qcow2
     size: "20Gi"
-  # Proxmox-specific settings via extraConfig
-  extraConfig:
-    "machine": "q35"
-```
-
-### VMImage Specification
-
-Reference Proxmox templates:
-
-```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMImage
-metadata:
-  name: ubuntu-22
-spec:
-  source:
-    proxmox:
-      templateName: "ubuntu-22-template"
-      storage: "local-lvm"
-      # Or clone from a VMID:
-      # templateID: 9000
-      fullClone: true
-```
-
-### VirtualMachine Example
-
-```yaml
-# Define the network attachment first
+---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMNetworkAttachment
 metadata:
-  name: lan-network
+  name: lan-vmbr0
 spec:
   network:
     proxmox:
@@ -592,7 +281,6 @@ spec:
       model: virtio
   ipAllocation:
     type: DHCP
-
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
@@ -600,627 +288,194 @@ metadata:
   name: web-server
 spec:
   providerRef:
-    name: proxmox-prod
+    name: proxmox-cluster
   classRef:
     name: small
   imageRef:
-    name: ubuntu-22
+    name: ubuntu-22-template
   powerState: On
   networks:
     - name: lan
       networkRef:
-        name: lan-network
+        name: lan-vmbr0
   disks:
     - name: data
       sizeGiB: 40
-      type: thin
+      type: qcow2
   userData:
     cloudInit:
       inline: |
         #cloud-config
         hostname: web-server
-        users:
-          - name: ubuntu
-            ssh_authorized_keys:
-              - "ssh-ed25519 AAAA..."
-        packages:
-          - nginx
+        packages: [nginx, qemu-guest-agent]
+        runcmd:
+          - systemctl enable --now nginx qemu-guest-agent
 ```
 
-## Cloud-Init Integration
+## Reconfiguration
 
-The provider automatically configures cloud-init for supported VMs:
+The Proxmox provider supports online (hot-plug) reconfiguration via `PUT /api2/json/nodes/{node}/qemu/{vmid}/config`:
 
-### Automatic Configuration
+| Operation | Online? | Requirements |
+|-----------|---------|--------------|
+| CPU increase | yes | Guest CPU hotplug enabled; modern Linux/Windows kernels handle this |
+| CPU decrease | partial | Guest cooperation required; may need power cycle for full unplug |
+| Memory increase | yes | virtio balloon driver in the guest (install `qemu-guest-agent` + balloon) |
+| Memory decrease | partial | May require power cycle for guests that don't release memory cleanly |
+| Disk expand | yes | Filesystem grow inside the guest is separate (`resize2fs`, `xfs_growfs`, ...) |
+| Disk shrink | **no** | Not supported (data-loss prevention) |
 
-- **IDE2 Device**: Attached as cloudinit drive
-- **User Data**: Rendered from VirtualMachine spec
-- **Network Config**: Generated from network specifications
-- **SSH Keys**: Extracted from userData or secrets
+## Snapshots — including memory state
 
-### Static IP Configuration
-
-Configure static IPs using cloud-init:
-
-```yaml
-userData:
-  cloudInit:
-    inline: |
-      #cloud-config
-      write_files:
-        - path: /etc/netplan/01-static.yaml
-          content: |
-            network:
-              version: 2
-              ethernets:
-                ens18:
-                  addresses: [192.168.1.100/24]
-                  gateway4: 192.168.1.1
-                  nameservers:
-                    addresses: [8.8.8.8, 1.1.1.1]
-```
-
-Or use Proxmox IP configuration:
-
-```yaml
-# This would be handled by the provider internally
-# when processing network specifications
-```
-
-## Guest Agent Integration (v0.2.3+)
-
-The Proxmox provider now integrates with the QEMU Guest Agent for enhanced VM monitoring:
-
-### IP Address Detection
-
-When a VM is running, the provider automatically queries the QEMU guest agent to retrieve accurate IP addresses:
-
-```yaml
-# IP addresses are automatically populated in VM status
-kubectl get vm my-vm -o yaml
-
-status:
-  phase: Running
-  ipAddresses:
-    - 192.168.1.100
-    - fd00::1234:5678:9abc:def0
-```
-
-### Features
-
-- **Automatic IP Detection**: Retrieves all network interface IPs from running VMs
-- **IPv4 and IPv6 Support**: Reports both address families
-- **Smart Filtering**: Excludes loopback (127.0.0.1, ::1) and link-local (169.254.x.x, fe80::) addresses
-- **Real-time Updates**: Information updated during Describe operations
-- **Graceful Degradation**: Falls back gracefully when guest agent is not available
-
-### Requirements
-
-For guest agent integration to work, the VM must have:
-
-1. **QEMU Guest Agent Installed**:
-   ```bash
-   # Ubuntu/Debian
-   apt-get install qemu-guest-agent
-   
-   # CentOS/RHEL
-   yum install qemu-guest-agent
-   
-   # Enable and start the service
-   systemctl enable --now qemu-guest-agent
-   ```
-
-2. **VM Configuration**: Guest agent is automatically enabled during VM creation
-
-### Implementation Details
-
-The provider:
-1. Checks if VM is in running state
-2. Makes API call to `/api2/json/nodes/{node}/qemu/{vmid}/agent/network-get-interfaces`
-3. Parses network interface details from guest agent response
-4. Filters out irrelevant addresses (loopback, link-local)
-5. Populates `status.ipAddresses` field
-
-### Troubleshooting
-
-If IP addresses are not appearing:
-- Verify guest agent is installed: `systemctl status qemu-guest-agent`
-- Check Proxmox VM options: `qm config <vmid> | grep agent`
-- Ensure VM has network connectivity
-- Check provider logs for guest agent errors
-
-## Cloning Behavior
-
-### Linked Clones (Default)
-
-Efficient space usage, faster creation:
-
-```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClone
-metadata:
-  name: web-clone
-spec:
-  sourceVMRef:
-    name: template-vm
-  linkedClone: true  # Default
-```
-
-### Full Clones
-
-Independent copies, slower creation:
-
-```yaml
-spec:
-  linkedClone: false
-```
-
-## Snapshots
-
-Create and manage VM snapshots:
+Proxmox is the only v0.3.6 provider that genuinely supports memory snapshots. The provider passes `vmstate=1` to the snapshot API when `VMSnapshot.spec.includeMemory: true` (`internal/providers/proxmox/pveapi/client.go:794-828`):
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMSnapshot
 metadata:
-  name: before-upgrade
+  name: pre-upgrade
 spec:
   vmRef:
     name: web-server
-  description: "Snapshot before system upgrade"
+  description: "Snapshot before upgrade"
+  includeMemory: true
 ```
+
+Memory snapshots are slower (RAM contents are streamed to storage) but allow point-in-time restore of the running state including in-flight transactions.
+
+## Cloning
+
+Both full and linked clones are supported natively by PVE. The provider sets `full=0` for linked clones, `full=1` for full clones (default).
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClone
+metadata:
+  name: web-server-02
+spec:
+  source:
+    vmRef:
+      name: template-vm
+  target:
+    name: web-server-02
+  options:
+    type: LinkedClone     # FullClone for an independent copy
+    powerOn: true
+```
+
+Linked clones share the parent's disk on copy-on-write storage (ZFS / Ceph / qcow2 with backing); the parent must remain available.
+
+## Async task tracking
+
+Every long-running PVE operation returns a UPID (Unique Process ID). The provider returns this as a proto `TaskRef`; the manager polls `TaskStatus` (which calls the PVE `/api2/json/nodes/{node}/tasks/{upid}/status` endpoint) with jittered backoff until terminal.
+
+Since v0.3.6, in-flight tasks are tracked by the `virtrigaud_provider_tasks_inflight{provider_type="proxmox", provider="<name>"}` gauge (G7.3). See [Observability](../operations/observability.md#11-virtrigaud_provider_tasks_inflight).
+
+## Console access
+
+`Describe` populates `status.consoleURL` with a deep link to the PVE web UI's console view (`internal/providers/proxmox/server.go:563-569`):
+
+```
+https://pve.example.com:8006/#v1:0:=qemu/{vmid}:4:5:=console
+```
+
+This is a **web-UI deep link**, not a standalone VNC ticket. To use it:
+
+1. Open it in a browser.
+2. The PVE UI prompts for login (or single sign-on if you have it).
+3. You land on the VM's noVNC console.
+
+A first-class VNC ticket endpoint (where the provider would acquire a one-shot ticket via `POST /api2/json/nodes/{node}/qemu/{vmid}/vncproxy` and embed it in the URL) is planned for a future release — see the "Proxmox" section in the [capability matrix roadmap](providers-capabilities.md#future-roadmap). The current matrix marks this cell `⚠️` to reflect the gap.
 
 ## Troubleshooting
 
-### Common Issues
+### CircuitBreaker open for the proxmox provider
 
-#### Authentication Failures
-
-```
-Error: failed to connect to Proxmox VE: authentication failed
+```promql
+virtrigaud_circuit_breaker_state{provider_type="proxmox", provider="proxmox-cluster"} == 2
 ```
 
-**Solutions**:
-- Verify API token permissions
-- Check token expiration
-- Ensure user has VM.* privileges
+The CircuitBreaker (G6 / v0.3.6) has fast-failed enough RPCs to PVE to open the breaker. Common causes:
 
-#### TLS Certificate Errors
+- Expired or rotated API token.
+- TLS certificate validation failure.
+- PVE node down / `pveproxy` service not running.
+- API rate-limit (PVE applies per-IP rate limits; verify by `curl`-ing `/version` from inside the provider pod).
 
-```
-Error: x509: certificate signed by unknown authority
-```
+The breaker self-recovers once the underlying issue is fixed; no manual reset needed.
 
-**Solutions**:
-- Add custom CA certificate to credentials secret
-- Use `PVE_INSECURE_SKIP_VERIFY=true` for testing
-- Verify certificate chain
+### `storage 'qcow2' requires file-backed storage`
 
-#### VM Creation Failures
+You set `disks.type: qcow2` against a non-file storage type (LVM, ZFS, Ceph RBD). Fix one of two ways:
 
-```
-Error: create VM failed with status 400: storage 'local-lvm' does not exist
-```
+- Switch the disk type to `raw`.
+- Move to a file-backed storage (`local`, `nfs`, `cephfs`).
 
-**Solutions**:
-- Verify storage configuration in Proxmox
-- Check node availability
-- Ensure sufficient resources
+### `401 Unauthorized` from PVE
 
-### Debug Logging
-
-Enable debug logging for troubleshooting:
-
-```yaml
-env:
-  - name: LOG_LEVEL
-    value: "debug"
-```
-
-### Health Checks
-
-Monitor provider health:
+For token auth, the `Authorization` header must be `PVEAPIToken=user@realm!tokenid=secret`. Test from a debug pod:
 
 ```bash
-# Check provider pod logs
-kubectl logs -n virtrigaud-system deployment/provider-proxmox
-
-# Test connectivity
-kubectl exec -n virtrigaud-system deployment/provider-proxmox -- \
-  curl -k https://pve.example.com:8006/api2/json/version
+curl -k "https://pve.example.com:8006/api2/json/version" \
+  -H "Authorization: PVEAPIToken=virtrigaud@pve!vrtg-token=$SECRET"
 ```
 
-## Performance Considerations
+If that returns 401, the token is bad or the user has no read permission at `/` — see [Minimum permissions](#minimum-permissions).
 
-### Resource Allocation
+### VMID collision in a cluster
 
-For production environments:
+The provider derives the VMID from a hash of the VM name + a timestamp suffix. In rare cases (rapid create/delete cycles) collisions can occur. If you see `VM <vmid> already exists`, retry — the next attempt will pick a fresh VMID.
 
-```yaml
-resources:
-  requests:
-    cpu: 100m
-    memory: 256Mi
-  limits:
-    cpu: 500m
-    memory: 512Mi
-```
-
-### Concurrent Operations
-
-The provider handles concurrent VM operations efficiently but consider:
-
-- Node capacity limits
-- Storage I/O constraints
-- Network bandwidth
-
-### Task Polling
-
-Task completion is polled every 2 seconds with a 5-minute timeout. These can be tuned via environment variables if needed.
-
-## Minimal Proxmox VE Permissions
-
-### Required API Token Permissions
-
-Create an API token with these minimal privileges:
+### Guest agent IPs missing
 
 ```bash
-# Create user for VirtRigaud
-pveum user add virtrigaud@pve --comment "VirtRigaud Provider"
-
-# Create API token
-pveum user token add virtrigaud@pve vrtg-token --privsep 1
-
-# Grant minimal required permissions
-pveum acl modify / --users virtrigaud@pve --roles PVEVMAdmin,PVEDatastoreUser
-
-# Custom role with minimal permissions (alternative)
-pveum role add VirtRigaud --privs "VM.Allocate,VM.Audit,VM.Config.CPU,VM.Config.Memory,VM.Config.Disk,VM.Config.Network,VM.Config.Options,VM.Monitor,VM.PowerMgmt,VM.Snapshot,VM.Clone,Datastore.Allocate,Datastore.AllocateSpace,Pool.Allocate"
-pveum acl modify / --users virtrigaud@pve --roles VirtRigaud
+# On the PVE node:
+qm config <vmid> | grep agent
+# Should show: agent: enabled=1
 ```
 
-### Permission Details
+If `agent:` is absent or `0`, set it via reconfigure. Inside the guest, install + enable `qemu-guest-agent`. The provider's `Describe` queries `/api2/json/nodes/{node}/qemu/{vmid}/agent/network-get-interfaces` and falls back gracefully when the agent is absent, but `status.ips` will be empty.
 
-| Permission | Usage | Required |
-|------------|-------|----------|
-| `VM.Allocate` | Create new VMs | ✅ Core |
-| `VM.Audit` | Read VM configuration | ✅ Core |
-| `VM.Config.*` | Modify VM settings | ✅ Reconfigure |
-| `VM.Monitor` | VM status monitoring | ✅ Core |
-| `VM.PowerMgmt` | Power operations | ✅ Core |
-| `VM.Snapshot` | Snapshot operations | ⚠️ Optional |
-| `VM.Clone` | VM cloning | ⚠️ Optional |
-| `Datastore.Allocate` | Create VM disks | ✅ Core |
-| `Pool.Allocate` | Resource pool usage | ⚠️ Optional |
-
-### Token Rotation Procedure
+### Validation walkthrough
 
 ```bash
-# 1. Create new token
-NEW_TOKEN=$(pveum user token add virtrigaud@pve vrtg-token-2 --privsep 1 --output-format json | jq -r '.value')
+# 1. Network reachability
+curl -k https://pve.example.com:8006/api2/json/version
 
-# 2. Update Kubernetes secret
-kubectl patch secret pve-credentials -n virtrigaud-system --type='merge' -p='{"stringData":{"token_id":"virtrigaud@pve!vrtg-token-2","token_secret":"'$NEW_TOKEN'"}}'
+# 2. Token works
+curl -k "https://pve.example.com:8006/api2/json/nodes" \
+  -H "Authorization: PVEAPIToken=virtrigaud@pve!vrtg-token=$SECRET"
 
-# 3. Restart provider to use new token
-kubectl rollout restart deployment provider-proxmox -n virtrigaud-system
-
-# 4. Verify new token works
-kubectl logs deployment/provider-proxmox -n virtrigaud-system
-
-# 5. Remove old token
-pveum user token remove virtrigaud@pve vrtg-token
+# 3. Cluster status
+curl -k "https://pve.example.com:8006/api2/json/cluster/status" \
+  -H "Authorization: PVEAPIToken=virtrigaud@pve!vrtg-token=$SECRET"
 ```
 
-## NetworkPolicy Examples
-
-### Production NetworkPolicy
+### Debug logging
 
 ```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: provider-proxmox-netpol
-  namespace: virtrigaud-system
 spec:
-  podSelector:
-    matchLabels:
-      app: provider-proxmox
-  policyTypes: [Ingress, Egress]
-  
-  ingress:
-  - from:
-    - podSelector:
-        matchLabels:
-          app: virtrigaud-manager
-    ports: [9443, 8080]
-  
-  egress:
-  # DNS resolution
-  - to: []
-    ports: [53]
-  
-  # Proxmox VE API
-  - to:
-    - ipBlock:
-        cidr: 192.168.1.0/24  # Your PVE network
-    ports: [8006]
-```
-
-### Development NetworkPolicy
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: provider-proxmox-dev-netpol
-  namespace: virtrigaud-system
-spec:
-  podSelector:
-    matchLabels:
-      app: provider-proxmox
-      environment: development
-  egress:
-  - to: []  # Allow all egress for development
-```
-
-## Storage and Placement
-
-### Storage Class Mapping
-
-Configure storage placement for different workloads:
-
-```yaml
-# High-performance storage
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClass
-metadata:
-  name: high-performance
-spec:
-  cpu: 8
-  memory: "32Gi"
-  diskDefaults:
-    type: thin
-    size: "50Gi"
-    storageClass: "nvme-storage"   # Maps to PVE storage pool
-
----
-# Standard storage
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClass
-metadata:
-  name: standard
-spec:
-  cpu: 4
-  memory: "8Gi"
-  diskDefaults:
-    type: thick
-    size: "40Gi"
-    storageClass: "ssd-storage"
-```
-
-### Placement Policies
-
-```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMPlacementPolicy
-metadata:
-  name: production-placement
-spec:
-  nodeSelector:
-    - "pve-node-1"
-    - "pve-node-2"
-  antiAffinity:
-    - key: "vm.type"
-      operator: "In"
-      values: ["database"]
-  constraints:
-    maxVMsPerNode: 10
-    minFreeMemory: "4Gi"
-```
-
-## Performance Testing
-
-### Load Test Results
-
-Performance benchmarks using virtrigaud-loadgen against fake PVE server:
-
-| Operation | P50 Latency | P95 Latency | Throughput | Notes |
-|-----------|-------------|-------------|------------|-------|
-| Create VM | 2.3s | 4.1s | 12 ops/min | Including cloud-init |
-| Power On | 800ms | 1.2s | 45 ops/min | Async operation |
-| Power Off | 650ms | 1.1s | 50 ops/min | Graceful shutdown |
-| Describe | 120ms | 200ms | 200 ops/min | Status query |
-| Reconfigure CPU | 1.8s | 3.2s | 15 ops/min | Online hot-plug |
-| Snapshot Create | 3.5s | 6.8s | 8 ops/min | With memory |
-| Clone (Linked) | 1.9s | 3.4s | 12 ops/min | Fast COW clone |
-
-### Running Performance Tests
-
-```bash
-# Deploy fake PVE server for testing
-kubectl apply -f test/performance/proxmox-loadtest.yaml
-
-# Run performance test
-kubectl create job proxmox-perf-test --from=cronjob/proxmox-performance-test
-
-# View results
-kubectl logs job/proxmox-perf-test -f
-```
-
-## Security Best Practices
-
-1. **Use API Tokens**: Prefer API tokens over username/password
-2. **Least Privilege**: Grant minimal required permissions (see above)
-3. **TLS Verification**: Always verify certificates in production
-4. **Secret Management**: Use Kubernetes secrets with proper RBAC
-5. **Network Policies**: Restrict provider network access (see examples)
-6. **Regular Rotation**: Rotate API tokens quarterly
-7. **Audit Logging**: Enable PVE audit logs for provider actions
-8. **Resource Quotas**: Limit provider resource consumption
-
-## Examples
-
-### Multi-Node Setup
-
-```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: Provider
-metadata:
-  name: proxmox-cluster
-spec:
-  type: proxmox
-  endpoint: https://pve-cluster.example.com:8006
   runtime:
-    env:
-      - name: PVE_NODE_SELECTOR
-        value: "pve-1,pve-2,pve-3"
+    logLevel: debug
 ```
 
-### High-Availability Configuration
+This causes the PVE REST client to log every request/response pair. Tokens / passwords are redacted (`internal/providers/proxmox/pveapi/`); the raw body is included so you can diff against the PVE API docs.
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: provider-proxmox
-spec:
-  replicas: 2
-  template:
-    spec:
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app: provider-proxmox
-              topologyKey: kubernetes.io/hostname
-```
+## Performance tips
 
-## Troubleshooting
+- **Token auth over password auth**: avoids the session-ticket renewal cycle.
+- **qcow2 + ZFS only when you need it**: ZFS does its own snapshotting; qcow2 on ZFS doubles the overhead.
+- **Pin the provider pod to a host with fast connectivity to the PVE cluster**: the API is chatty (one call per VM operation, plus task polling).
+- **`PROVIDER_NODE_SELECTOR` for HA pinning**: keeps related VMs on the same node where shared storage is local.
 
-### Common Issues
+## API reference
 
-#### ❌ "endpoint is required" Error
-
-**Symptom**: Provider pod crashes with `ERROR Failed to create PVE client error="endpoint is required"`
-
-**Cause**: Missing or empty `PVE_ENDPOINT` environment variable
-
-**Solution**:
-```yaml
-# Ensure PVE_ENDPOINT is set in deployment
-env:
-  - name: PVE_ENDPOINT
-    value: "https://your-proxmox.example.com:8006/api2"
-```
-
-#### ❌ Connection Timeout/Refused
-
-**Symptom**: Provider fails with connection timeouts or "connection refused"
-
-**Cause**: Network connectivity issues or wrong endpoint URL
-
-**Solutions**:
-1. **Verify endpoint**: Test from a pod in the cluster:
-   ```bash
-   kubectl run test-curl --rm -i --tty --image=curlimages/curl -- \
-     curl -k https://your-proxmox.example.com:8006/api2/json/version
-   ```
-
-2. **Check firewall**: Ensure port 8006 is accessible from Kubernetes cluster
-
-3. **Verify URL format**: Should be `https://hostname:8006/api2` (note the `/api2` path)
-
-#### ❌ TLS Certificate Errors
-
-**Symptom**: `x509: certificate signed by unknown authority`
-
-**Solutions**:
-- **Development**: Set `PVE_INSECURE_SKIP_VERIFY=true` (not for production!)
-- **Production**: Provide valid TLS certificates or CA bundle
-
-#### ❌ Authentication Failures
-
-**Symptom**: `401 Unauthorized` or `authentication failure`
-
-**Solutions**:
-1. **Verify token permissions**:
-   ```bash
-   # Test API token manually
-   curl -k "https://pve.example.com:8006/api2/json/version" \
-     -H "Authorization: PVEAPIToken=USER@REALM!TOKENID=SECRET"
-   ```
-
-2. **Check user privileges**: Ensure user has VM management permissions
-3. **Verify token format**: Should be `user@realm!tokenid` (note the `!`)
-
-#### ❌ Provider Not Starting
-
-**Symptom**: Pod in `CrashLoopBackOff` or `0/1 Ready`
-
-**Diagnostic Steps**:
-```bash
-# Check pod logs
-kubectl logs -n virtrigaud-system deployment/virtrigaud-provider-proxmox
-
-# Check environment variables
-kubectl describe pod -n virtrigaud-system -l app.kubernetes.io/component=provider-proxmox
-
-# Verify configuration
-kubectl get secret proxmox-credentials -o yaml
-```
-
-### Validation Commands
-
-Test your Proxmox connection before deploying:
-
-```bash
-# 1. Test network connectivity
-telnet your-proxmox.example.com 8006
-
-# 2. Test API endpoint
-curl -k https://your-proxmox.example.com:8006/api2/json/version
-
-# 3. Test authentication
-curl -k "https://your-proxmox.example.com:8006/api2/json/nodes" \
-  -H "Authorization: PVEAPIToken=USER@REALM!TOKENID=SECRET"
-
-# 4. Test from within cluster
-kubectl run debug --rm -i --tty --image=curlimages/curl -- sh
-# Then run curl commands from inside the pod
-```
-
-### Debug Logging
-
-Enable verbose logging for the provider:
-
-```yaml
-providers:
-  proxmox:
-    env:
-      - name: LOG_LEVEL
-        value: "debug"
-      - name: PVE_ENDPOINT
-        value: "https://pve.example.com:8006/api2"
-```
-
-## API Reference
-
-For complete API reference, see the [Provider API Documentation](../api-reference/).
-
-## Contributing
-
-To contribute to the Proxmox provider:
-
-1. See the [Provider Development Guide](tutorial.md)
-2. Check the [GitHub repository](https://github.com/projectbeskar/virtrigaud)
-3. Review [open issues](https://github.com/projectbeskar/virtrigaud/labels/provider%2Fproxmox)
+- Full CRD field reference: [Generated CRD docs](../references/generated-crd-docs.md).
+- Provider gRPC contract: [Generated gRPC docs](../references/grpc-api.md).
+- Capability matrix (all providers): [Capabilities](providers-capabilities.md).
+- Proxmox API reference: [Proxmox VE API](https://pve.proxmox.com/pve-docs/api-viewer/).
 
 ## Support
 
-- **Documentation**: [VirtRigaud Docs](https://projectbeskar.github.io/virtrigaud/)
-- **Issues**: [GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues)
-- **Community**: [Discord](https://discord.gg/projectbeskar)
+- Documentation: [VirtRigaud Docs](https://projectbeskar.github.io/virtrigaud/)
+- Issues: [GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues) — label `provider/proxmox`
