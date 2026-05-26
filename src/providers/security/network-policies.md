@@ -3,723 +3,354 @@ Copyright (c) 2026 VirtRigaud Creators
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Network Policies for Provider Security
+# NetworkPolicies for VirtRigaud
 
-This guide covers Kubernetes NetworkPolicy configurations to secure communication between VirtRigaud components and provider services.
+This page gives concrete NetworkPolicy templates for the manager and provider pods in **v0.3.6**. With mTLS not yet wired through the manager-provider gRPC channel (see [mTLS](mtls.md)), **NetworkPolicy is the primary compensating control** for the pod-network path. Regulated deployments should treat the policies on this page as required, not optional.
 
-## Overview
+!!! warning "NetworkPolicy requires an enforcing CNI"
+    NetworkPolicy is a Kubernetes API; enforcement depends on the CNI. The major CNIs that enforce it are Calico, Cilium, Antrea, Kube-router, and Weave. **Flannel does not enforce NetworkPolicy by default.** Verify with `kubectl get pods -n kube-system` and your CNI's documentation before assuming these policies are taking effect.
 
-NetworkPolicies provide network-level security by controlling traffic flow between pods, namespaces, and external endpoints. For VirtRigaud providers, this includes:
+## Port surface in v0.3.6
 
-- **Ingress Control**: Restricting which services can communicate with providers
-- **Egress Control**: Limiting provider access to external hypervisor endpoints
-- **Namespace Isolation**: Preventing cross-tenant communication
-- **External Access**: Controlling access to hypervisor management interfaces
+Verify against `cmd/manager/main.go`, `charts/virtrigaud/templates/manager-deployment.yaml`, `cmd/provider-*/main.go`, and `internal/controller/provider_controller.go:617-652`.
 
-## Basic NetworkPolicy Template
+### Manager pod
 
-### Provider Ingress Policy
+| Port  | Protocol | Purpose                                                | Notes                                                                |
+|-------|----------|--------------------------------------------------------|----------------------------------------------------------------------|
+| 8080  | TCP      | Prometheus `/metrics` endpoint                          | HTTP by default; HTTPS + RBAC when `--metrics-secure=true`           |
+| 8081  | TCP      | Health probes (`/healthz`, `/readyz`)                   | HTTP, used by kubelet only                                            |
+| 9443  | TCP      | Admission webhook server                                | TLS; the kube-apiserver dials this for CRD webhooks                  |
 
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: provider-ingress
-  namespace: provider-namespace
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: virtrigaud-provider
-  policyTypes:
-    - Ingress
-  ingress:
-    # Allow from VirtRigaud manager
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: virtrigaud-system
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: virtrigaud-manager
-      ports:
-        - protocol: TCP
-          port: 9443  # gRPC provider port
-    
-    # Allow health checks from monitoring
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: monitoring
-        - podSelector:
-            matchLabels:
-              app: prometheus
-      ports:
-        - protocol: TCP
-          port: 8080  # Health/metrics port
-    
-    # Allow from same namespace (for debugging)
-    - from:
-        - podSelector: {}
-      ports:
-        - protocol: TCP
-          port: 8080
-```
+The manager does **not** open a gRPC server port — it is purely a gRPC client to providers.
 
-### Provider Egress Policy
+### Provider pod (any of vsphere / libvirt / proxmox / mock)
+
+| Port  | Protocol | Purpose                          | Notes                                                                |
+|-------|----------|----------------------------------|----------------------------------------------------------------------|
+| 9443  | TCP      | gRPC server (`provider.v1.Provider`) | Plaintext in v0.3.6 (see [mTLS](mtls.md))                       |
+| 8080  | TCP      | Health probes (`/healthz`)        | HTTP, used by kubelet only. NOT a metrics endpoint.                   |
+
+The provider's health endpoint on `:8080` is a `kubelet`-only path. Provider pods do not export Prometheus metrics — all `virtrigaud_*` series come from the manager pod.
+
+### Hypervisor endpoints (provider egress)
+
+| Provider     | Egress destination                              | Port(s)         |
+|--------------|--------------------------------------------------|-----------------|
+| vSphere      | vCenter SOAP API                                 | 443 TCP         |
+| Libvirt      | libvirt host over SSH (`qemu+ssh://`)            | 22 TCP          |
+| Libvirt      | libvirt daemon over TLS (`qemu+tls://`)          | 16514 TCP       |
+| Libvirt      | libvirt daemon over plain TCP (`qemu+tcp://`)    | 16509 TCP       |
+| Proxmox      | Proxmox VE REST API                              | 8006 TCP        |
+
+For the libvirt provider over SSH, also note the [SSH host-key verification gap](../libvirt.md#authentication) and plan the egress allowlist tightly (single host CIDR, not a broad block).
+
+## Default-deny baseline
+
+Apply a default-deny NetworkPolicy in every namespace that hosts a manager or provider pod, then layer specific allow rules on top.
 
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: provider-egress
-  namespace: provider-namespace
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: virtrigaud-provider
-  policyTypes:
-    - Egress
-  egress:
-    # Allow DNS resolution
-    - to: []
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-    
-    # Allow HTTPS to Kubernetes API
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              name: kube-system
-      ports:
-        - protocol: TCP
-          port: 443
-    
-    # Allow access to hypervisor management interfaces
-    - to: []
-      ports:
-        - protocol: TCP
-          port: 443  # vCenter HTTPS
-        - protocol: TCP
-          port: 80   # vCenter HTTP (if needed)
-    
-    # For libvirt providers - allow access to hypervisor nodes
-    - to:
-        - podSelector:
-            matchLabels:
-              node-role.kubernetes.io/worker: "true"
-      ports:
-        - protocol: TCP
-          port: 16509  # libvirt daemon
-```
-
-## Environment-Specific Policies
-
-### vSphere Provider
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: vsphere-provider-policy
-  namespace: vsphere-providers
-  labels:
-    provider: vsphere
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: virtrigaud-provider-runtime
-      provider: vsphere
-  policyTypes:
-    - Ingress
-    - Egress
-  
-  ingress:
-    # Manager access
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: virtrigaud-system
-      ports:
-        - protocol: TCP
-          port: 9443
-    
-    # Monitoring access
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: monitoring
-      ports:
-        - protocol: TCP
-          port: 8080
-
-  egress:
-    # DNS
-    - to: []
-      ports:
-        - protocol: UDP
-          port: 53
-    
-    # vCenter access (specific IP ranges)
-    - to:
-        - ipBlock:
-            cidr: 10.0.0.0/8
-            except:
-              - 10.244.0.0/16  # Exclude pod network
-      ports:
-        - protocol: TCP
-          port: 443
-    
-    - to:
-        - ipBlock:
-            cidr: 192.168.0.0/16
-      ports:
-        - protocol: TCP
-          port: 443
-    
-    # ESXi host access for direct operations
-    - to:
-        - ipBlock:
-            cidr: 10.1.0.0/24  # ESXi management network
-      ports:
-        - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 902   # vCenter agent
-```
-
-### Libvirt Provider
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: libvirt-provider-policy
-  namespace: libvirt-providers
-  labels:
-    provider: libvirt
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: virtrigaud-provider-runtime
-      provider: libvirt
-  policyTypes:
-    - Ingress
-    - Egress
-  
-  ingress:
-    # Manager access
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: virtrigaud-system
-      ports:
-        - protocol: TCP
-          port: 9443
-    
-    # Monitoring access
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: monitoring
-      ports:
-        - protocol: TCP
-          port: 8080
-
-  egress:
-    # DNS
-    - to: []
-      ports:
-        - protocol: UDP
-          port: 53
-    
-    # Access to hypervisor nodes
-    - to: []
-      ports:
-        - protocol: TCP
-          port: 16509  # libvirt daemon
-        - protocol: TCP
-          port: 22     # SSH for remote libvirt
-    
-    # Access to shared storage (NFS, iSCSI, etc.)
-    - to:
-        - ipBlock:
-            cidr: 10.2.0.0/24  # Storage network
-      ports:
-        - protocol: TCP
-          port: 2049  # NFS
-        - protocol: TCP
-          port: 3260  # iSCSI
-        - protocol: UDP
-          port: 111   # RPC portmapper
-```
-
-### Mock Provider (Development)
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: mock-provider-policy
-  namespace: development
-  labels:
-    provider: mock
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: virtrigaud-provider-runtime
-      provider: mock
-  policyTypes:
-    - Ingress
-    - Egress
-  
-  ingress:
-    # Allow from manager and other development pods
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              environment: development
-      ports:
-        - protocol: TCP
-          port: 9443
-        - protocol: TCP
-          port: 8080
-
-  egress:
-    # Allow all egress for development environment
-    - to: []
-```
-
-## Multi-Tenant Isolation
-
-### Tenant Namespace Policies
-
-```yaml
-# Template for tenant-specific policies
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: tenant-isolation
-  namespace: tenant-{{TENANT_NAME}}
-  labels:
-    tenant: "{{TENANT_NAME}}"
-spec:
-  podSelector: {}  # Apply to all pods in namespace
-  policyTypes:
-    - Ingress
-    - Egress
-  
-  ingress:
-    # Allow from same tenant namespace
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              tenant: "{{TENANT_NAME}}"
-    
-    # Allow from VirtRigaud system namespace
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: virtrigaud-system
-    
-    # Allow from monitoring namespace
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: monitoring
-
-  egress:
-    # Allow to same tenant namespace
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              tenant: "{{TENANT_NAME}}"
-    
-    # Allow to VirtRigaud system namespace
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              name: virtrigaud-system
-    
-    # DNS resolution
-    - to: []
-      ports:
-        - protocol: UDP
-          port: 53
-    
-    # External hypervisor access (tenant-specific IP ranges)
-    - to:
-        - ipBlock:
-            cidr: "{{TENANT_HYPERVISOR_CIDR}}"
-      ports:
-        - protocol: TCP
-          port: 443
-```
-
-### Cross-Tenant Communication Prevention
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: deny-cross-tenant
-  namespace: tenant-production
+  name: default-deny
+  namespace: virtrigaud-system
 spec:
   podSelector: {}
   policyTypes:
     - Ingress
     - Egress
-  
-  ingress:
-    # Explicitly deny from other tenant namespaces
-    - from: []
-      # Empty from selector with explicit namespace exclusions
-  
-  egress:
-    # Explicitly deny to other tenant namespaces
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              name: virtrigaud-system
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              name: monitoring
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              tenant: production
-    # Deny all other namespace access
 ```
 
-## Advanced Policies
+Repeat in the namespace where the per-Provider Deployments land (by default the same namespace as the manager).
 
-### Time-Based Access Control
-
-```yaml
-# Use external controllers like OPA Gatekeeper for time-based policies
-apiVersion: templates.gatekeeper.sh/v1beta1
-kind: ConstraintTemplate
-metadata:
-  name: timerestriction
-spec:
-  crd:
-    spec:
-      names:
-        kind: TimeRestriction
-      validation:
-        type: object
-        properties:
-          allowedHours:
-            type: array
-            items:
-              type: integer
-            description: "Allowed hours (0-23) for network access"
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package timerestriction
-        
-        violation[{"msg": msg}] {
-          current_hour := time.now_ns() / 1000000000 / 3600 % 24
-          not current_hour in input.parameters.allowedHours
-          msg := sprintf("Network access not allowed at hour %v", [current_hour])
-        }
-
----
-apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: TimeRestriction
-metadata:
-  name: business-hours-only
-spec:
-  match:
-    kinds:
-      - apiGroups: ["networking.k8s.io"]
-        kinds: ["NetworkPolicy"]
-    namespaces: ["production"]
-  parameters:
-    allowedHours: [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]  # 8 AM - 5 PM
-```
-
-### Dynamic IP Allow-listing
+## Manager NetworkPolicy
 
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: dynamic-hypervisor-access
-  namespace: provider-namespace
-  annotations:
-    # Use external controllers to update IP blocks dynamically
-    network-policy-controller/update-interval: "300s"
-    network-policy-controller/ip-source: "configmap:hypervisor-ips"
+  name: virtrigaud-manager
+  namespace: virtrigaud-system
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: virtrigaud-provider
-  policyTypes:
-    - Egress
-  egress:
-    # Will be dynamically updated by controller
-    - to:
-        - ipBlock:
-            cidr: 10.0.0.0/8
-    # Static rules remain
-    - to: []
-      ports:
-        - protocol: UDP
-          port: 53
-```
-
-## Monitoring and Troubleshooting
-
-### NetworkPolicy Monitoring
-
-```yaml
-# ServiceMonitor for network policy violations
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: networkpolicy-monitoring
-  namespace: monitoring
-spec:
-  selector:
-    matchLabels:
-      app: networkpolicy-exporter
-  endpoints:
-    - port: metrics
-      interval: 30s
-      path: /metrics
-
----
-# Example alerts for network policy violations
-apiVersion: monitoring.coreos.com/v1
-kind: PrometheusRule
-metadata:
-  name: networkpolicy-alerts
-  namespace: monitoring
-spec:
-  groups:
-    - name: networkpolicy.rules
-      rules:
-        - alert: NetworkPolicyDeniedConnections
-          expr: increase(networkpolicy_denied_connections_total[5m]) > 10
-          for: 2m
-          labels:
-            severity: warning
-          annotations:
-            summary: "High number of denied network connections"
-            description: "{{ $labels.source_namespace }}/{{ $labels.source_pod }} had {{ $value }} denied connections to {{ $labels.dest_namespace }}/{{ $labels.dest_pod }}"
-```
-
-### Debug NetworkPolicies
-
-```bash
-#!/bin/bash
-# debug-networkpolicy.sh
-
-NAMESPACE=${1:-default}
-POD_NAME=${2}
-
-echo "=== NetworkPolicy Debug for $NAMESPACE/$POD_NAME ==="
-
-# List all NetworkPolicies in namespace
-echo "NetworkPolicies in namespace $NAMESPACE:"
-kubectl get networkpolicy -n $NAMESPACE
-
-# Show specific NetworkPolicy details
-echo -e "\nNetworkPolicy details:"
-kubectl get networkpolicy -n $NAMESPACE -o yaml
-
-# Test connectivity
-if [ ! -z "$POD_NAME" ]; then
-    echo -e "\nTesting connectivity from $POD_NAME:"
-    
-    # Test DNS resolution
-    kubectl exec -n $NAMESPACE $POD_NAME -- nslookup kubernetes.default.svc.cluster.local
-    
-    # Test internal connectivity
-    kubectl exec -n $NAMESPACE $POD_NAME -- wget -qO- --timeout=5 http://kubernetes.default.svc.cluster.local/api
-    
-    # Test external connectivity (adjust as needed)
-    kubectl exec -n $NAMESPACE $POD_NAME -- wget -qO- --timeout=5 https://google.com
-fi
-
-# Check iptables rules (if accessible)
-echo -e "\nIPTables rules (if accessible):"
-kubectl get nodes -o wide
-echo "Run the following on a node to see iptables:"
-echo "sudo iptables -L -n | grep -E '(KUBE|Chain)'"
-```
-
-### CNI-Specific Troubleshooting
-
-#### Calico
-
-```bash
-# Check Calico network policies
-kubectl get networkpolicy --all-namespaces
-kubectl get globalnetworkpolicy
-
-# Check Calico endpoints
-kubectl get endpoints --all-namespaces
-
-# Debug Calico connectivity
-kubectl exec -it -n kube-system <calico-node-pod> -- /bin/sh
-calicoctl get wep --all-namespaces
-calicoctl get netpol --all-namespaces
-```
-
-#### Cilium
-
-```bash
-# Check Cilium network policies
-kubectl get cnp --all-namespaces  # Cilium Network Policies
-kubectl get ccnp --all-namespaces # Cilium Cluster Network Policies
-
-# Debug Cilium connectivity
-kubectl exec -it -n kube-system <cilium-pod> -- cilium endpoint list
-kubectl exec -it -n kube-system <cilium-pod> -- cilium policy get
-```
-
-## Security Best Practices
-
-### 1. Principle of Least Privilege
-
-```yaml
-# Example: Minimal egress for a provider
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: minimal-egress-example
-spec:
-  podSelector:
-    matchLabels:
-      app: provider
-  policyTypes:
-    - Egress
-  egress:
-    # Only allow what's absolutely necessary
-    - to: []
-      ports:
-        - protocol: UDP
-          port: 53  # DNS only
-    - to:
-        - ipBlock:
-            cidr: 10.1.1.100/32  # Specific vCenter IP only
-      ports:
-        - protocol: TCP
-          port: 443  # HTTPS only
-```
-
-### 2. Default Deny Policies
-
-```yaml
-# Apply default deny to all namespaces
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: default-deny-all
-  namespace: production
-spec:
-  podSelector: {}
+      app.kubernetes.io/component: manager
+      app.kubernetes.io/name: virtrigaud
   policyTypes:
     - Ingress
     - Egress
-  # Empty ingress/egress rules = deny all
-```
 
-### 3. Regular Policy Auditing
-
-```bash
-#!/bin/bash
-# audit-networkpolicies.sh
-
-echo "=== NetworkPolicy Audit Report ==="
-echo "Generated: $(date)"
-echo
-
-# Check for namespaces without NetworkPolicies
-echo "Namespaces without NetworkPolicies:"
-for ns in $(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}'); do
-    if [ $(kubectl get networkpolicy -n $ns --no-headers 2>/dev/null | wc -l) -eq 0 ]; then
-        echo "  - $ns (WARNING: No network policies)"
-    fi
-done
-
-echo
-
-# Check for overly permissive policies
-echo "Potentially overly permissive policies:"
-kubectl get networkpolicy --all-namespaces -o json | jq -r '
-  .items[] | 
-  select(
-    (.spec.egress[]?.to // []) | length == 0 or
-    (.spec.ingress[]?.from // []) | length == 0
-  ) | 
-  "\(.metadata.namespace)/\(.metadata.name) - Check for overly broad rules"
-'
-
-echo
-
-# Check for unused NetworkPolicies
-echo "NetworkPolicies with no matching pods:"
-kubectl get networkpolicy --all-namespaces -o json | jq -r '
-  .items[] as $np |
-  $np.metadata.namespace as $ns |
-  $np.spec.podSelector as $selector |
-  if ($selector | keys | length) == 0 then
-    "\($ns)/\($np.metadata.name) - Applies to all pods in namespace"
-  else
-    "\($ns)/\($np.metadata.name) - Check if pods match selector"
-  end
-'
-```
-
-### 4. Integration with Service Mesh
-
-```yaml
-# Example: Istio integration with NetworkPolicies
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: istio-compatible-policy
-spec:
-  podSelector:
-    matchLabels:
-      app: provider
-  policyTypes:
-    - Ingress
-    - Egress
   ingress:
-    # Allow Istio sidecar communication
-    - from:
-        - podSelector:
-            matchLabels:
-              app: istio-proxy
-      ports:
-        - protocol: TCP
-          port: 15090  # Istio pilot
-    # Your application ports
+    # /metrics — only from your Prometheus pod.
+    # Tighten the selector to match your monitoring stack
+    # (kube-prometheus-stack defaults shown).
     - from:
         - namespaceSelector:
             matchLabels:
-              name: virtrigaud-system
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 8080
+
+    # Webhook :9443 — only from the kube-apiserver.
+    # The CNI must expose an apiserver selector; on managed
+    # clusters check the cloud provider's recommendation.
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              component: kube-apiserver
       ports:
         - protocol: TCP
           port: 9443
+
+    # Health probes :8081 are kubelet-initiated and do not
+    # traverse pod network. No NetworkPolicy entry needed —
+    # kubelet bypasses NetworkPolicy by design.
+
   egress:
-    # Allow Istio control plane
+    # DNS to kube-system CoreDNS.
     - to:
         - namespaceSelector:
             matchLabels:
-              name: istio-system
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # kube-apiserver — for ListWatch and SubjectAccessReview.
+    # On most clusters the apiserver is at the cluster-internal
+    # virtual IP 10.96.0.1:443. If yours differs, adjust the CIDR.
+    - to:
+        - ipBlock:
+            cidr: 10.96.0.1/32  # cluster apiserver virtual IP
       ports:
         - protocol: TCP
-          port: 15010  # Pilot
+          port: 443
+
+    # Egress to provider pods (gRPC :9443) in the same namespace
+    # AND in any namespace that holds provider deployments. The
+    # provider controller deploys providers into the same namespace
+    # as the manager unless overridden.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: provider-runtime
+      ports:
         - protocol: TCP
-          port: 15011  # Pilot secure
+          port: 9443
 ```
 
+If your provider runtimes live in a different namespace than the manager, add a `namespaceSelector` to the manager's egress rule and a matching `namespaceSelector` on the providers' ingress rule below.
+
+## Provider NetworkPolicy
+
+This is the **single most important policy** in v0.3.6. With gRPC plaintext between manager and provider, the provider pod must be reachable only from the manager pod.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: virtrigaud-provider
+  namespace: virtrigaud-system  # adjust if providers run elsewhere
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: provider-runtime
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # ONLY the manager pod may dial the provider's gRPC port.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: manager
+              app.kubernetes.io/name: virtrigaud
+      ports:
+        - protocol: TCP
+          port: 9443
+
+    # Health probes :8080 are kubelet-initiated; no rule needed.
+
+  egress:
+    # DNS — required for resolving the hypervisor endpoint hostname.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # Hypervisor API — adjust per provider type. Each provider needs
+    # exactly ONE of these blocks. Replace the CIDR with the actual
+    # hypervisor host or vCenter VIP.
+
+    # --- vSphere example ---
+    - to:
+        - ipBlock:
+            cidr: 10.10.20.5/32  # vCenter VIP
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # --- Libvirt-over-SSH example (replace with your libvirt host) ---
+    # - to:
+    #     - ipBlock:
+    #         cidr: 10.10.30.10/32
+    #   ports:
+    #     - protocol: TCP
+    #       port: 22
+
+    # --- Proxmox example ---
+    # - to:
+    #     - ipBlock:
+    #         cidr: 10.10.40.20/32
+    #   ports:
+    #     - protocol: TCP
+    #       port: 8006
+```
+
+!!! note "Specify hypervisor CIDRs explicitly"
+    Do not use broad blocks like `10.0.0.0/8`. The hypervisor endpoint is highly sensitive — write the policy with single-host CIDRs (`/32`) where possible and document each.
+
+## Per-provider variants
+
+### vSphere
+
+The vSphere provider needs egress to:
+
+- vCenter SOAP API (`/sdk` endpoint) on TCP 443
+- Optionally ESXi hosts directly if your topology has the provider talk to ESXi for some operations (rare in current code paths)
+
+Use the template above, with the egress `ipBlock` pointing at the vCenter VIP only.
+
+### Libvirt (qemu+ssh://)
+
+The libvirt provider needs egress to the libvirt host on TCP 22. Combine the NetworkPolicy below with the SSH-host-key warning on the [libvirt provider page](../libvirt.md#authentication) — the NetworkPolicy ensures the SSH traffic does not cross an untrusted boundary, which is the project's official mitigation for the missing host-key verification.
+
+```yaml
+egress:
+  - to:
+      - ipBlock:
+          cidr: 10.10.30.10/32  # libvirt host
+    ports:
+      - protocol: TCP
+        port: 22
+```
+
+The libvirt provider also runs `scp` for disk transfers on the same SSH connection — that is still port 22, no extra rule needed.
+
+### Proxmox
+
+The Proxmox provider needs egress to the Proxmox VE REST API on TCP 8006.
+
+```yaml
+egress:
+  - to:
+      - ipBlock:
+          cidr: 10.10.40.20/32  # PVE node or cluster VIP
+    ports:
+      - protocol: TCP
+        port: 8006
+```
+
+If your PVE deployment is a cluster, list all node IPs (or the cluster's shared VIP).
+
+### Mock provider
+
+The mock provider has no egress requirement beyond DNS. Its ingress rule is identical to the production providers — only the manager pod may dial it.
+
+## Verification
+
+After applying the policies, verify enforcement from inside a pod that should be denied:
+
+```bash
+# From a random pod in a different namespace, attempt to dial the
+# provider's gRPC port. The expected outcome is a CONNECTION TIMEOUT
+# (NOT a refused connection — connection refused means there is no
+# policy and the port is just closed; timeout means the policy is
+# dropping the SYN, which is what you want).
+kubectl run -it --rm netcheck \
+  --image=nicolaka/netshoot:v0.13 \
+  --restart=Never \
+  --namespace=default \
+  -- nc -zv -w 5 provider-vsphere-prod.virtrigaud-system.svc.cluster.local 9443
+```
+
+Then verify that the manager pod CAN still dial it:
+
+```bash
+kubectl exec -n virtrigaud-system deploy/virtrigaud-manager -- \
+  /bin/sh -c "command -v nc >/dev/null && nc -zv provider-vsphere-prod 9443"
+```
+
+The manager pod runs distroless and does not include `nc`, so this exec will likely fail with `command not found` — check the gRPC behaviour via a real reconcile instead (look at `virtrigaud_provider_rpc_requests_total` after applying a `VirtualMachine`).
+
+## CNI-specific notes
+
+### Cilium
+
+If you use `CiliumNetworkPolicy` (extends `NetworkPolicy` with L7 rules), you can add gRPC-method-level restrictions:
+
+```yaml
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: virtrigaud-provider-l7
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/component: provider-runtime
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/component: manager
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+```
+
+You CAN add a gRPC-method allowlist here (e.g. allow only `Validate, Create, Describe, Power, Delete, TaskStatus`). Be careful: if you forget a method, the manager will fail with `codes.PermissionDenied` and the operator-visible signal will be `virtrigaud_provider_rpc_requests_total{code="PermissionDenied"}` going up.
+
+### Calico
+
+Calico's `GlobalNetworkPolicy` lets you apply the same rule across all namespaces. Combine with `NetworkSet` for hypervisor IP allowlists that you can update without re-applying every Provider policy:
+
+```yaml
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkSet
+metadata:
+  name: hypervisor-endpoints
+  labels:
+    role: hypervisor
+spec:
+  nets:
+    - 10.10.20.5/32
+    - 10.10.20.6/32
+```
+
+Then reference `selector: role == "hypervisor"` in your `GlobalNetworkPolicy` egress rules.
+
+## See also
+
+- [mTLS](mtls.md) — what this NetworkPolicy is compensating for.
+- [Operations -> Security](../../operations/security.md#v036-security-gap-inventory) — the gap inventory that motivates these policies.
+- [Libvirt provider](../libvirt.md#authentication) — the SSH host-key trust model.
