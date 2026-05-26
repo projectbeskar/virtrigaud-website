@@ -3,241 +3,210 @@ Copyright (c) 2026 VirtRigaud Creators
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Development Guide
+# Development
 
-Welcome to the VirtRigaud development guide! This section provides information for developers who want to contribute to VirtRigaud or build custom providers.
+Reference for contributors and external provider authors working against
+**VirtRigaud v0.3.6**.
 
-## Quick Links
+## Where to go from here
 
-- **[GitHub Repository](https://github.com/projectbeskar/virtrigaud)** - Main project repository
-- **[Building Locally](building-locally.md)** - Build VirtRigaud from source
-- **[Contributing Guide](contributing.md)** - How to contribute
-- **[Testing Locally](testing-locally.md)** - Test your changes
-- **[Provider Development](../providers/tutorial.md)** - Create custom providers
+| Topic | Page |
+|-------|------|
+| Build VirtRigaud from source — manager, in-tree providers, container images | [Building Locally](building-locally.md) |
+| The contribution workflow — branch, test, CHANGELOG, sign-off | [Contributing](contributing.md) |
+| Running the test suites — unit, integration, e2e (Kind), conformance | [Testing Locally](testing-locally.md) |
+| Writing an external provider against the SDK | [Provider Development](providers.md) |
+| Internal provider deep dives (vSphere, Libvirt, Proxmox) | [Provider docs](../providers/vsphere.md) |
+| API surface — CRDs, gRPC contract, metrics catalog | [References section](../references/generated-crd-docs.md) |
 
-## Getting Started with Development
+## Prerequisites (v0.3.6)
 
-### Prerequisites
+The toolchain floor moved in v0.3.6 (PR
+[#125](https://github.com/projectbeskar/virtrigaud/pull/125)):
 
-To develop VirtRigaud, you'll need:
+- **Go 1.26+** — `go.mod` is the source of truth; CI uses
+  `go-version-file: go.mod` so you should match locally. Source builders
+  must upgrade; **binary consumers via released container images are
+  unaffected**.
+- Docker — for image builds and the libvirt provider's CGO toolchain.
+- Kubernetes cluster — `kind`, `k3d`, or a real cluster. `kind` is what
+  the `make test-e2e` target expects.
+- `kubectl`.
+- Helm 3.x.
+- `make`.
 
-- **Go 1.23+** - Primary programming language
-- **Docker** - For building container images
-- **Kubernetes cluster** - kind, k3s, or remote cluster
-- **kubectl** - Kubernetes CLI
-- **Helm 3.x** - Package manager
-- **make** - Build automation
+Optional, depending on what you're building:
 
-### Quick Setup
+- `libvirt-dev` (Debian/Ubuntu) or `libvirt-devel` (Fedora) — required to
+  compile the libvirt provider locally (`make build-provider-libvirt`).
+  The libvirt provider is `CGO_ENABLED=1`; the other providers are pure
+  Go.
+- `golangci-lint` — pinned via `make lint`; will be installed locally
+  under `bin/` on first invocation.
+- `setup-envtest` — `make test` bootstraps this for you.
+
+## One-time bootstrap
 
 ```bash
-# Clone the repository
 git clone https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
 
-# Install development dependencies
-make dev-setup
-
-# Run tests
-make test
-
-# Build binaries
+# Bootstraps controller-gen, envtest, and produces bin/manager.
+# Subsequent invocations are incremental.
 make build
 ```
 
-## Development Workflows
+Running `make build` first is the recommended bootstrap because the target
+declares `gen-crds generate fmt vet` as dependencies, which pulls in the
+code-generation toolchain. Other targets reuse the cached tools.
 
-### Making Code Changes
+## The mandatory edit loop
 
-1. **Fork and clone** the repository
-2. **Create a branch** for your changes
-3. **Make your changes** with tests
-4. **Run tests** locally
-5. **Submit a pull request**
-
-See the [Contributing Guide](contributing.md) for detailed instructions.
-
-### API Development
-
-When modifying API types (CRDs):
+After **any** `.go` change:
 
 ```bash
-# Edit API types
-vim api/infra.virtrigaud.io/v1beta1/virtualmachine_types.go
-
-# Generate code and sync CRDs
-make generate
-make sync-helm-crds
-
-# Verify everything is in sync
-make verify-helm-crds
+make fmt          # must produce no diff
+make lint         # fix every warning
+make test         # all packages pass
+make build        # must succeed
 ```
 
-### Provider Development
-
-Creating a new provider for a hypervisor platform:
-
-1. **Read the** [Provider Development Tutorial](../providers/tutorial.md)
-2. **Implement the** Provider interface
-3. **Add tests** and documentation
-4. **Submit for** provider catalog inclusion
-
-## Project Structure
-
-```
-virtrigaud/
-├── api/                    # API definitions (CRDs)
-│   └── infra.virtrigaud.io/
-│       └── v1beta1/       # API version
-├── cmd/                    # Main applications
-│   ├── manager/           # Controller manager
-│   └── provider-*/        # Provider binaries
-├── internal/              # Internal packages
-│   ├── controllers/       # Kubernetes controllers
-│   ├── providers/         # Provider implementations
-│   └── webhooks/          # Admission webhooks
-├── pkg/                   # Public libraries
-│   ├── grpc/             # gRPC interfaces
-│   └── contracts/        # Provider contracts
-├── config/               # Kustomize configs
-│   ├── crd/             # CRD definitions
-│   ├── manager/         # Manager deployment
-│   └── webhook/         # Webhook configs
-├── charts/              # Helm charts
-│   └── virtrigaud/      # Main Helm chart
-├── docs/                # Documentation source
-└── test/                # Test suites
-```
-
-## Building and Testing
-
-### Build Commands
+If `*_types.go` changed, additionally:
 
 ```bash
-# Build all binaries
-make build
+make update-crds       # alias: make generate manifests sync-helm-crds
+```
 
-# Build specific component
-make build-manager
-make build-provider-vsphere
+Then add or update tests and a CHANGELOG entry. The full mandate is on the
+[Contributing](contributing.md) page; the **CHANGELOG entry is not
+optional** for any change in `api/`, `cmd/`, `internal/`, `charts/`,
+`proto/`, or `sdk/`.
 
-# Build container images
+## Where the code lives
+
+```text
+api/infra.virtrigaud.io/v1beta1/  CRD Go types — source of truth
+cmd/                              manager, providers, CLI
+  manager/                        canonical manager entrypoint (v0.3.6+; #119)
+  provider-{vsphere,libvirt,proxmox,mock}/
+internal/
+  controller/                     reconcilers (flat package, not subpackages)
+  providers/{vsphere,libvirt,proxmox,mock}/   gRPC server implementations
+  transport/grpc/                 manager-side gRPC client + CB interceptor
+  obs/                            metrics, logging, tracing
+  resilience/                     CircuitBreaker primitive (G6 / #112)
+  runtime/                        remote.Resolver, manager runtime helpers
+  scaffold/                       boilerplate helpers
+proto/                            separate Go module: provider.proto + bindings
+sdk/                              separate Go module: provider SDK for external authors
+charts/virtrigaud/                Helm chart with synced CRDs
+config/                           Kustomize CRDs + RBAC + samples
+examples/                         operator-facing YAML examples
+test/{e2e,integration,conformance}/   out-of-tree test suites
+fieldTesting/                     scratch workspace, NOT part of the build
+```
+
+A few legacy paths that appear in older docs **do not exist** in
+v0.3.6 — ignore any reference to them:
+
+- `api/v1beta1/` (the old kubebuilder default — use
+  `api/infra.virtrigaud.io/v1beta1/`).
+- `pkg/grpc/` (use `internal/transport/grpc/` for manager-side and
+  `sdk/provider/` for the SDK).
+
+## Building images
+
+```bash
+# Manager image (uses build/Dockerfile.manager; v0.3.6 unified path)
 make docker-build
-make docker-push
 
-# Build Helm chart
-make helm-package
+# Provider images
+make docker-buildx-provider-vsphere
+make docker-buildx-provider-libvirt
+make docker-buildx-provider-proxmox
+make docker-buildx-provider-mock
+
+# All providers
+make docker-buildx-providers
+
+# Multi-arch
+make docker-build-multiplatform
+make docker-buildx BUILD_PLATFORMS=linux/amd64,linux/arm64
 ```
 
-### Testing Commands
-
-```bash
-# Run unit tests
-make test
-
-# Run integration tests
-make test-integration
-
-# Run provider conformance tests
-make test-vcts
-
-# Run with coverage
-make test-coverage
-
-# Lint code
-make lint
-
-# Format code
-make fmt
-```
-
-See [Testing Locally](testing-locally.md) for more details.
+The manager and provider Dockerfiles accept the same set of build args
+(documented in `build/Dockerfile.manager` and the per-provider
+`cmd/provider-<name>/Dockerfile`) — `BUILDER_IMAGE`, `BASE_IMAGE`,
+`GOPROXY`, CA-cert handling — useful for corporate / banking deployments
+that need a private builder image or an internal proxy.
 
 ## Documentation
 
-### Building Documentation
-
-This documentation site is built with MkDocs. To build locally:
+This site is built with MkDocs Material. The Go code itself does not build
+the docs; the [virtrigaud-website](https://github.com/projectbeskar/virtrigaud-website)
+repository owns them. To preview the site locally:
 
 ```bash
-# Install dependencies
-make install
-
-# Install CRD documentation tools
-make install-crd-tools
-
-# Build documentation
-make build
-
-# Serve with live reload
-make serve
+# In the virtrigaud-website repo
+make install     # pip install -r requirements.txt
+make serve       # mkdocs serve on :8000
 ```
 
-See [Building Locally](building-locally.md) for more information.
+CRD reference pages under `src/references/generated-crd-docs.md` are
+regenerated from the actual CRDs; do not hand-edit them.
 
-### Documentation Structure
+## Provider development
 
-```
-docs/
-├── getting-started/     # Getting started guides
-├── guides/             # Provider guides
-├── providers/          # Provider documentation
-├── examples/           # Example configurations
-├── api-reference/      # API documentation
-└── development/        # This section
-```
+There are two paths to add a provider:
 
-## Release Process
+1. **In-tree** (`internal/providers/<name>/`). Used by vSphere, Libvirt,
+   Proxmox, and Mock. Has the most direct access to the manager's helpers
+   but lives inside the main module.
+2. **Out-of-tree using the SDK** (`sdk/provider/`). For provider authors
+   who want to ship their own gRPC server and image without forking the
+   manager. See [Provider Development](providers.md).
 
-VirtRigaud follows semantic versioning (semver):
+The [Provider Tutorial](../providers/tutorial.md) walks through the
+in-tree case end-to-end and is the most concrete reference; the SDK-based
+case is documented at [Provider Development](providers.md).
 
-- **Major** (v1.0.0): Breaking changes
-- **Minor** (v0.2.0): New features, backwards compatible
-- **Patch** (v0.2.1): Bug fixes
+## Release process
 
-### Creating a Release
+Tagged via `rc → smoke → final`:
 
-1. Update version in relevant files
-2. Generate changelog
-3. Create git tag
-4. Build and publish artifacts
-5. Update Helm chart repository
+1. `git tag v<X.Y.Z>-rc1`; push.
+2. The release workflow builds rc1 container images and runs Trivy scans
+   (which has caught real CVEs pre-promotion — see
+   [v0.3.6 release notes](../operations/upgrade.md#v035-v036)).
+3. Deploy rc1 to a lab cluster (`vr1.lab.k8` is the canonical one);
+   smoke-test.
+4. If clean, tag `v<X.Y.Z>` from the same commit; the final release
+   automation runs.
+5. Update the Helm chart repo and announce.
 
-See the [Release Guide](https://github.com/projectbeskar/virtrigaud/blob/main/docs/releases.md) for details.
+The CHANGELOG entries for each release have authoring attribution per the
+project rules — that is also the audit-trail mechanism for regulated
+deployments.
 
-## Community
+## Getting help
 
-### Getting Help
+- **[GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues)** —
+  bug reports, feature requests, security advisories.
+- **[GitHub Discussions](https://github.com/projectbeskar/virtrigaud/discussions)** —
+  questions, design discussion.
 
-- **[GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues)** - Bug reports, feature requests
-- **[GitHub Discussions](https://github.com/projectbeskar/virtrigaud/discussions)** - Questions, ideas
-- **[Contributing Guide](contributing.md)** - How to contribute
+That's the full list. Older docs referred to a `#virtrigaud` Slack channel;
+**no such channel exists** and that reference was removed in
+[PR #9](https://github.com/projectbeskar/virtrigaud-website/pull/9).
 
-### Code of Conduct
+## Code of conduct
 
 VirtRigaud follows the CNCF Code of Conduct. Be respectful and inclusive.
 
-## Developer Resources
+## Next steps
 
-### Key Documentation
-
-- **[Provider Contract](../providers/tutorial.md)** - Provider interface specification
-- **[API Reference](../references/crds.md)** - CRD specifications
-- **[Architecture](../remote-providers.md)** - System architecture
-- **[Security](../operations/security.md)** - Security considerations
-
-### Tools and Libraries
-
-- **controller-runtime** - Kubernetes controller framework
-- **gRPC** - Provider communication protocol
-- **Kubebuilder** - CRD and controller scaffolding
-- **Helm** - Package management
-- **MkDocs** - Documentation generation
-
-## Next Steps
-
-- **[Set up your development environment](building-locally.md)**
-- **[Read the contributing guide](contributing.md)**
-- **[Run tests locally](testing-locally.md)**
-- **[Build a custom provider](../providers/tutorial.md)**
-- **[Join the community](https://github.com/projectbeskar/virtrigaud)**
+- [Building Locally](building-locally.md) — first time building from
+  source.
+- [Contributing](contributing.md) — opening your first PR.
+- [Testing Locally](testing-locally.md) — running the full test matrix.
+- [Provider Development](providers.md) — writing an SDK-based provider.
