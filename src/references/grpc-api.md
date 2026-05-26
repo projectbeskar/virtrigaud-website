@@ -1,6 +1,17 @@
 # Protocol Documentation
 <a name="top"></a>
 
+## Overview
+
+VirtRigaud providers expose a single gRPC service (`provider.v1.Provider`) over mTLS. The manager connects via the Resolver and client created per-provider. As of **v0.3.6**, every outbound RPC call passes through two mandatory interceptors before reaching the provider process:
+
+- **`providerRPCMetricsInterceptor`** — records `virtrigaud_provider_rpc_*` Prometheus metrics (call count, latency, error rate) for every RPC. Refer to the observability reference for the full metric catalogue.
+- **`providerCircuitBreakerInterceptor`** — wraps the call with a half-open circuit breaker (ref G6 / #112). In the production path the circuit breaker is always active; unit tests may pass a `nil` breaker which the interceptor handles transparently.
+
+Task-creating RPCs (`Create`, `Delete`, `Power`, `Reconfigure`, `HardwareUpgrade`, `SnapshotCreate`, `SnapshotDelete`, `SnapshotRevert`, `Clone`, `ImagePrepare`, `ExportDisk`, `ImportDisk`) additionally register the returned `TaskRef` with the **inflight-task tracker** (ref G7.3 / #130). The controller polls `TaskStatus` until `done=true` or the context is cancelled.
+
+---
+
 ## Table of Contents
 
 - [provider/v1/provider.proto](#provider_v1_provider-proto)

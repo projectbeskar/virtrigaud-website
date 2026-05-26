@@ -687,6 +687,7 @@ _Appears in:_
 | `type` _string_ | Type specifies the disk type (provider-specific) | thin | Enum: [thin thick eagerzeroedthick ssd hdd] <br /> |
 | `expandPolicy` _string_ | ExpandPolicy defines how the disk can be expanded | Offline | Enum: [Online Offline] <br /> |
 | `storageClass` _string_ | StorageClass specifies the storage class (optional) |  |  |
+| `scsi` _[SCSIControllerSpec](#scsicontrollerspec)_ | SCSI specifies SCSI controller configuration (vSphere only) |  |  |
 
 
 #### DiskType
@@ -1475,7 +1476,7 @@ _Appears in:_
 | `purpose` _string_ | Purpose describes the purpose of the migration |  | Enum: [disaster-recovery cloud-migration provider-change testing maintenance] <br /> |
 | `createdBy` _string_ | CreatedBy identifies who or what created the migration |  | MaxLength: 255 <br /> |
 | `project` _string_ | Project identifies the project this migration belongs to |  | MaxLength: 255 <br /> |
-| `environment` _string_ | Environment specifies the environment |  | Enum: [dev staging prod test] <br /> |
+| `environment` _string_ | Environment specifies the environment |  | Enum: [dev staging prod test qa uat] <br /> |
 | `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing the migration |  | MaxProperties: 50 <br /> |
 
 
@@ -1802,7 +1803,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `displayName` _string_ | DisplayName is a human-readable name |  | MaxLength: 255 <br /> |
 | `description` _string_ | Description provides a description |  | MaxLength: 1024 <br /> |
-| `environment` _string_ | Environment specifies the environment (dev, staging, prod) |  | Enum: [dev staging prod test] <br /> |
+| `environment` _string_ | Environment specifies the environment |  | Enum: [dev staging prod test qa uat] <br /> |
 | `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing |  | MaxProperties: 50 <br /> |
 
 
@@ -2038,7 +2039,8 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `cluster` _string_ | Cluster specifies the target cluster |  |  |
 | `host` _string_ | Host specifies the target host |  |  |
-| `datastore` _string_ | Datastore specifies the target datastore |  |  |
+| `datastore` _string_ | Datastore specifies the target datastore. Mutually exclusive with StoragePod; Datastore takes precedence if both are set. |  |  |
+| `storagePod` _string_ | StoragePod specifies a vSphere Datastore Cluster (StoragePod) for automatic datastore selection. The provider selects the datastore with the most free space. Ignored when Datastore is also set. |  |  |
 | `folder` _string_ | Folder specifies the target folder |  |  |
 | `resourcePool` _string_ | ResourcePool specifies the target resource pool |  |  |
 
@@ -2270,7 +2272,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `datastore` _string_ | Datastore specifies the default datastore |  | MaxLength: 255 <br /> |
+| `datastore` _string_ | Datastore specifies the default datastore. Mutually exclusive with StoragePod; Datastore takes precedence if both are set. |  | MaxLength: 255 <br /> |
+| `storagePod` _string_ | StoragePod specifies a vSphere Datastore Cluster (StoragePod) for automatic datastore selection when no explicit Datastore is specified. |  | MaxLength: 255 <br /> |
 | `cluster` _string_ | Cluster specifies the default cluster |  | MaxLength: 255 <br /> |
 | `folder` _string_ | Folder specifies the default folder |  | MaxLength: 255 <br /> |
 | `resourcePool` _string_ | ResourcePool specifies the default resource pool |  | MaxLength: 255 <br /> |
@@ -2428,7 +2431,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `mode` _[ProviderRuntimeMode](#providerruntimemode)_ | Mode specifies the runtime mode (always Remote) | Remote | Enum: [Remote] <br /> |
-| `image` _string_ | Image is the container image for remote providers (required) |  | Pattern: `^[a-zA-Z0-9._/-]+:[a-zA-Z0-9._-]+$` <br /> |
+| `image` _string_ | Image is the container image for remote providers (required). Supports `image:tag`, `image@digest`, or `image:tag@digest` formats. |  | Pattern: `^[a-zA-Z0-9._/-]+(:[a-zA-Z0-9._-]+)?(@[a-zA-Z0-9]+:[a-fA-F0-9]{64})?$` <br /> |
 | `imagePullPolicy` _[PullPolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#pullpolicy-v1-core)_ | ImagePullPolicy defines the image pull policy | IfNotPresent | Enum: [Always Never IfNotPresent] <br /> |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#localobjectreference-v1-core) array_ | ImagePullSecrets are references to secrets for pulling images |  | MaxItems: 10 <br /> |
 | `replicas` _integer_ | Replicas is the number of provider instances (default 1) | 1 | Maximum: 10 <br />Minimum: 1 <br /> |
@@ -2438,6 +2441,8 @@ _Appears in:_
 | `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#toleration-v1-core) array_ | Tolerations allow pods to schedule onto nodes with matching taints |  | MaxItems: 20 <br /> |
 | `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#affinity-v1-core)_ | Affinity defines scheduling constraints |  |  |
 | `securityContext` _[SecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#securitycontext-v1-core)_ | SecurityContext defines security context for provider pods |  |  |
+| `logLevel` _string_ | LogLevel sets the log level for provider pods. Defaults to the controller's log level if not specified. | info | Enum: [debug info warn error] <br /> |
+| `logFormat` _string_ | LogFormat sets the log format for provider pods | text | Enum: [text json] <br /> |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | Env defines additional environment variables for provider pods |  | MaxItems: 50 <br /> |
 | `livenessProbe` _[Probe](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#probe-v1-core)_ | LivenessProbe defines the liveness probe for provider pods |  |  |
 | `readinessProbe` _[Probe](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#probe-v1-core)_ | ReadinessProbe defines the readiness probe for provider pods |  |  |
@@ -2727,6 +2732,24 @@ _Appears in:_
 | `maxSurge` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#intorstring-intstr-util)_ | MaxSurge is the maximum number of VMs that can be created above desired replica count | 25% |  |
 | `partition` _integer_ | Partition indicates the ordinal at which the VMSet should be partitioned for updates |  | Minimum: 0 <br /> |
 | `podManagementPolicy` _[VMSetPodManagementPolicyType](#vmsetpodmanagementpolicytype)_ | PodManagementPolicy controls how VMs are created during initial scale up,<br />when replacing VMs on nodes, or when scaling down | OrderedReady | Enum: [OrderedReady Parallel] <br /> |
+
+
+#### SCSIControllerSpec
+
+
+
+SCSIControllerSpec defines SCSI controller configuration for vSphere
+
+
+
+_Appears in:_
+- [DiskSpec](#diskspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `controller` _integer_ | Controller specifies the SCSI controller bus number (0-3). If not specified, uses the first available controller. |  | Maximum: 3 <br />Minimum: 0 <br /> |
+| `sharedBus` _string_ | SharedBus specifies the SCSI bus sharing mode | noSharing | Enum: [noSharing virtualSharing physicalSharing] <br /> |
+| `controllerType` _string_ | ControllerType specifies the SCSI controller type | pvscsi | Enum: [lsilogic buslogic lsilogic-sas pvscsi] <br /> |
 
 
 #### SecurityConstraints
