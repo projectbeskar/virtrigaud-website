@@ -5,18 +5,18 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Examples
 
-This directory contains comprehensive examples for VirtRigaud v0.2.3+, showcasing all features and capabilities.
+This directory contains examples for VirtRigaud v0.3.6. All YAML examples use the `infra.virtrigaud.io/v1beta1` API.
 
 ## Quick Start Examples
 
 ### Basic Examples
-- **[complete-example.yaml](complete-example.yaml)** - Complete end-to-end example with v0.2.1 features
+- **[complete-example.yaml](complete-example.yaml)** - Complete end-to-end example with Provider, VMClass, VMImage, and VirtualMachine
 - **[vm-ubuntu-small.yaml](vm-ubuntu-small.yaml)** - Simple Ubuntu VM with graceful shutdown
-- **[vmclass-small.yaml](vmclass-small.yaml)** - Basic VMClass with hardware version support
+- **[vmclass-small.yaml](vmclass-small.yaml)** - Basic VMClass definition
 
 ### Provider Examples
-- **[provider-vsphere.yaml](provider-vsphere.yaml)** - Basic vSphere provider configuration
-- **[provider-libvirt.yaml](provider-libvirt.yaml)** - Basic LibVirt provider configuration
+- **[provider-vsphere.yaml](provider-vsphere.yaml)** - vSphere provider configuration
+- **[provider-libvirt.yaml](provider-libvirt.yaml)** - Libvirt provider configuration
 
 ### Resource Examples
 - **[vmimage-ubuntu.yaml](vmimage-ubuntu.yaml)** - VM image configuration
@@ -24,185 +24,104 @@ This directory contains comprehensive examples for VirtRigaud v0.2.3+, showcasin
 
 ## v0.2.1 Feature Examples
 
-### New in v0.2.1
-- **[v021-feature-showcase.yaml](v021-feature-showcase.yaml)** - **🌟 COMPREHENSIVE DEMO** - All v0.2.1 features in one example
-- **[graceful-shutdown-examples.yaml](graceful-shutdown-examples.yaml)** - OffGraceful shutdown configurations
+The following examples were added for v0.2.1 features and are still valid in v0.3.6:
+
+- **[v021-feature-showcase.yaml](v021-feature-showcase.yaml)** - Graceful shutdown, lifecycle hooks, hardware version
+- **[graceful-shutdown-examples.yaml](graceful-shutdown-examples.yaml)** - OffGraceful power state configurations
 - **[vsphere-hardware-versions.yaml](vsphere-hardware-versions.yaml)** - Hardware version management
-- **[disk-sizing-examples.yaml](disk-sizing-examples.yaml)** - Disk size configuration tests
+- **[disk-sizing-examples.yaml](disk-sizing-examples.yaml)** - Disk size configuration
 
 ### Advanced Provider Examples
-- **[vsphere-advanced-example.yaml](vsphere-advanced-example.yaml)** - Advanced vSphere with v0.2.1 features
-- **[libvirt-advanced-example.yaml](libvirt-advanced-example.yaml)** - Advanced LibVirt configuration
-- **[proxmox-complete-example.yaml](proxmox-complete-example.yaml)** - Complete Proxmox setup
-
-### Multi-Provider Examples
+- **[vsphere-advanced-example.yaml](vsphere-advanced-example.yaml)** - Advanced vSphere configuration
+- **[libvirt-advanced-example.yaml](libvirt-advanced-example.yaml)** - Advanced Libvirt configuration
+- **[proxmox-complete-example.yaml](proxmox-complete-example.yaml)** - Proxmox setup
+- **[libvirt-complete-example.yaml](libvirt-complete-example.yaml)** - Complete Libvirt deployment
 - **[multi-provider-example.yaml](multi-provider-example.yaml)** - Multiple providers in one cluster
-- **[libvirt-complete-example.yaml](libvirt-complete-example.yaml)** - Complete LibVirt deployment
 
-## v0.2.3 Feature Summary
+## Migration Examples
 
-### 🔧 VM Reconfiguration (vSphere, Libvirt, Proxmox)
-```yaml
-# Online resource changes (vSphere, Proxmox)
-# Offline changes (Libvirt - requires restart)
-spec:
-  classRef:
-    name: medium    # Change from small to medium
-  powerState: On
-```
+!!! warning "vSphere → Libvirt only tested in v0.3.6"
+    Only the vSphere → Libvirt migration direction is tested. S3 and NFS storage backends are not implemented; the `vmmigration-s3.yaml` and `vmmigration-nfs.yaml` files in this directory reference a fictional storage backend and should not be used. Use `vmmigration-basic.yaml` or `vmmigration-advanced.yaml`.
 
-### 📋 Async Task Tracking (vSphere, Proxmox)
-```yaml
-# Automatic tracking of long-running operations
-# Real-time progress and error reporting
-```
+- **[vmmigration-basic.yaml](vmmigration-basic.yaml)** - Basic vSphere → Libvirt migration
+- **[vmmigration-advanced.yaml](vmmigration-advanced.yaml)** - Migration with storage and network mapping
 
-### 🖥️ Console Access (vSphere, Libvirt)
-```yaml
-# Web console URLs automatically generated
-status:
-  consoleURL: "https://vcenter.example.com/ui/app/vm..."  # vSphere
-  # or
-  consoleURL: "vnc://libvirt-host:5900"  # Libvirt VNC
-```
+## Advanced Examples
 
-### 🌐 Guest Agent Integration (Proxmox)
-```yaml
-# Accurate IP detection via QEMU guest agent
-status:
-  ips:
-    - 192.168.1.100
-    - fd00::1234:5678:9abc:def0
-```
+See the [advanced/](advanced/index.md) subdirectory for:
 
-### 📦 VM Cloning (vSphere)
-```yaml
-# Full and linked clones with automatic snapshot handling
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClone
-metadata:
-  name: web-server-clone
-spec:
-  source:
-    vmRef:
-      name: source-vm
-  options:
-    type: LinkedClone   # or FullClone
-    powerOn: true
-```
+- **[advanced/vm-reconfigure-and-snapshot.yaml](advanced/vm-reconfigure-and-snapshot.yaml)** - VM reconfiguration with pre-reconfigure snapshot
+- **[advanced/vsphere-clone-example.yaml](advanced/vsphere-clone-example.yaml)** - VMClone from an existing VM
+- **[advanced/console-access-example.yaml](advanced/console-access-example.yaml)** - Console URL access
+- **[advanced/snapshot-lifecycle.yaml](advanced/snapshot-lifecycle.yaml)** - Snapshot lifecycle management
+- **[advanced/vsphere-task-tracking.yaml](advanced/vsphere-task-tracking.yaml)** - Async task tracking status
 
-### 🔄 Previous Features (v0.2.1)
+## Nested Virtualization
 
-- **Graceful Shutdown**: OffGraceful power state with VMware Tools
-- **Hardware Version Management**: vSphere hardware version control
-- **Proper Disk Sizing**: Correct disk allocation across providers
-- **Enhanced Lifecycle Management**: postStart/preStop hooks
+- **[nested-virtualization.yaml](nested-virtualization.yaml)** - VMClass with nested virtualization enabled
 
 ## Usage Patterns
 
-### Testing v0.2.3 Features
+### Apply an example
 
-1. **Test VM reconfiguration**:
-   ```bash
-   # Change VM class to trigger reconfiguration
-   kubectl patch virtualmachine my-vm --type='merge' \
-     -p='{"spec":{"classRef":{"name":"medium"}}}'
+```bash
+kubectl apply -f examples/provider-vsphere.yaml
+kubectl apply -f examples/vmimage-ubuntu.yaml
+kubectl apply -f examples/vm-ubuntu-small.yaml
+```
 
-   # Watch the reconfiguration process
-   kubectl get vm my-vm -w
-   ```
+### Watch VM status
 
-2. **Access VM console**:
-   ```bash
-   # Get console URL from VM status
-   kubectl get vm my-vm -o jsonpath='{.status.consoleURL}'
+```bash
+kubectl get vm my-vm -w
+```
 
-   # For VNC (Libvirt): Use any VNC client
-   vncviewer $(kubectl get vm my-vm -o jsonpath='{.status.consoleURL}' | sed 's/vnc:\/\///')
-   ```
+### Get console URL
 
-3. **Monitor async tasks** (vSphere, Proxmox):
-   ```bash
-   # Watch task progress in provider logs
-   kubectl logs -f deployment/virtrigaud-provider-vsphere
-   ```
+```bash
+kubectl get vm my-vm -o jsonpath='{.status.consoleURL}'
+```
 
-4. **Verify guest agent IPs** (Proxmox):
-   ```bash
-   # Check IP addresses from guest agent
-   kubectl get vm my-vm -o jsonpath='{.status.ips}'
-   ```
+### Trigger VM reconfiguration
 
-5. **Test VM cloning** (vSphere):
-   ```bash
-   # Create a clone of existing VM
-   kubectl apply -f - <<EOF
-   apiVersion: infra.virtrigaud.io/v1beta1
-   kind: VMClone
-   metadata:
-     name: web-server-clone
-   spec:
-     source:
-       vmRef:
-         name: web-server-01
-     target:
-       name: web-server-clone
-       classRef:
-         name: small
-     options:
-       type: LinkedClone
-       powerOn: true
-   EOF
-   ```
-
-### Development Workflow
-
-1. **Choose base example** based on your use case
-2. **Customize** provider, class, and VM specifications
-3. **Test locally** with your infrastructure
-4. **Iterate** based on your requirements
-
-### Production Deployment
-
-1. **Start with complete-example.yaml**
-2. **Add security configurations** from security/ subdirectory
-3. **Configure secrets** from secrets/ subdirectory  
-4. **Apply advanced patterns** from advanced/ subdirectory
+```bash
+kubectl patch virtualmachine my-vm --type='merge' \
+  -p='{"spec":{"classRef":{"name":"medium"}}}'
+```
 
 ## File Organization
 
 ```
-docs/examples/
-├── README.md                          # This file
-├── complete-example.yaml             # Complete setup guide
-├── v021-feature-showcase.yaml        # 🌟 v0.2.1 comprehensive demo
-├── vm-ubuntu-small.yaml             # Simple VM example
-├── vmclass-small.yaml               # Basic VMClass
-├── provider-*.yaml                  # Provider configurations
-├── graceful-shutdown-examples.yaml  # OffGraceful demos
-├── vsphere-hardware-versions.yaml   # Hardware version examples
-├── disk-sizing-examples.yaml        # Disk sizing tests
-├── advanced/                        # Complex scenarios
-├── secrets/                         # Secret management
-└── security/                        # Security configurations
+src/examples/
+├── index.md                           # This file
+├── complete-example.yaml             # Complete setup
+├── v021-feature-showcase.yaml        # v0.2.1 features
+├── vm-ubuntu-small.yaml              # Simple VM
+├── vmclass-small.yaml                # Basic VMClass
+├── provider-vsphere.yaml             # vSphere provider
+├── provider-libvirt.yaml             # Libvirt provider
+├── vmimage-ubuntu.yaml               # VM image
+├── vmnetwork-app.yaml                # Network attachment
+├── graceful-shutdown-examples.yaml   # Graceful shutdown
+├── vsphere-hardware-versions.yaml    # Hardware versions
+├── disk-sizing-examples.yaml         # Disk sizing
+├── vmmigration-basic.yaml            # Migration (tested)
+├── vmmigration-advanced.yaml         # Migration with mapping
+├── nested-virtualization.yaml        # Nested virt VMClass
+├── advanced/                         # Complex scenarios
+├── secrets/                          # Secret management
+└── security/                         # Security configurations
 ```
 
 ## Version Compatibility
 
-- **v0.2.3+**: All examples with v0.2.3 features (Reconfigure, Clone, TaskStatus, ConsoleURL, Guest Agent)
-- **v0.2.2**: Nested virtualization, TPM support, snapshot management
-- **v0.2.1**: Graceful shutdown, hardware version, disk sizing fixes
-- **v0.2.0**: Initial production-ready providers
-- **v0.1.x**: Legacy examples in git history
+- **v0.3.6**: All examples in this directory
+- **v0.3.x**: Examples are backward compatible within the v0.3.x line
+- **v0.2.x and older**: Not supported
 
-## Need Help?
+## See Also
 
-- 📖 **Documentation**: [../index.md](../index.md)
-- 🚀 **Quick Start**: [../getting-started/quickstart.md](../getting-started/quickstart.md)
-- 🔧 **CLI Tools**: [../cli-tools.md](../cli-tools.md)
-- 📋 **Upgrade Guide**: [../upgrade.md](../upgrade.md)
-- 🏗️ **Contributing**: [CONTRIBUTING.md](https://github.com/projectbeskar/virtrigaud/blob/main/CONTRIBUTING.md)
-
----
-
-**Pro Tip**: Start with `v021-feature-showcase.yaml` to see all v0.2.1 capabilities in action! 🚀
+- [Getting Started](../getting-started/index.md)
+- [CLI Tools Reference](../references/cli-tools.md)
+- [CRD Reference](../references/crds.md)
+- [Upgrade Guide](../operations/upgrade.md)

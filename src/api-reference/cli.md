@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # CLI Reference
 
-VirtRigaud provides several command-line tools for managing virtual machines, testing providers, and developing new providers. All tools are available as part of VirtRigaud v0.2.0.
+VirtRigaud provides several command-line tools for managing virtual machines, testing providers, and developing new providers. This reference covers v0.3.6.
 
 ## Overview
 
@@ -15,19 +15,20 @@ VirtRigaud provides several command-line tools for managing virtual machines, te
 | [`vcts`](#vcts) | Conformance testing suite | Provider developers, QA teams |
 | [`vrtg-provider`](#vrtg-provider) | Provider development toolkit | Provider developers |
 | [`virtrigaud-loadgen`](#virtrigaud-loadgen) | Load testing and benchmarking | Performance engineers |
+| [`alpha-to-beta-dryrun`](#alpha-to-beta-dryrun) | v1alpha1 migration helper (tombstone) | Pre-v0.3.0 upgraders |
 
 ## Installation
 
 ### From GitHub Releases
 
 ```bash
-# Download the latest release
-curl -L "https://github.com/projectbeskar/virtrigaud/releases/download/v0.2.0/vrtg-linux-amd64" -o vrtg
+# Download v0.3.6
+curl -L "https://github.com/projectbeskar/virtrigaud/releases/download/v0.3.6/vrtg-linux-amd64" -o vrtg
 chmod +x vrtg
 sudo mv vrtg /usr/local/bin/
 
 # Install all CLI tools
-curl -L "https://github.com/projectbeskar/virtrigaud/releases/download/v0.2.0/virtrigaud-cli-linux-amd64.tar.gz" | tar xz
+curl -L "https://github.com/projectbeskar/virtrigaud/releases/download/v0.3.6/virtrigaud-cli-linux-amd64.tar.gz" | tar xz
 sudo mv vrtg vcts vrtg-provider virtrigaud-loadgen /usr/local/bin/
 ```
 
@@ -47,10 +48,10 @@ sudo make install-cli
 ### Using Go
 
 ```bash
-go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.2.0
-go install github.com/projectbeskar/virtrigaud/cmd/vcts@v0.2.0
-go install github.com/projectbeskar/virtrigaud/cmd/vrtg-provider@v0.2.0
-go install github.com/projectbeskar/virtrigaud/cmd/virtrigaud-loadgen@v0.2.0
+go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.3.6
+go install github.com/projectbeskar/virtrigaud/cmd/vcts@v0.3.6
+go install github.com/projectbeskar/virtrigaud/cmd/vrtg-provider@v0.3.6
+go install github.com/projectbeskar/virtrigaud/cmd/virtrigaud-loadgen@v0.3.6
 ```
 
 ## vrtg
@@ -351,109 +352,103 @@ cleanup:
 
 ## vrtg-provider
 
-Development toolkit for creating and maintaining VirtRigaud providers.
+Development toolkit for creating and maintaining VirtRigaud providers. Defined in [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/main.go).
 
 ### Global Flags
 
 ```bash
---verbose            Enable verbose output
--h, --help          Help for vrtg-provider
+--verbose, -v       Enable verbose output
+-h, --help         Help for vrtg-provider
 ```
 
 ### Commands
 
 #### init
 
-Initialize a new provider project.
+Initialize a new provider project. Source: [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/init.go).
 
 ```bash
-# Create a new provider
-vrtg-provider init --name hyperv --type hyperv --output ./hyperv-provider
-
-# Create with custom options
-vrtg-provider init --name aws-ec2 --type aws \
-  --capabilities snapshots,linked-clones \
-  --output ./aws-provider
+vrtg-provider init <provider-name> [flags]
 ```
 
-**Options:**
-- `--name`: Provider name
-- `--type`: Provider type
-- `--capabilities`: Comma-separated capabilities list
-- `--output`: Output directory
-- `--remote`: Generate remote provider (default: true)
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--output, -o` | `.` | Output directory |
+| `--type, -t` | `generic` | Provider type: `vsphere`, `libvirt`, `firecracker`, `qemu`, `generic` |
+| `--remote` | `false` | Generate remote runtime configuration |
+| `--force` | `false` | Overwrite existing files |
+
+```bash
+# Create a libvirt-style provider in ./providers/
+vrtg-provider init myprovider --type libvirt --output ./providers/
+```
 
 #### generate
 
-Generate code for provider components.
+Regenerate protocol buffer bindings. Source: [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/generate.go).
 
-```bash
-# Generate API types
-vrtg-provider generate api --provider-type vsphere
+Run from within a provider project directory (`go.mod` + `Makefile` required).
 
-# Generate client code
-vrtg-provider generate client --provider-type vsphere --api-version v1
-
-# Generate test suite
-vrtg-provider generate tests --provider-type vsphere
-
-# Generate documentation
-vrtg-provider generate docs --provider-type vsphere
-```
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--proto-only` | `false` | Only regenerate proto bindings |
+| `--clean` | `false` | Clean generated files first |
 
 #### verify
 
-Verify provider implementation.
+Verify provider implementation. Source: [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/verify.go).
+
+Run from within a provider project directory.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--skip-build` | `false` | Skip build check |
+| `--skip-tests` | `false` | Skip unit tests |
+| `--skip-conformance` | `false` | Skip VCTS conformance |
+| `--profile` | `core` | Conformance profile: `core`, `snapshot`, `clone`, `advanced` |
 
 ```bash
-# Verify provider structure
-vrtg-provider verify structure --path ./my-provider
+# Full verification (build + tests + conformance core profile)
+vrtg-provider verify
 
-# Verify capabilities
-vrtg-provider verify capabilities --path ./my-provider
-
-# Verify API compatibility
-vrtg-provider verify api --path ./my-provider --api-version v1beta1
+# Skip conformance — useful in CI before a provider endpoint is available
+vrtg-provider verify --skip-conformance
 ```
 
 #### publish
 
-Publish provider artifacts.
+Publish a provider to the VirtRigaud catalog. Source: [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/publish.go).
+
+Run from within a provider project directory.
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--image` | Yes | — | Container image repository |
+| `--repo` | Yes | — | Source code repository URL |
+| `--maintainer` | Yes | — | Maintainer email |
+| `--name` | No | directory name | Provider name |
+| `--tag` | No | `latest` | Image tag |
+| `--license` | No | `Apache-2.0` | SPDX license identifier |
+| `--skip-verify` | No | `false` | Skip VCTS verification |
+| `--dry-run` | No | `false` | Print catalog entry without writing |
+| `--catalog` | No | auto-detect | Path to `providers/catalog.yaml` |
 
 ```bash
-# Build and publish provider image
-vrtg-provider publish --path ./my-provider --registry ghcr.io/myorg
-
-# Publish with specific tag
-vrtg-provider publish --path ./my-provider --tag v1.0.0
-
-# Dry run publication
-vrtg-provider publish --path ./my-provider --dry-run
+# Dry-run preview
+vrtg-provider publish \
+  --image ghcr.io/yourorg/myprovider \
+  --repo https://github.com/yourorg/myprovider \
+  --maintainer you@example.com \
+  --dry-run
 ```
 
-### Provider Structure
+#### version
 
+```bash
+vrtg-provider version
 ```
-my-provider/
-├── cmd/
-│   └── provider-mytype/
-│       ├── Dockerfile
-│       └── main.go
-├── internal/
-│   └── provider/
-│       ├── provider.go
-│       ├── capabilities.go
-│       └── provider_test.go
-├── deploy/
-│   ├── provider.yaml
-│   ├── service.yaml
-│   └── deployment.yaml
-├── docs/
-│   └── README.md
-├── go.mod
-├── go.sum
-└── Makefile
-```
+
+Prints binary version and git SHA.
 
 ## virtrigaud-loadgen
 
@@ -601,6 +596,15 @@ timestamp,scenario,operation,latency_ms,status,provider
 2025-01-15T10:00:05Z,vm-creation,create,failed,timeout,vsphere-prod
 ```
 
+## alpha-to-beta-dryrun
+
+A tombstoned migration helper from the v1alpha1 API era. Source: [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/alpha-to-beta-dryrun/main.go).
+
+!!! warning "No-op in v0.3.6"
+    The v1alpha1 API was removed before v0.3.0. Running this binary exits with an error explaining that v1alpha1 resources should have already been migrated. There are no flags and no useful operations.
+
+---
+
 ## Best Practices
 
 ### Using vrtg
@@ -636,10 +640,9 @@ timestamp,scenario,operation,latency_ms,status,provider
 - **Documentation**: [VirtRigaud Docs](https://projectbeskar.github.io/virtrigaud/)
 - **Issues**: [GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/projectbeskar/virtrigaud/discussions)
-- **Community**: [Discord](https://discord.gg/projectbeskar)
 
 ## Version Information
 
-This documentation covers VirtRigaud CLI tools v0.2.0.
+This reference covers VirtRigaud CLI tools v0.3.6.
 
 For older versions, see the [releases page](https://github.com/projectbeskar/virtrigaud/releases).
