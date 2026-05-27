@@ -157,7 +157,7 @@ Ready. End-to-end time depends on disk size + storage throughput.
 ### Why PVC, not S3/HTTP/NFS
 
 The design rationale is captured in
-`fieldTesting/ADR-0001-transport-grpc-and-capi-integration.md`. Briefly:
+[ADR-0001](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0001-transport-grpc-and-capi-integration.md). Briefly:
 
 - The PVC model treats the intermediate as a first-class K8s resource:
   owned by the `VMMigration` CR, garbage-collected on delete, observable in
