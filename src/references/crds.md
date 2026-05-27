@@ -9,11 +9,15 @@ This document describes all Custom Resource Definitions provided by VirtRigaud.
 
 API group: `infra.virtrigaud.io` / Version: `v1beta1`
 
+VirtRigaud ships **10 CRDs** at v0.3.6. For the full auto-generated field reference, see [generated-crd-docs.md](generated-crd-docs.md).
+
 ---
 
 ## VirtualMachine
 
 The `VirtualMachine` CRD represents a virtual machine instance managed by a provider.
+
+Full schema: [generated-crd-docs.md#virtualmachine](generated-crd-docs.md#virtualmachine)
 
 ### Spec
 
@@ -98,6 +102,8 @@ spec:
 
 The `VMClass` CRD defines resource allocation and hardware profile for virtual machines.
 
+Full schema: [generated-crd-docs.md#vmclass](generated-crd-docs.md#vmclass)
+
 ### Spec
 
 | Field | Type | Required | Default | Description |
@@ -144,6 +150,8 @@ spec:
 
 The `VMImage` CRD defines base templates or images for virtual machines.
 
+Full schema: [generated-crd-docs.md#vmimage](generated-crd-docs.md#vmimage)
+
 ### Spec
 
 | Field | Type | Description |
@@ -184,6 +192,8 @@ spec:
 ## VMNetworkAttachment
 
 The `VMNetworkAttachment` CRD defines provider-specific network configurations that VMs reference.
+
+Full schema: [generated-crd-docs.md#vmnetworkattachment](generated-crd-docs.md#vmnetworkattachment)
 
 ### Spec
 
@@ -236,6 +246,8 @@ spec:
 ## Provider
 
 The `Provider` CRD configures hypervisor connection details and the provider runtime.
+
+Full schema: [generated-crd-docs.md#provider](generated-crd-docs.md#provider)
 
 ### Spec
 
@@ -381,3 +393,186 @@ Used for adopted or migrated VMs instead of `imageRef`.
 | `source` | `string` | — | Origin: `migration`, `clone`, `import`, `snapshot`, `manual` |
 | `sizeGiB` | `int32` | — | Expected disk size |
 | `migrationRef` | `LocalObjectReference` | — | VMMigration audit trail |
+
+---
+
+## VMMigration
+
+The `VMMigration` CRD manages live or offline migration of a virtual machine from one provider to another. In v0.3.6 only the **vSphere → Libvirt** direction is tested. Other pairs may work but are unverified.
+
+Full schema: [generated-crd-docs.md#vmmigration](generated-crd-docs.md#vmmigration)
+
+### Spec summary
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `sourceVMRef` | `ObjectRef` | Yes | Source VirtualMachine |
+| `targetProviderRef` | `ObjectRef` | Yes | Destination provider |
+| `targetClassRef` | `ObjectRef` | No | Override VMClass on destination |
+| `storageMapping` | `[]StorageMapping` | No | Map source datastores/pools to target |
+| `networkMapping` | `[]NetworkMapping` | No | Map source port-groups to target networks |
+| `cutoverPolicy` | `CutoverPolicy` | No | `Immediate` or `Manual` (manual requires a separate patch to trigger cutover) |
+
+### Example
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMMigration
+metadata:
+  name: web-server-migration
+spec:
+  sourceVMRef:
+    name: web-server
+  targetProviderRef:
+    name: libvirt-dev
+  cutoverPolicy: Immediate
+```
+
+---
+
+## VMSnapshot
+
+The `VMSnapshot` CRD represents a point-in-time snapshot of a VirtualMachine. Creating a VMSnapshot resource triggers the provider's snapshot RPC. Libvirt Clone and ImagePrepare RPCs are stubs in v0.3.6 ([#153](https://github.com/projectbeskar/virtrigaud/issues/153), [#154](https://github.com/projectbeskar/virtrigaud/issues/154)).
+
+Full schema: [generated-crd-docs.md#vmsnapshot](generated-crd-docs.md#vmsnapshot)
+
+### Spec summary
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `vmRef` | `LocalObjectReference` | Yes | Target VirtualMachine |
+| `includeMemory` | `bool` | No | Capture in-memory state (vSphere only) |
+| `description` | `string` | No | Human-readable description |
+| `retainPolicy` | `RetainPolicy` | No | `Keep` or `Delete` — controls cleanup on VMSnapshot deletion |
+
+### Example
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMSnapshot
+metadata:
+  name: web-server-snap-pre-upgrade
+spec:
+  vmRef:
+    name: web-server
+  includeMemory: false
+  description: "Before OS upgrade"
+```
+
+---
+
+## VMSet
+
+The `VMSet` CRD manages a fleet of identically-configured VirtualMachines (analogous to a ReplicaSet for VMs). The controller reconciles the desired replica count against live VirtualMachine objects.
+
+Full schema: [generated-crd-docs.md#vmset](generated-crd-docs.md#vmset)
+
+### Spec summary
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `replicas` | `int32` | Yes | Desired instance count |
+| `selector` | `LabelSelector` | Yes | Matches VMs managed by this set |
+| `template` | `VMTemplateSpec` | Yes | VirtualMachine spec template |
+| `scalePolicy` | `VMSetScalePolicy` | No | `Concurrent` (default) or `Sequential` |
+
+### Example
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMSet
+metadata:
+  name: web-workers
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-worker
+  template:
+    metadata:
+      labels:
+        app: web-worker
+    spec:
+      providerRef:
+        name: vsphere-prod
+      classRef:
+        name: small
+      imageRef:
+        name: ubuntu-22-template
+      powerState: On
+```
+
+---
+
+## VMPlacementPolicy
+
+The `VMPlacementPolicy` CRD defines affinity and anti-affinity rules that influence where VMs are placed within a provider. VirtualMachines reference a policy via `spec.placementRef`.
+
+Full schema: [generated-crd-docs.md#vmplacementpolicy](generated-crd-docs.md#vmplacementpolicy)
+
+### Spec summary
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `affinity` | `AffinityRules` | Co-location rules (VM, host, cluster, datastore, zone, application affinity) |
+| `antiAffinity` | `AntiAffinityRules` | Separation rules (same dimensions as above) |
+
+### Example
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMPlacementPolicy
+metadata:
+  name: spread-web-workers
+spec:
+  antiAffinity:
+    hostAntiAffinity:
+      matchLabels:
+        app: web-worker
+```
+
+---
+
+## VMClone
+
+The `VMClone` CRD manages a clone operation — creates a new VirtualMachine from a source VM or template. In v0.3.6 the Libvirt Clone RPC is a stub ([#153](https://github.com/projectbeskar/virtrigaud/issues/153)).
+
+Full schema: [generated-crd-docs.md#vmclone](generated-crd-docs.md#vmclone)
+
+### Spec summary
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `source` | `VMCloneSource` | Yes | `vmRef` (clone from live VM) or `snapshotRef` (clone from snapshot) |
+| `target` | `VMCloneTarget` | Yes | Destination name and optional class/placement overrides |
+| `options` | `VMCloneOptions` | No | `type`: `FullClone` (default) or `LinkedClone`; `powerOn`: auto-power after clone |
+
+### Example
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClone
+metadata:
+  name: web-server-clone
+spec:
+  source:
+    vmRef:
+      name: web-server
+  target:
+    name: web-server-staging
+    classRef:
+      name: small
+  options:
+    type: FullClone
+    powerOn: true
+```
+
+---
+
+## CRD count at v0.3.6
+
+The 10 CRDs in `infra.virtrigaud.io/v1beta1`: `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMMigration`, `VMSnapshot`, `VMSet`, `VMPlacementPolicy`, `VMClone`.
+
+`VMAdoption` is a **controller** (in `internal/controller/`), not a CRD. There is no `VMAdoption` resource in the API group.
+
+For the full machine-generated field reference, see [generated-crd-docs.md](generated-crd-docs.md).

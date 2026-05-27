@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # CLI Tools Reference
 
-VirtRigaud provides a comprehensive set of command-line tools for managing virtual machines, developing providers, running conformance tests, and performing load testing. This guide covers all available CLI tools and their usage.
+VirtRigaud provides a set of command-line tools for managing virtual machines, developing providers, running conformance tests, and performing load testing. This guide covers all available CLI tools and their usage in v0.3.6.
 
 ## Overview
 
@@ -15,6 +15,10 @@ VirtRigaud provides a comprehensive set of command-line tools for managing virtu
 | [`vcts`](#vcts) | Conformance testing suite | Provider developers, QA teams, CI/CD pipelines |
 | [`vrtg-provider`](#vrtg-provider) | Provider development toolkit | Provider developers, Contributors |
 | [`virtrigaud-loadgen`](#virtrigaud-loadgen) | Load testing and benchmarking | Performance engineers, SREs |
+| [`alpha-to-beta-dryrun`](#alpha-to-beta-dryrun) | v1alpha1 migration helper (tombstone) | Operators upgrading from pre-v0.3.0 |
+
+!!! note "Implementation status"
+    Several `vrtg` subcommand handlers print "not implemented" and exit 0 in v0.3.6. The commands are defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg/main.go) and are scaffolded for future releases. Fully implemented commands are noted in each section below.
 
 ## Installation
 
@@ -22,7 +26,7 @@ VirtRigaud provides a comprehensive set of command-line tools for managing virtu
 
 ```bash
 # Download the latest release
-export VIRTRIGAUD_VERSION="v0.2.1"
+export VIRTRIGAUD_VERSION="v0.3.6"
 export PLATFORM="linux-amd64"  # or darwin-amd64, windows-amd64
 
 # Install main CLI tool
@@ -55,10 +59,10 @@ make install-cli PREFIX=/usr/local
 
 ```bash
 # Install specific version
-go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.2.1
-go install github.com/projectbeskar/virtrigaud/cmd/vcts@v0.2.1
-go install github.com/projectbeskar/virtrigaud/cmd/vrtg-provider@v0.2.1
-go install github.com/projectbeskar/virtrigaud/cmd/virtrigaud-loadgen@v0.2.1
+go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.3.6
+go install github.com/projectbeskar/virtrigaud/cmd/vcts@v0.3.6
+go install github.com/projectbeskar/virtrigaud/cmd/vrtg-provider@v0.3.6
+go install github.com/projectbeskar/virtrigaud/cmd/virtrigaud-loadgen@v0.3.6
 
 # Install latest
 go install github.com/projectbeskar/virtrigaud/cmd/vrtg@latest
@@ -87,16 +91,15 @@ vrtg completion powershell | Out-String | Invoke-Expression
 
 ## vrtg
 
-The main CLI tool for managing VirtRigaud resources and virtual machines.
+The main CLI tool for managing VirtRigaud resources and virtual machines. Defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg/main.go).
 
 ### Global Flags
 
 ```bash
 --kubeconfig string   Path to kubeconfig file (default: $KUBECONFIG or ~/.kube/config)
---namespace string    Kubernetes namespace (default: "default")
---output string       Output format: table, json, yaml (default: "table")
---timeout duration    Operation timeout (default: 30s)
---verbose             Enable verbose output
+--namespace, -n       Kubernetes namespace (default: "default")
+--output, -o          Output format: table, json, yaml (default: "table")
+--timeout duration    Request timeout (default: 30s)
 -h, --help           Help for vrtg
 ```
 
@@ -104,28 +107,24 @@ The main CLI tool for managing VirtRigaud resources and virtual machines.
 
 #### vm - Virtual Machine Management
 
-Manage virtual machines with comprehensive lifecycle operations.
+Manage virtual machines with comprehensive lifecycle operations. Aliases: `virtualmachine`, `vms`.
 
 ```bash
-# List virtual machines
+# List virtual machines  [IMPLEMENTED]
 vrtg vm list [flags]
 
-# Describe a virtual machine
+# Describe a virtual machine  [IMPLEMENTED]
 vrtg vm describe <name> [flags]
 
-# Show VM events
+# Show VM events  [IMPLEMENTED]
 vrtg vm events <name> [flags]
 
-# Get VM console URL
+# Get VM console URL  [IMPLEMENTED]
 vrtg vm console-url <name> [flags]
 ```
 
-**Flags:**
-- `--all-namespaces`: List VMs across all namespaces
-- `--label-selector`: Filter by labels (e.g., `app=web,env=prod`)
-- `--field-selector`: Filter by fields (e.g., `spec.powerState=On`)
-- `--sort-by`: Sort output by column (name, namespace, powerState, provider)
-- `--watch`: Watch for changes
+!!! note "v0.3.6 status"
+    `vm list` and `vm describe` query the Kubernetes API directly and print real data. `vm events`, `vm console-url`, `vm snapshot`, `vm clone`, `vrtg init`, and `vrtg diag bundle` are defined but print a "not implemented" message. Output format (`--output json/yaml`) is also not yet implemented.
 
 **Examples:**
 
@@ -444,7 +443,7 @@ Test results are available in multiple formats:
 
 ## vrtg-provider
 
-Provider development toolkit for creating and managing VirtRigaud providers.
+Provider development toolkit for creating and managing VirtRigaud providers. Defined in [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/main.go).
 
 ### Usage
 
@@ -455,163 +454,175 @@ vrtg-provider [command] [flags]
 ### Global Flags
 
 ```bash
---verbose     Enable verbose output
---help        Help for vrtg-provider
+--verbose, -v   Enable verbose output
+--help          Help for vrtg-provider
 ```
 
 ### Commands
 
 #### init - Initialize Provider
 
-Bootstrap a new provider project with scaffolding.
+Bootstrap a new provider project with scaffolded code. Defined in [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/init.go).
 
 ```bash
 vrtg-provider init <provider-name> [flags]
 ```
 
 **Flags:**
-- `--template`: Template to use (grpc, rest, hybrid)
-- `--output-dir`: Output directory (default: current directory)
-- `--module`: Go module name
-- `--author`: Author name for generated files
+- `--output, -o`: Output directory for the provider project (default: `.`)
+- `--type, -t`: Provider type: `vsphere`, `libvirt`, `firecracker`, `qemu`, `generic` (default: `generic`)
+- `--remote`: Generate remote runtime configuration
+- `--force`: Overwrite existing files
 
 **Examples:**
 
 ```bash
-# Create basic gRPC provider
-vrtg-provider init my-provider --template grpc
+# Create a new provider scaffolded for a vSphere-like hypervisor
+vrtg-provider init myprovider --type vsphere
 
-# Create with custom module
-vrtg-provider init my-provider \
-  --template grpc \
-  --module github.com/myorg/my-provider \
-  --author "John Doe <john@example.com>"
+# Create with remote runtime configuration in a specific directory
+vrtg-provider init myprovider --remote --output ./providers/
 
-# Create in specific directory
-vrtg-provider init my-provider \
-  --output-dir /path/to/providers \
-  --template grpc
+# Overwrite an existing scaffold
+vrtg-provider init myprovider --force
 ```
+
+The scaffold is created under `<output>/providers/<provider-name>/`. The provider name must be lowercase alphanumeric with hyphens (max 63 chars).
 
 #### generate - Code Generation
 
-Generate boilerplate code for provider implementation.
+Regenerate protocol buffer bindings and other generated code. Defined in [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/generate.go).
+
+Must be run from within a provider project directory (directory must contain `go.mod` and `Makefile`).
 
 ```bash
-vrtg-provider generate [type] [flags]
+vrtg-provider generate [flags]
 ```
 
-**Types:**
-- `client`: Generate client code
-- `server`: Generate server implementation
-- `tests`: Generate test scaffolding
-- `docs`: Generate documentation templates
+**Flags:**
+- `--proto-only`: Only regenerate protocol buffer bindings
+- `--clean`: Clean generated files before regenerating
 
 **Examples:**
 
 ```bash
-# Generate client code
-vrtg-provider generate client --provider my-provider
+# Regenerate all generated code
+vrtg-provider generate
 
-# Generate test scaffolding
-vrtg-provider generate tests --provider my-provider
+# Regenerate proto bindings only
+vrtg-provider generate --proto-only
 
-# Generate documentation
-vrtg-provider generate docs --provider my-provider
+# Clean and regenerate
+vrtg-provider generate --clean
 ```
 
 #### verify - Verification
 
-Verify provider implementation and compliance.
+Verify provider implementation by running build, unit tests, and VCTS conformance. Defined in [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/verify.go).
+
+Must be run from within a provider project directory.
 
 ```bash
 vrtg-provider verify [flags]
 ```
 
 **Flags:**
-- `--provider-dir`: Provider directory to verify
-- `--check-interface`: Verify interface compliance
-- `--check-docs`: Verify documentation completeness
-- `--check-tests`: Verify test coverage
+- `--skip-build`: Skip build verification
+- `--skip-tests`: Skip unit tests
+- `--skip-conformance`: Skip VCTS conformance tests
+- `--profile`: Conformance test profile: `core`, `snapshot`, `clone`, `advanced` (default: `core`)
 
 **Examples:**
 
 ```bash
-# Basic verification
-vrtg-provider verify --provider-dir ./my-provider
+# Full verification
+vrtg-provider verify
 
-# Comprehensive check
-vrtg-provider verify \
-  --provider-dir ./my-provider \
-  --check-interface \
-  --check-docs \
-  --check-tests
+# Verify build and unit tests only (skip conformance)
+vrtg-provider verify --skip-conformance
+
+# Run conformance against the clone profile
+vrtg-provider verify --profile clone
 ```
 
 #### publish - Publishing
 
-Prepare provider for publishing and distribution.
+Publish a provider to the VirtRigaud catalog. Defined in [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/publish.go).
+
+Must be run from within a provider project directory.
 
 ```bash
 vrtg-provider publish [flags]
 ```
 
-**Flags:**
-- `--provider-dir`: Provider directory
-- `--version`: Version to publish
-- `--registry`: Container registry
-- `--chart-repo`: Helm chart repository
+**Required flags:**
+- `--image`: Container image repository (e.g., `ghcr.io/yourorg/your-provider`)
+- `--repo`: Source code repository URL
+- `--maintainer`: Maintainer email address
+
+**Optional flags:**
+- `--name`: Provider name (auto-detected from current directory if omitted)
+- `--tag`: Container image tag (default: `latest`)
+- `--license`: License identifier in SPDX format (default: `Apache-2.0`)
+- `--skip-verify`: Skip VCTS verification
+- `--dry-run`: Show the catalog entry without writing it
+- `--catalog`: Path to catalog YAML file (default: auto-detected `providers/catalog.yaml`)
 
 **Examples:**
 
 ```bash
-# Publish provider
+# Dry-run to preview the catalog entry
 vrtg-provider publish \
-  --provider-dir ./my-provider \
-  --version v1.0.0 \
-  --registry ghcr.io/myorg
+  --image ghcr.io/yourorg/your-provider \
+  --repo https://github.com/yourorg/your-provider \
+  --maintainer you@example.com \
+  --dry-run
 
-# Publish with Helm chart
+# Publish with explicit tag
 vrtg-provider publish \
-  --provider-dir ./my-provider \
-  --version v1.0.0 \
-  --registry ghcr.io/myorg \
-  --chart-repo https://charts.myorg.com
+  --image ghcr.io/yourorg/your-provider \
+  --tag v1.0.0 \
+  --repo https://github.com/yourorg/your-provider \
+  --maintainer you@example.com
 ```
+
+#### version - Version Information
+
+```bash
+vrtg-provider version
+```
+
+Prints the `vrtg-provider` binary version and git SHA.
 
 ### Provider Template Structure
 
+The `init` command creates the following structure under `<output>/providers/<name>/`:
+
 ```
-my-provider/
+providers/my-provider/
 ├── cmd/
 │   └── provider/
 │       └── main.go              # Provider entry point
 ├── internal/
 │   ├── provider/
 │   │   ├── server.go           # gRPC server implementation
-│   │   ├── client.go           # Provider client
 │   │   └── types.go            # Provider-specific types
 │   └── config/
 │       └── config.go           # Configuration management
-├── pkg/
-│   └── api/                    # Public API interfaces
 ├── test/
-│   ├── conformance/            # Conformance tests
-│   └── integration/            # Integration tests
+│   └── conformance/            # Conformance tests
 ├── deploy/
-│   ├── helm/                   # Helm charts
 │   └── k8s/                    # Kubernetes manifests
-├── docs/                       # Documentation
 ├── Dockerfile                  # Container image
 ├── Makefile                    # Build automation
-└── README.md                   # Provider documentation
+└── go.mod
 ```
 
 ---
 
 ## virtrigaud-loadgen
 
-Load testing and benchmarking tool for VirtRigaud deployments.
+Load testing and benchmarking tool for VirtRigaud deployments. Defined in [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/virtrigaud-loadgen/main.go).
 
 ### Usage
 
@@ -623,11 +634,10 @@ virtrigaud-loadgen [command] [flags]
 
 ```bash
 --kubeconfig string   Path to kubeconfig file
---namespace string    Kubernetes namespace (default: "default")  
---output-dir string   Output directory for results (default: "./loadgen-results")
---config-file string  Load generation configuration file
---dry-run            Show what would be executed without running
---verbose            Enable verbose output
+--namespace, -n       Kubernetes namespace (default: "default")
+--output-dir, -o      Output directory for results (default: "./loadgen-results")
+--dry-run            Dry-run mode (don't create Kubernetes resources)
+--verbose, -v        Verbose output
 ```
 
 ### Commands
@@ -639,114 +649,62 @@ virtrigaud-loadgen run [flags]
 ```
 
 **Flags:**
-- `--vms`: Number of VMs to create (default: 10)
-- `--duration`: Test duration (default: 10m)
-- `--ramp-up`: Ramp-up time (default: 2m)
-- `--workers`: Number of concurrent workers (default: 5)
-- `--provider`: Provider to test against
-- `--vm-class`: VMClass to use for test VMs
-- `--vm-image`: VMImage to use for test VMs
+- `--config, -c`: Load generation config file (YAML)
+
+The load parameters (duration, concurrency, VM count, operation mix) are driven by the config file. Without `--config`, defaults are used: 5m duration, concurrency 2, 10 VMs, providers `["test-provider"]`.
 
 **Examples:**
 
 ```bash
-# Basic load test
-virtrigaud-loadgen run --vms 50 --duration 15m
+# Run with defaults
+virtrigaud-loadgen run
 
-# Comprehensive load test
-virtrigaud-loadgen run \
-  --vms 100 \
-  --duration 30m \
-  --ramp-up 5m \
-  --workers 10 \
-  --provider vsphere-provider
+# Run with a config file
+virtrigaud-loadgen run --config loadtest-config.yaml
 
-# Test with specific configuration
-virtrigaud-loadgen run --config-file loadtest-config.yaml
-```
-
-#### config - Configuration Management
-
-```bash
-# Generate sample configuration
-virtrigaud-loadgen config generate --output sample-config.yaml
-
-# Validate configuration
-virtrigaud-loadgen config validate --config-file my-config.yaml
+# Dry run (logs what would happen without creating VMs)
+virtrigaud-loadgen run --config loadtest-config.yaml --dry-run
 ```
 
 ### Configuration File
 
+The YAML config maps to the `LoadGenConfig` struct in `cmd/virtrigaud-loadgen/main.go`:
+
 ```yaml
 # loadtest-config.yaml
-metadata:
-  name: "production-load-test"
-  description: "Load test for production environment"
+duration: "30m"
+concurrency: 10
+rampUpTime: "5m"
+steadyState: "20m"
+rampDownTime: "5m"
 
-spec:
-  # Test parameters
-  vms: 100
-  duration: "30m"
-  rampUp: "5m"
-  workers: 10
-  
-  # Target configuration
-  provider: "vsphere-provider"
-  namespace: "loadtest"
-  
-  # VM configuration
-  vmClass: "standard-vm"
-  vmImage: "ubuntu-22-04"
-  
-  # Test scenarios
-  scenarios:
-    - name: "vm-lifecycle"
-      weight: 70
-      operations:
-        - create
-        - start
-        - stop
-        - delete
-    
-    - name: "vm-operations"
-      weight: 20
-      operations:
-        - snapshot
-        - clone
-        - reconfigure
-    
-    - name: "provider-stress"
-      weight: 10
-      operations:
-        - rapid-create-delete
-        - concurrent-operations
+vmTemplate:
+  classRef: "small"
+  imageRef: "ubuntu-22-template"
+  labels:
+    generated-by: loadgen
 
-  # Reporting
-  reporting:
-    formats: ["json", "html", "csv"]
-    metrics:
-      - response-time
-      - throughput
-      - error-rate
-      - resource-usage
+providers:
+  - "vsphere-provider"
+
+vmCount: 50
+
+# Operation mix — percentages, must not need to sum to 100
+operations:
+  create: 20
+  delete: 10
+  power: 15
+  reconfigure: 10
+  snapshot: 5
+  clone: 5
+  describe: 35
 ```
 
 ### Metrics and Reporting
 
-Load test results include:
+Results are saved to `<output-dir>/` in CSV and Markdown summary formats. Each row in the CSV represents one operation attempt with columns: `Operation`, `Provider`, `VMName`, `StartTime`, `Duration`, `Success`, `Error`, `Phase`.
 
-- **Performance Metrics**: Response times, throughput, latency percentiles
-- **Error Analysis**: Error rates, failure patterns, error categorization
-- **Resource Usage**: CPU, memory, network utilization
-- **Provider Metrics**: Provider-specific performance indicators
-- **Trend Analysis**: Performance over time, bottleneck identification
-
-### Output Formats
-
-- **JSON**: Machine-readable results for automation
-- **HTML**: Interactive dashboard with charts and graphs
-- **CSV**: Raw data for further analysis
-- **Prometheus**: Metrics export for monitoring systems
+The Markdown summary includes P50 / P95 / P99 latency percentiles per operation type.
 
 ---
 
@@ -918,10 +876,22 @@ vrtg provider logs <provider-name> --follow --verbose
 vcts run --provider <provider-name> --verbose
 ```
 
+---
+
+## alpha-to-beta-dryrun
+
+A one-shot migration helper from the v1alpha1 API era. Defined in [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/alpha-to-beta-dryrun/main.go).
+
+!!! warning "Tombstoned in v0.3.6"
+    The `v1alpha1` API was removed before v0.3.0. This binary now exits with an error message explaining that v1alpha1 resources should have been migrated before reaching this version. It is retained in the repository as a safety net but has no useful functionality.
+
+    If you are upgrading from a pre-v0.3.0 cluster, you must have already migrated your resources to `v1beta1` in a prior release. There is no automated migration path from v1alpha1 at this version.
+
+---
+
 ## See Also
 
-- [Getting Started Guide](getting-started/quickstart.md)
-- [Provider Development](providers/tutorial.md)
-- [API Reference](api-reference/)
-- [Examples](examples/)
-- [Troubleshooting](resilience.md)
+- [Getting Started Guide](../getting-started/index.md)
+- [Provider Development](../providers/tutorial.md)
+- [API Reference](../api-reference/cli.md)
+- [Examples](../examples/index.md)

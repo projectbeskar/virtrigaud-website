@@ -62,9 +62,9 @@ VirtRigaud uses a **Remote Provider** architecture where each provider runs as a
 
 Choose your provider and follow the setup guide:
 
-1. **[vSphere Provider Guide](vsphere-setup.md)** - For VMware vSphere environments
-2. **[Libvirt Provider Guide](libvirt-setup.md)** - For KVM/QEMU hosts
-3. **[Proxmox Provider Guide](proxmox-setup.md)** - For Proxmox VE clusters
+1. **[vSphere Provider Guide](../providers/vsphere.md)** - For VMware vSphere environments
+2. **[Libvirt Provider Guide](../providers/libvirt.md)** - For KVM/QEMU hosts
+3. **[Proxmox Provider Guide](../providers/proxmox.md)** - For Proxmox VE clusters
 
 Each guide covers:
 
@@ -76,37 +76,35 @@ Each guide covers:
 
 ## Provider Capabilities Matrix
 
-Not all providers support the same features. See the [Provider Capabilities Matrix](../providers-capabilities.md) for a detailed comparison.
+Not all providers support the same features. See the [Provider Capabilities Matrix](../providers/providers-capabilities.md) for a detailed comparison.
+
+This is an abbreviated summary for v0.3.6. For the full authoritative matrix, see [providers/providers-capabilities.md](../providers/providers-capabilities.md).
 
 | Feature | vSphere | Libvirt | Proxmox |
 |---------|---------|---------|---------|
-| VM Creation | ✅ | ✅ | ✅ |
-| Power Management | ✅ | ✅ | ✅ |
-| Reconfiguration | ✅ | ✅ | ✅ |
-| Snapshots | ✅ | ✅ | ✅ |
-| Cloning | ✅ | ✅ | ✅ |
-| Templates | ✅ | ✅ | ✅ |
-| Console Access | ❌ | ✅ (VNC) | ✅ (VNC) |
-| Cloud-init | ✅ | ✅ | ✅ |
-| Guest Agent | ✅ | ✅ | ✅ |
-| Storage Policies | ✅ | ❌ | ❌ |
-| DRS/HA | ✅ | ❌ | ✅ |
+| VM Creation | Yes | Yes | Yes |
+| Power Management | Yes | Yes | Yes |
+| Reconfiguration | Yes | Yes (offline) | Yes |
+| Snapshots | Yes | Yes | Yes |
+| Cloning | Yes | Stub (#153) | Yes |
+| Console Access | Yes | Yes (VNC) | Yes (VNC) |
+| Cloud-init | Yes | Yes | Yes |
+| Migration (tested) | vSphere → Libvirt only | target only | — |
 
 ## Advanced Topics
 
 Once you're comfortable with basic provider setup:
 
-- **[Advanced VM Lifecycle](../advanced-lifecycle.md)** - Snapshots, cloning, reconfiguration
-- **[Nested Virtualization](../nested-virtualization.md)** - Running hypervisors in VMs
-- **[Graceful Shutdown](../graceful-shutdown.md)** - Proper VM shutdown handling
-- **[Remote Providers](../remote-providers.md)** - Provider architecture deep dive
+- **[Advanced VM Lifecycle](advanced/advanced-lifecycle.md)** - Snapshots, cloning, reconfiguration
+- **[Nested Virtualization](advanced/nested-virtualization.md)** - Running hypervisors in VMs
+- **[Graceful Shutdown](advanced/graceful-shutdown.md)** - Proper VM shutdown handling
+- **[Remote Providers](advanced/remote-providers.md)** - Provider architecture deep dive
 
 ## Developing Custom Providers
 
 Want to add support for a new hypervisor?
 
 - **[Provider Development Tutorial](../providers/tutorial.md)** - Step-by-step guide
-- **[Provider API Reference](../providers/)** - Technical documentation
 - **[Provider Versioning](../providers/versioning.md)** - Version management
 
 ## Multi-Provider Deployments
@@ -148,11 +146,14 @@ When setting up providers, consider:
 
 See the [Security Guide](../operations/security.md) for detailed recommendations.
 
+!!! warning "v0.3.6 security gaps"
+    mTLS between the manager and provider pods is not enforced in v0.3.6 ([#147](https://github.com/projectbeskar/virtrigaud/issues/147)); provider gRPC servers do not require authentication ([#148](https://github.com/projectbeskar/virtrigaud/issues/148)). Use Kubernetes NetworkPolicies to restrict who can reach provider pods until these are resolved. See [Network Policies](../providers/security/network-policies.md).
+
 ## Getting Help
 
-- **[Provider-Specific Guides](../providers/)** - Detailed provider documentation
+- **[Provider Documentation](../providers/vsphere.md)** — vSphere, [Libvirt](../providers/libvirt.md), [Proxmox](../providers/proxmox.md)
 - **[Troubleshooting](../getting-started/index.md#troubleshooting)** - Common issues
-- **[Examples](../examples/)** - Working configurations
+- **[Examples](../examples/index.md)** - Working configurations
 - **[GitHub Issues](https://github.com/projectbeskar/virtrigaud/issues)** - Report bugs or request features
 
 ## Next Steps

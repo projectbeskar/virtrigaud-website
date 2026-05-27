@@ -108,7 +108,7 @@ crdUpgrade:
   
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl  # VirtRigaud kubectl image
-    tag: "v0.2.0"  # Auto-updated to match release version
+    tag: "v0.3.6"  # Auto-updated to match release version
   
   backoffLimit: 3
   ttlSecondsAfterFinished: 300
@@ -173,7 +173,7 @@ metadata:
 spec:
   source:
     chart: virtrigaud
-    targetRevision: 0.2.2
+    targetRevision: 0.3.6
     helm:
       values: |
         crdUpgrade:
@@ -197,7 +197,7 @@ spec:
   chart:
     spec:
       chart: virtrigaud
-      version: 0.2.2
+      version: 0.3.6
   values:
     crdUpgrade:
       enabled: true  # Automatic upgrades work!
@@ -224,6 +224,39 @@ kubectl logs -n virtrigaud-system -l app.kubernetes.io/component=crd-upgrade
 kubectl describe job -n virtrigaud-system -l app.kubernetes.io/component=crd-upgrade
 ```
 
+### Known Issue: Empty `crds/` Directory when Building from Source
+
+!!! danger "H2: `BackoffLimitExceeded` on the CRD-upgrade-job when installing from a source checkout"
+    The `charts/virtrigaud/crds/` directory in the git repository contains only a `.gitkeep` placeholder. The actual CRD YAML files are **not committed** to git — they are generated at build time by `make gen-helm-crds`.
+
+    **Symptom**: The CRD-upgrade-job starts, applies an empty ConfigMap, and exits without error, but `kubectl get crd` shows no VirtRigaud CRDs. Or, if the job runs before the CRDs exist at all, it may reach `BackoffLimitExceeded`.
+
+    This bit operators on the v0.3.3-rc2 deploy of the lab cluster.
+
+    **Workaround**: Install from the published Helm chart rather than rebuilding from source:
+
+    ```bash
+    helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
+    helm repo update
+    helm install virtrigaud virtrigaud/virtrigaud \
+      --version 0.3.6 \
+      --namespace virtrigaud-system \
+      --create-namespace
+    ```
+
+    If you must install from a source checkout, run `make gen-helm-crds` first to populate `charts/virtrigaud/crds/`:
+
+    ```bash
+    # From the virtrigaud source root
+    make gen-helm-crds
+    # Verify the CRD files are populated
+    ls charts/virtrigaud/crds/
+    # Now install or upgrade
+    helm install virtrigaud ./charts/virtrigaud -n virtrigaud-system
+    ```
+
+    **Status**: Tracked as project issue H2. The published chart at `https://projectbeskar.github.io/virtrigaud` always includes the CRD files and is not affected.
+
 ### Common Issues
 
 #### 1. RBAC Permissions
@@ -247,7 +280,7 @@ kubectl describe clusterrole <role-name>
 crdUpgrade:
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl
-    tag: "v0.2.2-rc1"  # Use matching VirtRigaud version
+    tag: "v0.3.6"  # Use matching VirtRigaud version
     pullPolicy: IfNotPresent
 ```
 

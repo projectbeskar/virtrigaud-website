@@ -304,10 +304,9 @@ kubectl get vm -w
 ## Further Reading
 
 - [Main Examples README](../index.md)
-- [Provider Documentation](../../providers/)
 - [vSphere Provider Guide](../../providers/vsphere.md)
 - [Libvirt Provider Guide](../../providers/libvirt.md)
-- [Provider Capabilities Matrix](../../providers-capabilities.md)
+- [Provider Capabilities Matrix](../../providers/providers-capabilities.md)
 
 ## Contributing
 
@@ -320,5 +319,5 @@ Have an advanced example to share? Contributions welcome!
 
 ---
 
-**Note**: These examples use v0.2.3+ features. Ensure you're running the latest VirtRigaud version.
+**Note**: These examples target v0.3.6. Ensure you're running VirtRigaud v0.3.6 or later.
 

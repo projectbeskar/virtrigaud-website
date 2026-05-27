@@ -5,7 +5,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # Nested Virtualization Support
 
-This document describes how to enable and configure nested virtualization in VirtRigaud virtual machines across different hypervisor providers.
+!!! note "Not actively tested in v0.3.6"
+    The configuration patterns in this page are based on the provider implementations and hypervisor capabilities, but nested virtualization is **not part of the v0.3.6 test suite**. The VMClass `performanceProfile.nestedVirtualization` field exists in the API, and the provider-level mechanics described here are correct for each hypervisor, but VirtRigaud does not run end-to-end nested-virt scenarios in CI.
+
+    If you need nested virtualization for a production workload, validate the configuration in your environment before relying on it.
 
 ## Overview
 
@@ -357,10 +360,10 @@ virt-install --name test-nested --memory 1024 --vcpus 1 --disk size=10 --cdrom /
 
 ## Support Matrix
 
-| Provider | Min Version | Nested Support | Performance | Security Features |
-|----------|-------------|----------------|-------------|-------------------|
-| vSphere  | ESXi 6.0    | Full           | Good        | TPM, Secure Boot  |
-| LibVirt  | 1.2.13      | Full           | Good        | TPM, Secure Boot  |
-| Proxmox  | PVE 6.0     | Planned        | Good        | Limited           |
+| Provider | Min Version | Nested Support | Performance | Notes |
+|----------|-------------|----------------|-------------|-------|
+| vSphere  | ESXi 6.0    | Via `vhv.enable=TRUE` | Good | Hardware version 14+ recommended |
+| LibVirt  | 1.2.13      | Via CPU host-model passthrough | Good | Requires `kvm_intel nested=1` or `kvm_amd nested=1` on host |
+| Proxmox  | PVE 6.0     | Via CPU type `host` | Good | Enable `kvm: 1` and `cpu: host` in VM config |
 
 For more information, see the provider-specific documentation in the `docs/providers/` directory.
