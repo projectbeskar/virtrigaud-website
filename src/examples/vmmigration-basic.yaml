@@ -27,11 +27,15 @@ spec:
     networks:
       - name: default
   
-  # Storage for intermediate disk transfer
+  # PVC-backed intermediate storage (only supported type in v0.3.6).
+  # Requires a ReadWriteMany StorageClass (NFS, CephFS, etc.).
   storage:
-    type: nfs
-    endpoint: /mnt/nfs-migrations
-  
+    type: pvc
+    pvc:
+      storageClassName: nfs-migration-storage
+      size: 100Gi
+      accessMode: ReadWriteMany
+
   # Migration options with sensible defaults
   options:
     diskFormat: qcow2

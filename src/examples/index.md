@@ -40,8 +40,8 @@ The following examples were added for v0.2.1 features and are still valid in v0.
 
 ## Migration Examples
 
-!!! warning "vSphere → Libvirt only tested in v0.3.6"
-    Only the vSphere → Libvirt migration direction is tested. S3 and NFS storage backends are not implemented; the `vmmigration-s3.yaml` and `vmmigration-nfs.yaml` files in this directory reference a fictional storage backend and should not be used. Use `vmmigration-basic.yaml` or `vmmigration-advanced.yaml`.
+!!! warning "Storage and migration direction constraints in v0.3.6"
+    `storage.type: pvc` is the only accepted value in v0.3.6. S3, NFS, block, and live storage backends do not exist in the CRD and will be rejected by the controller. Additionally, only the vSphere → Libvirt migration direction is tested; other source/target pairs are documented but not validated in production. See [Migration User Guide](../migration/user-guide.md) for details.
 
 - **[vmmigration-basic.yaml](vmmigration-basic.yaml)** - Basic vSphere → Libvirt migration
 - **[vmmigration-advanced.yaml](vmmigration-advanced.yaml)** - Migration with storage and network mapping

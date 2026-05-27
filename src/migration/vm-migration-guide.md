@@ -22,7 +22,7 @@ debugging a failed migration, read on.
 | Storage validation | `internal/controller/vmmigration_controller.go:1419-1450` |
 | Per-provider Export RPC implementations | `internal/providers/{vsphere,libvirt,proxmox}/server.go` — `ExportDisk` |
 | Per-provider Import RPC implementations | Same files — `ImportDisk` (e.g. `internal/providers/libvirt/server.go:471-…` decodes `pvc://` URLs) |
-| ADR for transport + storage design | `fieldTesting/ADR-0001-transport-grpc-and-capi-integration.md` |
+| ADR for transport + storage design | [`docs/adr/0001-transport-grpc-and-capi-integration.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0001-transport-grpc-and-capi-integration.md) |
 | Field-test postmortems | `fieldTesting/MIGRATION_*.md` |
 
 ## v0.3.6 supported direction
@@ -76,7 +76,7 @@ debugging a failed migration, read on.
 
 The decisive choice in v0.3.6 is that the **transfer medium is a Kubernetes
 PVC**, not an external storage system. That choice is captured in
-ADR-0001 (`fieldTesting/ADR-0001-transport-grpc-and-capi-integration.md`)
+ADR-0001 ([docs/adr/0001-transport-grpc-and-capi-integration.md](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0001-transport-grpc-and-capi-integration.md))
 and reflects three constraints:
 
 1. **One credentials story.** Adding S3/HTTP/NFS would force a per-backend
@@ -346,5 +346,5 @@ The directions explicitly on the roadmap for after v0.3.6:
   during long migrations.
 - [Full CRD Reference](../references/generated-crd-docs.md#vmmigration) —
   generated CRD documentation.
-- [`fieldTesting/ADR-0001-transport-grpc-and-capi-integration.md`](https://github.com/projectbeskar/virtrigaud/blob/main/fieldTesting/ADR-0001-transport-grpc-and-capi-integration.md) — design rationale for gRPC + PVC.
+- [`docs/adr/0001-transport-grpc-and-capi-integration.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0001-transport-grpc-and-capi-integration.md) — design rationale for gRPC + PVC.
 - Field-test postmortems: `fieldTesting/MIGRATION_*.md` in the main repo.
