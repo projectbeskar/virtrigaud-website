@@ -40,6 +40,155 @@ helm upgrade virtrigaud virtrigaud/virtrigaud --version v0.2.1
 
 ## Version-Specific Upgrade Notes
 
+### v0.3.6 → v0.3.7
+
+Released 2026-05-30. **Security enforcement + multi-arch release.** Two breaking
+changes affect SSH libvirt providers and any Provider CR without a `tls` block.
+
+#### Breaking changes
+
+##### 1. mTLS now enforced on all Provider CRs (BREAKING)
+
+The manager now **requires** a `spec.runtime.service.tls` block on every
+Provider CR. A Provider that lacks the block will not reconcile — no Deployment
+is created — and its status shows:
+
+```
+TLSConfigured=False, Reason=TLSBlockMissing
+```
+
+**Remediation — to enable mTLS (recommended for production):**
+
+1. Create a TLS Secret with `tls.crt`, `tls.key`, and `ca.crt`:
+
+   ```yaml
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: provider-vsphere-tls
+     namespace: virtrigaud-system
+   type: kubernetes.io/tls
+   data:
+     tls.crt: <base64>
+     tls.key: <base64>
+   stringData:
+     ca.crt: |
+       -----BEGIN CERTIFICATE-----
+       ...
+       -----END CERTIFICATE-----
+   ```
+
+2. Add the `tls` block to your Provider CR under `spec.runtime.service`:
+
+   ```yaml
+   runtime:
+     service:
+       tls:
+         enabled: true
+         secretRef:
+           name: provider-vsphere-tls
+         insecureSkipVerify: false
+   ```
+
+**Remediation — to keep plaintext (dev/lab only):**
+
+```yaml
+runtime:
+  service:
+    tls:
+      enabled: false
+```
+
+When `tls.enabled: false`, the condition reads `TLSConfigured=False,
+Reason=ExplicitlyDisabled` and the Deployment proceeds. This is audit-flagged
+and not suitable for regulated environments.
+
+**Additional mTLS facts:**
+
+- TLS 1.3 is the minimum protocol version for both manager and provider.
+- Provider env `VIRTRIGAUD_PROVIDER_ALLOWED_SANS` (comma-joined) constrains
+  which manager certificates are accepted. `VIRTRIGAUD_PROVIDER_INSECURE=true`
+  opts out of TLS entirely on the provider side (plaintext).
+- Fail-closed: no TLS material + no explicit opt-out → provider hard-exits.
+- For chart-templated providers, the Helm `providerTLS` block accepts
+  `secretName`, `allowedSANs` (list), and `insecure` (bool, only when
+  `secretName` is empty).
+
+##### 2. Libvirt SSH host-key verification now enforced (BREAKING for SSH libvirt)
+
+In v0.3.6 the libvirt provider set `no_verify=1` on the SSH URI, skipping
+host-key verification. **That flag is removed in v0.3.7.** Existing SSH libvirt
+Providers will stop connecting after the upgrade until a `known_hosts` key is
+added to the credentials Secret.
+
+**Remediation:**
+
+Seed `known_hosts` on the operator workstation and add it to the Secret:
+
+```bash
+ssh-keyscan -H <libvirt-host> > known_hosts
+kubectl patch secret libvirt-creds -n virtrigaud-system \
+  --type='json' \
+  -p="[{\"op\": \"add\", \"path\": \"/stringData/known_hosts\",
+         \"value\": \"$(cat known_hosts)\"}]"
+```
+
+The provider reads the key from `/etc/virtrigaud/credentials/known_hosts`.
+
+**Escape hatch (lab/migration windows only; audit-flagged):**
+
+```yaml
+spec:
+  runtime:
+    env:
+      - name: LIBVIRT_INSECURE_SKIP_HOST_KEY_VERIFICATION
+        value: "true"
+```
+
+#### Other changes (no operator action required)
+
+- **Multi-arch images** — all component images (`manager`, `provider-vsphere`,
+  `provider-libvirt`, `provider-proxmox`) are now built for both
+  `linux/amd64` and `linux/arm64`. arm64 clusters are now fully supported.
+  No changes needed in Provider CRs or Helm values.
+
+- **Manager RBAC tightened** — the manager's ClusterRole now grants read-only
+  access to Secrets (was read-write in v0.3.6). If you added custom rules that
+  relied on write access, re-add them via `rbac.additionalRules` in your Helm
+  values. A `helm upgrade` picks up the new RBAC automatically.
+
+- **Go source-build floor raised to 1.26.3** — if you build from source, you
+  need Go 1.26.3 or later. Binary and image consumers are unaffected.
+
+#### Helm upgrade command
+
+```bash
+helm repo update
+helm upgrade -i virtrigaud virtrigaud/virtrigaud \
+  --version 0.3.7 \
+  --reset-values \
+  -f your-values.yaml
+```
+
+If you use chart-templated providers with `providerTLS.secretName`, ensure the
+referenced Secret exists before the upgrade or the provider pods will not start.
+
+#### Post-upgrade verification
+
+```bash
+# All providers should show TLSConfigured=True and ProviderAvailable=True
+kubectl get providers -A
+
+# Confirm the manager is running v0.3.7
+kubectl -n virtrigaud-system port-forward deploy/virtrigaud-manager 8080:8080 &
+curl -s localhost:8080/metrics | grep '^virtrigaud_build_info'
+# Expect: virtrigaud_build_info{version="v0.3.7",...} 1
+
+# Check for any providers still failing TLS negotiation
+kubectl get providers -A \
+  -o custom-columns=NAME:.metadata.name,TLS:.status.conditions[?(@.type=="TLSConfigured")].reason
+```
+
 ### v0.3.5 → v0.3.6
 
 Released 2026-05-25. **Headline observability + supply-chain release.** No

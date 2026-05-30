@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The Proxmox provider manages VMs on Proxmox Virtual Environment (PVE) via the native PVE REST API. It is the newest production-grade provider in the VirtRigaud tree and is currently maturing toward general availability.
 
-This page is aligned to **VirtRigaud v0.3.6**. Capability claims trace back to the provider's `GetCapabilities` builder in `internal/providers/proxmox/capabilities.go` and the REST client in `internal/providers/proxmox/pveapi/`.
+This page is aligned to **VirtRigaud v0.3.7**. Capability claims trace back to the provider's `GetCapabilities` builder in `internal/providers/proxmox/capabilities.go` and the REST client in `internal/providers/proxmox/pveapi/`.
 
 ## Status
 
@@ -112,9 +112,14 @@ spec:
   insecureSkipVerify: false
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.6"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.7"
     service:
       port: 9443
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-proxmox-tls
+        insecureSkipVerify: false
 ```
 
 ### Username / password
@@ -129,6 +134,22 @@ stringData:
   username: "virtrigaud@pve"
   password: "REPLACE_ME"
 ```
+
+## TLS / mTLS (v0.3.7+)
+
+Starting in v0.3.7, the manager enforces that every Provider CR has a `spec.runtime.service.tls` block. A Provider without this block fails to reconcile and its status will show `TLSConfigured=False, Reason=TLSBlockMissing` — no Deployment is created.
+
+For full mTLS details see [Security — mTLS](../providers/security/mtls.md).
+
+### `spec.runtime.service.tls` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | bool | Set `true` to enable mTLS. Set `false` for plaintext (dev/lab only; audit-flagged). |
+| `secretRef.name` | string | Name of a `kubernetes.io/tls` or `Opaque` Secret containing `tls.crt`, `tls.key`, and `ca.crt`. |
+| `insecureSkipVerify` | bool | Skip server certificate verification. Dev-only; never set in regulated environments. |
+
+TLS material mounts at `/etc/virtrigaud/tls` inside the provider pod. Both manager and provider pin TLS 1.3. The `TLSConfigured` status condition reasons are `TLSBlockMissing`, `ExplicitlyDisabled`, `SecretRefMissing`, and `Enabled`.
 
 ## Minimum permissions
 

@@ -20,6 +20,13 @@ spec:
     name: libvirt-creds
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.2.3"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.7"
     service:
       port: 9090
+      # v0.3.7: a Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false to keep plaintext (dev/lab only).
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-libvirt-tls   # Secret (kubernetes.io/tls or Opaque) with tls.crt, tls.key, ca.crt
+        insecureSkipVerify: false

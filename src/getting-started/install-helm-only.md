@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Helm-only Installation
 
-This guide covers installing VirtRigaud v0.3.6 using only Helm (CRDs included in the chart) and verifying the installation is healthy.
+This guide covers installing VirtRigaud v0.3.7 using only Helm (CRDs included in the chart) and verifying the installation is healthy.
 
 ## Prerequisites
 
@@ -22,16 +22,39 @@ helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
 helm repo update virtrigaud
 ```
 
-### Install VirtRigaud v0.3.6
+### Install VirtRigaud v0.3.7
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.6 \
+  --version 0.3.7 \
   --namespace virtrigaud-system \
   --create-namespace \
   --wait \
   --timeout 10m
 ```
+
+!!! note "Multi-arch images (v0.3.7)"
+    All component images are now multi-arch (`linux/amd64` + `linux/arm64`).
+    arm64 clusters are fully supported — no changes to Helm values or Provider
+    CRs are needed.
+
+!!! note "mTLS required in v0.3.7"
+    Every Provider CR must have a `spec.runtime.service.tls` block. For
+    chart-templated providers, the `providerTLS` Helm values block supplies
+    TLS configuration without editing each Provider CR directly:
+
+    ```yaml
+    # values.yaml excerpt
+    providerTLS:
+      secretName: "my-provider-tls-secret"   # Secret with tls.crt, tls.key, ca.crt
+      allowedSANs:
+        - "manager.virtrigaud-system.svc"
+      insecure: false                         # set true only when secretName is empty (lab only)
+    ```
+
+    Operators managing Provider CRs directly must add the `tls` block
+    themselves. See the [upgrade guide](../operations/upgrade.md#v036--v037)
+    for the full remediation steps.
 
 `--wait` blocks until all pods are ready. `--timeout 10m` matches the default provider image pull time on slow registries.
 
@@ -39,7 +62,7 @@ helm install virtrigaud virtrigaud/virtrigaud \
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.6 \
+  --version 0.3.7 \
   --namespace virtrigaud-system \
   --create-namespace \
   --skip-crds \
@@ -54,26 +77,26 @@ helm install virtrigaud virtrigaud/virtrigaud \
 # Manager pod is running
 kubectl get pods -n virtrigaud-system
 
-# Helm release is at v0.3.6
+# Helm release is at v0.3.7
 helm list -n virtrigaud-system
 # NAME         NAMESPACE          REVISION  CHART                APP VERSION
-# virtrigaud   virtrigaud-system  1         virtrigaud-0.3.6     v0.3.6
+# virtrigaud   virtrigaud-system  1         virtrigaud-0.3.6     v0.3.7
 ```
 
 Expected output from `helm list`:
 
 - `CHART` column: `virtrigaud-0.3.6`
-- `APP VERSION` column: `v0.3.6`
+- `APP VERSION` column: `v0.3.7`
 
 ### Verify the manager image tag
 
 ```bash
 kubectl get deployment virtrigaud-manager -n virtrigaud-system \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
-# ghcr.io/projectbeskar/virtrigaud/manager:v0.3.6
+# ghcr.io/projectbeskar/virtrigaud/manager:v0.3.7
 ```
 
-### Confirm v0.3.6 metrics are available
+### Confirm v0.3.7 metrics are available
 
 ```bash
 kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8080:8080 &
@@ -83,10 +106,10 @@ curl -s http://localhost:8080/metrics | grep '^virtrigaud_build_info'
 Expected:
 
 ```
-virtrigaud_build_info{component="manager",git_sha="<sha>",go_version="go1.26.x",version="v0.3.6"} 1
+virtrigaud_build_info{component="manager",git_sha="<sha>",go_version="go1.26.x",version="v0.3.7"} 1
 ```
 
-New metric families available in v0.3.6 (seeded to 0 at boot before any Provider CRs are created):
+New metric families available in v0.3.7 (seeded to 0 at boot before any Provider CRs are created):
 
 ```bash
 curl -s http://localhost:8080/metrics | grep 'virtrigaud_circuit_breaker\|virtrigaud_provider_tasks_inflight'
@@ -99,7 +122,7 @@ virtrigaud_circuit_breaker_state{provider="<name>",provider_type="<type>"} 0
 virtrigaud_provider_tasks_inflight{provider="<name>",provider_type="<type>"} 0
 ```
 
-For the full v0.3.6 metrics surface see the [Observability Guide](../operations/observability.md).
+For the full v0.3.7 metrics surface see the [Observability Guide](../operations/observability.md).
 
 ### Check all 10 CRDs are installed
 
@@ -180,7 +203,7 @@ spec:
       values: |
         manager:
           image:
-            tag: v0.3.6
+            tag: v0.3.7
 ```
 
 ### Flux HelmRelease
@@ -202,7 +225,7 @@ spec:
   values:
     manager:
       image:
-        tag: v0.3.6
+        tag: v0.3.7
 ```
 
 ## Migration from Kustomize to Helm

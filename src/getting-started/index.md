@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # 15-Minute Quickstart
 
-This guide gets you up and running with VirtRigaud v0.3.6 in 15 minutes using either a vSphere or Libvirt provider.
+This guide gets you up and running with VirtRigaud v0.3.7 in 15 minutes using either a vSphere or Libvirt provider.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
 helm repo update virtrigaud
 
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.6 \
+  --version 0.3.7 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
@@ -36,7 +36,7 @@ To enable specific providers at install time:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.6 \
+  --version 0.3.7 \
   --namespace virtrigaud-system \
   --create-namespace \
   --set providers.vsphere.enabled=true \
@@ -47,7 +47,7 @@ To skip CRDs if you manage them separately:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.6 \
+  --version 0.3.7 \
   --namespace virtrigaud-system \
   --create-namespace \
   --skip-crds
@@ -70,19 +70,19 @@ kubectl get pods -n virtrigaud-system
 # All 10 CRDs are installed
 kubectl get crds | grep virtrigaud.io
 
-# Manager is at v0.3.6
+# Manager is at v0.3.7
 kubectl logs -n virtrigaud-system deployment/virtrigaud-manager | head -5
 ```
 
-After the manager starts, confirm v0.3.6 is running via the metrics endpoint:
+After the manager starts, confirm v0.3.7 is running via the metrics endpoint:
 
 ```bash
 kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8080:8080 &
 curl -s http://localhost:8080/metrics | grep '^virtrigaud_build_info'
-# virtrigaud_build_info{component="manager",...,version="v0.3.6"} 1
+# virtrigaud_build_info{component="manager",...,version="v0.3.7"} 1
 ```
 
-Starting with v0.3.6 you will also see the new `virtrigaud_circuit_breaker_state` and `virtrigaud_provider_tasks_inflight` families on `/metrics` (seeded to 0 at boot for every Provider CR). See the [Observability Guide](../operations/observability.md) for the full v0.3.6 metrics surface.
+Starting with v0.3.7 you will also see the new `virtrigaud_circuit_breaker_state` and `virtrigaud_provider_tasks_inflight` families on `/metrics` (seeded to 0 at boot for every Provider CR). See the [Observability Guide](../operations/observability.md) for the full v0.3.7 metrics surface.
 
 ## Step 3: Configure a Provider
 
@@ -111,10 +111,22 @@ spec:
     namespace: default
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.7"
     service:
       port: 9090
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-vsphere-tls
+        insecureSkipVerify: false
 ```
+
+!!! note "mTLS required in v0.3.7"
+    Every Provider CR must include a `spec.runtime.service.tls` block.
+    A Provider without it will not reconcile (`TLSConfigured=False,
+    Reason=TLSBlockMissing`). See the [upgrade guide](../operations/upgrade.md#v036--v037)
+    for remediation steps. Images are now multi-arch (`linux/amd64` +
+    `linux/arm64`) — no action required for arm64 clusters.
 
 ### Option B: Libvirt Provider
 
@@ -139,9 +151,14 @@ spec:
     namespace: default
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.6"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.7"
     service:
       port: 9090
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-libvirt-tls
+        insecureSkipVerify: false
 ```
 
 ```bash

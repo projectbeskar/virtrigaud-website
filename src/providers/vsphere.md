@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The vSphere provider manages virtual machines on VMware vSphere (vCenter Server and standalone ESXi) via the `govmomi` SDK. It is the most mature provider in the VirtRigaud tree and powers production deployments.
 
-This page is aligned to **VirtRigaud v0.3.6**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/vsphere/server.go`.
+This page is aligned to **VirtRigaud v0.3.7**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/vsphere/server.go`.
 
 ## Capabilities at a glance
 
@@ -92,9 +92,14 @@ spec:
   insecureSkipVerify: false
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.7"
     service:
       port: 9443
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-vsphere-tls
+        insecureSkipVerify: false
 ```
 
 ### Service account permissions
@@ -106,6 +111,50 @@ Create a dedicated vSphere user with these privileges:
 - **Resource**: AssignVMToPool
 - **Virtual machine**: full set (or a tailored subset covering Inventory, Interaction, Configuration, Provisioning, Snapshot management)
 - **Global**: EnableMethods, DisableMethods, Licenses
+
+## TLS / mTLS (v0.3.7+)
+
+Starting in v0.3.7, the manager enforces that every Provider CR has a `spec.runtime.service.tls` block. A Provider without this block fails to reconcile and its status will show `TLSConfigured=False, Reason=TLSBlockMissing` — no Deployment is created.
+
+For full mTLS details see [Security — mTLS](../providers/security/mtls.md).
+
+### `spec.runtime.service.tls` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | bool | Set `true` to enable mTLS. Set `false` for plaintext (dev/lab only; audit-flagged). |
+| `secretRef.name` | string | Name of a `kubernetes.io/tls` or `Opaque` Secret containing `tls.crt`, `tls.key`, and `ca.crt`. |
+| `insecureSkipVerify` | bool | Skip server certificate verification. Dev-only; never set in regulated environments. |
+
+TLS material mounts at `/etc/virtrigaud/tls` inside the provider pod. Both manager and provider pin TLS 1.3. A missing Secret with `tls.enabled: true` sets `TLSConfigured=False, Reason=SecretRefMissing`.
+
+The `TLSConfigured` status condition reasons are:
+
+| Reason | Meaning |
+|--------|---------|
+| `TLSBlockMissing` | No `tls` block at all in the Provider CR. |
+| `ExplicitlyDisabled` | `tls.enabled: false` — plaintext acknowledged. |
+| `SecretRefMissing` | `tls.enabled: true` but `secretRef.name` not specified or Secret not found. |
+| `Enabled` | mTLS wired; Deployment proceeds. |
+
+### Example Secret
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: provider-vsphere-tls
+  namespace: virtrigaud-system
+type: kubernetes.io/tls
+data:
+  tls.crt: LS0tLS1CRUdJTi...  # base64-encoded cert
+  tls.key: LS0tLS1CRUdJTi...  # base64-encoded key
+stringData:
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    # Your CA certificate
+    -----END CERTIFICATE-----
+```
 
 ## Endpoint formats
 

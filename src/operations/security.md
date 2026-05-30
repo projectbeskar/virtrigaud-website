@@ -5,10 +5,21 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Security Guide
 
-This is the canonical operator-facing security reference for VirtRigaud **v0.3.6**. It describes the current security posture honestly: what the code actually does today, what it does not yet do, and what the operator is expected to provide for a regulated (e.g. banking) deployment.
+This is the canonical operator-facing security reference for VirtRigaud **v0.3.7**. It describes the current security posture honestly: what the code actually does, what the operator is expected to provide, and what remains out of scope for a regulated (e.g. banking) deployment.
 
-!!! warning "Read this before relying on the page below"
-    Several security features that an experienced operator might **expect** from a Kubernetes operator that talks to hypervisors are **not yet implemented in v0.3.6**. They are called out inline with `[NOT WIRED IN v0.3.6]` admonitions. Do not silently assume a control is in place; verify against the source references provided.
+!!! success "v0.3.7 is a security-hardening release"
+    v0.3.7 closes the two highest-severity transport gaps that were open in v0.3.6:
+
+    - **Manager↔provider gRPC is now protected by mutual TLS by default** (TLS 1.3 floor, fail-closed providers, client-cert SAN allow-list). See [gRPC transport](#grpc-transport-between-manager-and-providers).
+    - **Libvirt SSH host-key verification is on by default** — the legacy `no_verify=1` behaviour is gone. See [Libvirt SSH host-key verification](#libvirt-ssh-host-key-verification).
+
+    Manager RBAC was also tightened to least-privilege (Secret access is now read-only). The historical gap list, now annotated with what shipped, is retained at [v0.3.6 security gap inventory](#v036-security-gap-inventory) so links from older pages still resolve.
+
+!!! warning "Two breaking changes on upgrade from v0.3.6"
+    1. Existing **Provider CRs without a `spec.runtime.service.tls` block fail to reconcile** until you provision a TLS Secret (`tls.enabled=true` + `secretRef`) or explicitly opt into plaintext (`tls.enabled=false`).
+    2. Existing **libvirt SSH Providers relying on implicit `no_verify=1` stop connecting** until a `known_hosts` entry is added (or the documented env opt-out is set).
+
+    Both are intentional secure-by-default changes. Details below.
 
 ## Threat model
 
@@ -34,14 +45,14 @@ This is the canonical operator-facing security reference for VirtRigaud **v0.3.6
 
 ### STRIDE quick-reference
 
-| Threat                  | Where VirtRigaud is exposed                                          | Mitigation status in v0.3.6                                                                         |
+| Threat                  | Where VirtRigaud is exposed                                          | Mitigation status in v0.3.7                                                                         |
 |-------------------------|----------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
-| **Spoofing**            | A rogue Provider CR could point the manager at an attacker endpoint. | RBAC on Provider CR is the only gate. mTLS between manager and provider is **[NOT WIRED]** — see below. |
-| **Tampering**           | Provider gRPC traffic on the pod network.                            | gRPC is plaintext by default in v0.3.6. Treat the pod network as trusted (CNI encryption / private cluster). |
-| **Repudiation**         | Admin actions on CRs.                                                | K8s audit logs (operator-provided). VirtRigaud emits `Events` for reconcile decisions.              |
-| **Information disclosure** | Credentials in logs, status, events, metrics labels.              | Audited: no credentials are logged or returned in `Status`. Length-only diagnostics (e.g. `password_length=N`) are present. |
+| **Spoofing**            | A rogue Provider CR could point the manager at an attacker endpoint; a spoofed provider service could intercept manager RPCs. | RBAC on the Provider CR plus **mTLS**: the manager verifies the provider's server cert (TLS 1.3, SNI anchored to the Service FQDN) and the provider rejects any caller whose client cert is not signed by the configured CA / not on the SAN allow-list. |
+| **Tampering**           | Provider gRPC traffic on the pod network.                            | gRPC is **encrypted with mTLS by default** in v0.3.7. Plaintext requires an explicit per-Provider opt-out. |
+| **Repudiation**         | Admin actions on CRs.                                                | K8s audit logs (operator-provided). VirtRigaud emits `Events` for reconcile decisions. The `TLSConfigured` Condition records TLS posture per Provider for auditors. |
+| **Information disclosure** | Credentials in logs, status, events, metrics labels.              | Audited: no credentials are logged or returned in `Status`. Length-only diagnostics (e.g. `password_length=N`) are present. Credentials now travel only inside mTLS-protected gRPC streams. |
 | **Denial of service**   | Runaway provider RPCs, controller starvation.                         | Per-Provider CircuitBreaker (G6/#112) limits how loudly a flapping provider can fail. See [Resilience](resilience.md). |
-| **Elevation of privilege** | Manager ServiceAccount has cluster-wide write on VirtRigaud CRDs. | RBAC scoped to `infra.virtrigaud.io` + a narrow set of core K8s verbs. No `*` resources, no `cluster-admin`. |
+| **Elevation of privilege** | Manager ServiceAccount has cluster-wide write on VirtRigaud CRDs. | RBAC scoped to `infra.virtrigaud.io` + a narrow set of core K8s verbs; Secret access tightened to **read-only** (`get;list;watch`) in v0.3.7. No `*` resources, no `cluster-admin`. |
 
 ## Provider credentials
 
@@ -78,7 +89,7 @@ For Proxmox specifically, **API tokens MUST be used in production**. See [Proxmo
 
 - VirtRigaud logs **length-only diagnostics** (e.g. `username_length=12 password_length=24`) at INFO level to confirm credentials were mounted, never the values.
 - vSphere provider explicitly does not pass username/password as command-line arguments; the SOAP client uses `url.UserPassword` so they are not visible in process listings.
-- libvirt SSH password auth uses `sshpass -e` (env-var-bearing) rather than command-line — but see the [SSH host-key verification gap](#libvirt-ssh-host-key-verification) below; password-over-network has a separate threat.
+- libvirt SSH password auth uses `sshpass -e` (env-var-bearing) rather than command-line; the SSH transport itself now verifies the host key by default (see [Libvirt SSH host-key verification](#libvirt-ssh-host-key-verification) below).
 
 ### Where credentials are NOT exposed
 
@@ -89,63 +100,55 @@ For Proxmox specifically, **API tokens MUST be used in production**. See [Proxmo
 
 ## gRPC transport between manager and providers
 
-!!! danger "mTLS is documented for future support; not wired in v0.3.6"
-    The `internal/transport/grpc/client.go` `Client` accepts a `TLSConfig` (CertFile, KeyFile, CAFile, Insecure — see lines 951-991) and builds gRPC transport credentials correctly. However, the `internal/runtime/remote/resolver.go` `buildTLSConfig()` method that **decides whether to populate that TLSConfig** is currently short-circuited:
+!!! success "mTLS is wired and on by default in v0.3.7"
+    Manager↔provider gRPC traffic is protected by **mutual TLS by default** (ADR-0003, #147/#148). The manager loads a client cert + key + CA bundle from the Provider's TLS Secret and dials over **TLS 1.3** with the SNI `ServerName` anchored to the provider Service FQDN. The provider serves mTLS with `RequireAndVerifyClientCert` and enforces a SAN allow-list before any RPC is accepted.
 
-    ```go
-    // internal/runtime/remote/resolver.go:142-148
-    func (r *Resolver) buildTLSConfig(ctx context.Context, provider *infravirtrigaudiov1beta1.Provider) (*grpcClient.TLSConfig, error) {
-        // If TLS is not enabled, return nil for insecure connection
-        // TLS configuration removed in v1beta1, always return nil for insecure connection
-        if true {
-            return nil, nil
-        }
-        // ... unreachable code follows
-    }
-    ```
+    Plaintext gRPC is no longer the default. A provider with no TLS material and no explicit opt-out **hard-exits on startup** (fail-closed). The full configuration, escape hatches, and rotation story live on the [mTLS page](../providers/security/mtls.md).
 
-    **Net effect**: regardless of whether you populate `Provider.spec.runtime.service.tls.secretRef` on a Provider CR, the manager dials providers with `insecure.NewCredentials()` (plaintext gRPC). The CRD field is parsed and validated but has no runtime effect in v0.3.6.
+    For a banking deployment, mTLS is now the **primary** transport control; NetworkPolicy + encrypted CNI remain valid defence-in-depth and are the required compensating control for any Provider you deliberately run with `tls.enabled=false`.
 
-    **What this means for a banking deployment**: the pod-network path between manager and provider is currently a plaintext gRPC channel. You must treat the pod network as trusted (encrypted CNI such as Cilium with WireGuard, or a network policy that guarantees the traffic never crosses an untrusted boundary). Plan to revisit this when first-class mTLS lands.
+### How it is wired
 
-    Tracking: this is a known v0.3.6 gap. See "[v0.3.6 security gap inventory](#v036-security-gap-inventory)" below.
+- **CRD field with runtime effect.** `Provider.spec.runtime.service.tls` (`enabled`, `secretRef`, `insecureSkipVerify`) now drives behaviour. The referenced Secret carries `tls.crt` / `tls.key` / `ca.crt` (a `kubernetes.io/tls` Secret or an `Opaque` Secret with those three keys; both accepted) and is mounted on the provider pod at `/etc/virtrigaud/tls`.
+- **Manager side** (`internal/runtime/remote/resolver.go`): `MinVersion=TLS1.3`, `RootCAs` from `ca.crt`, client `Certificates` from `tls.crt`+`tls.key`, `ServerName` anchored to the provider Service FQDN.
+- **Provider side** (SDK): `MinVersion=TLS1.3`, `RequireAndVerifyClientCert`, CA bundle in `ClientCAs`, SAN allow-list via `validateTLSPeer`.
+- **Status condition** `TLSConfigured` (reasons `Enabled` / `ExplicitlyDisabled` / `SecretRefMissing` / `TLSBlockMissing`) makes posture auditable via `kubectl get providers`.
+- **Cert rotation** hot-reloads the **leaf** cert/key without a pod restart; rotating the **CA bundle** still requires a provider restart. Documented limitation.
+
+!!! warning "Breaking change on upgrade"
+    Existing Provider CRs **without** a `spec.runtime.service.tls` block fail to reconcile (`TLSConfigured=False, Reason=TLSBlockMissing`, **no Deployment created**) until the operator either provisions a Secret with `tls.enabled=true` + `secretRef`, or explicitly sets `tls.enabled=false` for audit-flagged plaintext. There is **no global `--insecure-no-tls-providers` flag** — per-Provider `tls.enabled=false` (or `providerTLS.insecure` for chart-templated providers) is the only escape hatch.
 
 ### Provider-side gRPC server authentication
 
-The provider SDK (`sdk/provider/middleware/middleware.go:81-94`) defines:
+The provider SDK (`sdk/provider/middleware/middleware.go`) defines:
 
-- `AuthConfig.RequireTLS` — refuse RPCs without a valid client cert (mTLS).
+- `AuthConfig.RequireTLS` + `AuthConfig.AllowedSANs` — refuse RPCs without a verified client cert (mTLS), and gate accepted identities by SAN/CN allow-list.
 - `AuthConfig.BearerTokenAuth` + `AuthConfig.ValidateToken` — accept a Bearer-token Authorization metadata header and validate it with an operator-supplied function.
 
-!!! warning "Auth interceptors are present in the SDK but NOT wired in the in-tree providers"
-    The four in-tree provider binaries (`cmd/provider-vsphere`, `cmd/provider-libvirt`, `cmd/provider-proxmox`, `cmd/provider-mock`) construct their middleware config with only `Logging` and `Recovery` interceptors. None enable `Auth.RequireTLS` or `Auth.BearerTokenAuth`. The libvirt provider in `cmd/provider-libvirt/main.go` does not even use the SDK's `server.New(config)` path — it constructs a raw `grpc.NewServer()` with no middleware at all.
+!!! note "mTLS auth is now enabled in the in-tree providers"
+    All four in-tree provider binaries (`cmd/provider-vsphere`, `cmd/provider-libvirt`, `cmd/provider-proxmox`, `cmd/provider-mock`) enable `Auth.RequireTLS` when TLS material is present. The libvirt provider was migrated onto the SDK server path so it gets the same auth middleware as the others. `validateTLSPeer` rejects an unverified caller with gRPC `Unauthenticated` and a non-matching SAN with `PermissionDenied`. An **empty** allow-list is permissive (any cert signed by the configured CA is accepted — single-CA trust model); populate `VIRTRIGAUD_PROVIDER_ALLOWED_SANS` for SAN-level authorization. See the [mTLS page](../providers/security/mtls.md#the-san-allow-list).
 
-    **An external provider author** writing their own binary against `sdk/provider` MAY enable Bearer-token auth today; see [Bearer Token Authentication](../providers/security/bearer-token.md). The manager does not currently send a bearer token, so an external provider that requires one will reject the manager's RPCs.
+    Bearer-token auth on the gRPC channel remains available in the SDK but unused by the in-tree manager — it is not needed when the manager is the only legitimate caller. See [Bearer Token Authentication](../providers/security/bearer-token.md).
 
 ### Libvirt SSH host-key verification
 
-When a libvirt Provider CR uses a `qemu+ssh://` endpoint, the provider injects `no_verify=1` into the SSH URI:
+!!! success "Host-key verification is on by default in v0.3.7"
+    When a libvirt Provider CR uses a `qemu+ssh://` endpoint, the provider now **verifies the SSH host key** of the hypervisor it dials (ADR-0004, #149). The legacy `no_verify=1` behaviour has been removed from the default path. There is **no TOFU (trust-on-first-use)**: if verification is on but no usable `known_hosts` is present, the connection **hard-fails** with an actionable error rather than silently accepting any key.
 
-```go
-// internal/providers/libvirt/virsh.go:165-171
-if strings.Contains(parsedURI.Scheme, "ssh") {
-    query := parsedURI.Query()
-    query.Set("no_verify", "1") // Skip host key verification
-    query.Set("no_tty", "1")    // Non-interactive mode
-    parsedURI.RawQuery = query.Encode()
-}
+**Trust material.** The host key lives in a `known_hosts` entry inside the existing libvirt credentials Secret (the one referenced by `credentialSecretRef`), mounted at `/etc/virtrigaud/credentials/known_hosts`. Seed it with:
+
+```bash
+ssh-keyscan -H <libvirt-host> >> known_hosts
 ```
 
-This means the libvirt provider does **not verify the SSH host key** of the hypervisor it dials. An attacker who can MITM the pod-to-hypervisor connection can present any host key and the provider will accept it.
+then add the resulting `known_hosts` key to the credentials Secret. The full operational runbook (keyscan, Secret update, rollout) lives on the libvirt provider and host-prep pages; this page only covers the security framing.
 
-**Mitigations for regulated environments:**
+**Escape hatch (lab / migration only).** Set the environment variable `LIBVIRT_INSECURE_SKIP_HOST_KEY_VERIFICATION=true` via `spec.runtime.env` to fall back to non-verifying behaviour. This is **audit-flagged**: a WARN is logged on every connection. Do not use it in regulated environments.
 
-1. **Treat the network path as trusted.** Co-locate the libvirt provider pod and the libvirt host on the same private subnet, behind a CNI that enforces traffic on that path (Calico + WireGuard, Cilium + IPsec). Combine with a NetworkPolicy that allows egress to that subnet only.
-2. **Mount a known_hosts file.** Bake the libvirt host's host key into a ConfigMap, mount it at a known path, and modify the provider Deployment to consume it. This needs a code-path that consumes operator-provided known_hosts; **that path does not exist in v0.3.6** — it is a planned follow-up.
-3. **Use an SSH-bastion proxy.** Stand up an SSH bastion with verified host keys; have the provider talk to the bastion instead of the libvirt host directly. The bastion verifies the next hop.
-4. **Use a libvirt-go native binding.** Future direction: replace the `qemu+ssh+virsh` shell-out path with a libvirt-go API client that does TLS directly. Tracked as a v0.4.0+ follow-up.
+!!! warning "Breaking change on upgrade"
+    v0.3.6 libvirt SSH Providers relied on implicit `no_verify=1`. After upgrading to v0.3.7 they **stop connecting** until either a `known_hosts` entry is added to the credentials Secret, or the `LIBVIRT_INSECURE_SKIP_HOST_KEY_VERIFICATION=true` opt-out is set. This is the security control working as designed — a clean, actionable connection failure replaces a silent insecure success.
 
-For v0.3.6, the project's official posture is **option 1 (trusted network)**. Auditors should be told this explicitly.
+**Defence-in-depth (still recommended):** keep the libvirt provider pod and the libvirt host on the same private subnet behind a CNI that enforces traffic on that path, with a NetworkPolicy scoping egress. Host-key verification is now the primary control; network isolation is the backstop.
 
 ## RBAC
 
@@ -154,22 +157,24 @@ For v0.3.6, the project's official posture is **option 1 (trusted network)**. Au
 `charts/virtrigaud/templates/manager-rbac.yaml` grants the manager's ServiceAccount these verbs:
 
 - **VirtRigaud CRDs** (`infra.virtrigaud.io`): `create, delete, get, list, patch, update, watch` on `virtualmachines`, `providers`, `vmsnapshots`, `vmclones`, `vmmigrations`, `vmsets`, `vmclasses`, `vmimages`, `vmnetworkattachments`, `vmplacementpolicies` (and their `/status` and `/finalizers` subresources).
-- **Core K8s**: `secrets, configmaps, services, events` (`create, delete, get, list, patch, update, watch`).
-- **`persistentvolumeclaims`** (for migration storage): full verbs.
+- **`secrets`**: `get, list, watch` only — **read-only as of v0.3.7** (#152). The manager resolves `Provider.spec.credentialSecretRef` and the TLS `secretRef` to mount them into provider Deployments; it never creates, updates, or deletes Secrets.
+- **Core K8s**: `configmaps, services, events` (scoped to the verbs each actually needs).
+- **`persistentvolumeclaims`** (for migration storage).
 - **`pods`**: `get, list, watch` (for provider-readiness checks).
-- **`apps/deployments`** (for spawning provider pods): full verbs.
+- **`apps/deployments`** (for spawning provider pods).
 - **`coordination.k8s.io/leases`**: leader election.
 - **`metrics.k8s.io/pods,nodes`**: `get, list`.
 
 **No wildcards. No `cluster-admin`. No `*` resources.** The chart supports `rbac.scope=namespace` for single-namespace deployments via the Role/RoleBinding branch.
 
-!!! note "Secrets verb scope"
-    The manager needs `secrets` `get/list/watch` because:
+!!! note "Secrets verb scope tightened in v0.3.7"
+    The manager's Secret access was reduced from full CRUD to **read-only** (`get;list;watch`) in v0.3.7 (#152), and unused/phantom grants were removed, bringing the ClusterRole to least-privilege. This requires a `helm upgrade` to take effect. If a custom deployment genuinely needs additional grants, re-add them via the chart's `rbac.additionalRules` value rather than widening the built-in role.
 
-    - `Provider.spec.credentialSecretRef` resolves to a Secret it must mount into the provider Deployment.
-    - It owns the migration-PVC Secret bridge.
+    Read-only is sufficient because:
 
-    It does **not** need `create/delete/update` on Secrets in principle. The current chart grants them; tightening this is a v0.4.0 follow-up.
+    - `Provider.spec.credentialSecretRef` resolves to a Secret the manager mounts into the provider Deployment (read).
+    - The TLS `secretRef` resolves to a Secret the manager reads to build the gRPC client config and mount on the provider pod (read).
+    - The migration-PVC Secret bridge reads, not writes, Secret material.
 
 ### Provider pod RBAC
 
@@ -322,14 +327,20 @@ We coordinate disclosure on a 90-day default timeline.
 
 ## v0.3.6 security gap inventory
 
-This is the current honest list of security work the project is aware of and has not yet shipped. Operators in regulated environments must factor these into their compensating-control posture.
+This section tracks the security gaps that were open in v0.3.6 and records what shipped to close them. The heading and anchor (`#v036-security-gap-inventory`) are retained so links from older pages still resolve. The two highest-severity transport gaps are **resolved in v0.3.7**.
+
+!!! success "Resolved in v0.3.7"
+    | Former gap | Status in v0.3.7 |
+    |------------|------------------|
+    | **mTLS not wired through Resolver** — the CRD field had no runtime effect. | **Resolved.** `Provider.spec.runtime.service.tls` now drives mTLS by default (TLS 1.3 floor). See [gRPC transport](#grpc-transport-between-manager-and-providers). |
+    | **In-tree providers did not enable mTLS/Bearer auth** in their middleware. | **Resolved.** All four in-tree providers enforce `Auth.RequireTLS` + the SAN allow-list; libvirt was migrated onto the SDK server. Unauthenticated callers are rejected (`Unauthenticated`); off-list certs get `PermissionDenied`. |
+    | **libvirt SSH `no_verify=1`** disabled host-key verification. | **Resolved.** Host-key verification is **on by default** (no TOFU). Trust material is a `known_hosts` key in the credentials Secret; audit-flagged env opt-out exists for lab use. See [Libvirt SSH host-key verification](#libvirt-ssh-host-key-verification). |
+    | **Manager RBAC included `secrets` `create/delete/update`** wider than required. | **Resolved.** Secret access tightened to read-only (`get;list;watch`); unused grants removed (#152). Re-add via `rbac.additionalRules` if genuinely needed. |
+
+The following remain open and operators in regulated environments must factor them into their compensating-control posture:
 
 | Gap | Severity (banking) | Mitigation today |
 |-----|---------------------|-------------------|
-| **mTLS not wired through Resolver** — `internal/runtime/remote/resolver.go:142-148` short-circuits TLS config; CRD field exists but has no effect. | HIGH | Treat pod network as trusted (CNI-level encryption, NetworkPolicy). |
-| **In-tree providers do not enable Bearer-token or mTLS auth** in their middleware config — `cmd/provider-{vsphere,proxmox,mock}/main.go` enable only Logging+Recovery; `cmd/provider-libvirt/main.go` uses no SDK middleware at all. | HIGH | NetworkPolicy that allows ingress to provider pods only from the manager pod. See [Network Policies](../providers/security/network-policies.md). |
-| **libvirt SSH `no_verify=1`** — `internal/providers/libvirt/virsh.go:167` disables host-key verification. | HIGH | Trusted-network posture or SSH bastion; documented in the [libvirt provider page](../providers/libvirt.md#authentication). |
-| **Manager `--metrics-secure=false`** is the v0.3.6 default. | MEDIUM | Pass `--metrics-secure=true` and wire RBAC for Prometheus. Default flip planned for v0.4.0. |
-| **Manager RBAC includes `secrets` `create/delete/update`** that is wider than required. | LOW | Acceptable; tightening is a v0.4.0 follow-up. |
+| **Manager `--metrics-secure=false`** is still the default. | MEDIUM | Pass `--metrics-secure=true` and wire RBAC for Prometheus. Default flip planned for a later release. |
 | **`govulncheck` is not a CI gate.** Trivy on the image catches CVEs at release time, but not at PR time. | LOW | Manual `govulncheck ./...` before tag. |
 | **provider-libvirt image is `debian:bookworm-slim`**, not distroless, because it shells out to `virsh` / `ssh` / `scp`. | LOW | Image is still non-root + readOnlyRootFS + dropAllCaps. Future: replace SSH-virsh with libvirt-go. |
