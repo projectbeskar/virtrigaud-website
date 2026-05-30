@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Capabilities Matrix
 
-This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.3.6**.
+This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.3.7**.
 
 Cells marked ✅ / ❌ in this matrix are cross-referenced against each provider's `GetCapabilities` gRPC response (`internal/providers/{vsphere,libvirt,proxmox}/server.go`) and the capability builder registrations in `internal/providers/{proxmox}/capabilities.go` / `sdk/provider/capabilities/`. Where a feature is implemented in code but not yet exposed through the capability flag (or vice versa), the cell carries a footnote rather than being silently changed.
 
@@ -245,10 +245,29 @@ Reflects each provider's `GetCapabilities.SupportedNetworkTypes` response.
 
 All provider images are available from the GitHub Container Registry:
 
-- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6`
-- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.6`
-- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.6`
-- **Mock**: `ghcr.io/projectbeskar/virtrigaud/provider-mock:v0.3.6`
+- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.7`
+- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.7`
+- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.7`
+
+The mock provider (`provider-mock`) is a development/conformance-testing image only.
+It is **not** published under release tags and is **not** part of the multi-arch
+release set above.
+
+### Image architectures
+
+Starting with v0.3.7, all images are multi-arch manifests:
+
+| Component | `linux/amd64` | `linux/arm64` |
+|-----------|:---:|:---:|
+| manager | ✅ | ✅ |
+| provider-vsphere | ✅ | ✅ |
+| provider-libvirt | ✅ | ✅ |
+| provider-proxmox | ✅ | ✅ |
+| kubectl | ✅ | ✅ |
+
+arm64 clusters (Apple Silicon nodes, AWS Graviton, Ampere) are fully supported
+from v0.3.7 onward. No changes to Provider CRs or Helm values are required —
+the container runtime selects the correct layer automatically.
 
 ## Choosing a Provider
 
@@ -331,6 +350,7 @@ All provider images are available from the GitHub Container Registry:
 
 ## Version History
 
+- **v0.3.7**: mTLS enforced on all Provider CRs (`TLSConfigured` condition); libvirt SSH host-key verification on by default; multi-arch images (amd64+arm64); manager RBAC tightened.
 - **v0.3.6**: Manager-side CircuitBreaker wired on all provider RPCs (G6); G7 metric families completed; H1 build-path consolidation. No new provider-side capabilities.
 - **v0.3.5**: Observability G-track foundation — provider RPC metrics surface for every provider.
 - **v0.3.3**: Changelog organisation with versioned release headers.
@@ -342,4 +362,4 @@ All provider images are available from the GitHub Container Registry:
 
 ---
 
-*This document reflects VirtRigaud v0.3.6 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*
+*This document reflects VirtRigaud v0.3.7 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*

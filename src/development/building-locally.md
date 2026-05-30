@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 This guide covers building VirtRigaud from source and building the documentation.
 
-!!! note "v0.3.6 build-path consolidation (PRs #115/#117/#119/#121)"
+!!! note "Build-path consolidation (PRs #115/#117/#119/#121, stable since v0.3.6)"
     Prior to v0.3.6 there were two parallel build paths — `cmd/main.go` + a root
     `Dockerfile`, and `cmd/manager/main.go` + `build/Dockerfile.manager`. The two
     drifted: `make build` and `make docker-build` produced a binary missing
@@ -34,9 +34,8 @@ Dockerfile.
 
 ### Prerequisites
 
-- **Go 1.26+** - [Download](https://go.dev/dl/) — required since
-  [#125](https://github.com/projectbeskar/virtrigaud/pull/125) (Go toolchain
-  floor bumped from 1.24.0 to 1.26.0). Binary consumers via released images are
+- **Go 1.26.3+** - [Download](https://go.dev/dl/) — the Go toolchain floor
+  was raised to **1.26.3** in v0.3.7. Binary consumers via released images are
   unaffected; only source builders need to upgrade.
 - **Docker** - [Install](https://docs.docker.com/get-docker/)
 - **Kubernetes cluster** - kind, k3s, or remote
@@ -226,8 +225,8 @@ sudo apt-get install golang-go
 # Or download from https://go.dev/dl/
 ```
 
-Go 1.26 or higher is required for generating CRD documentation from the
-v0.3.6+ source tree.
+Go 1.26.3 or higher is required for generating CRD documentation from the
+v0.3.7+ source tree.
 
 ### Quick Start
 

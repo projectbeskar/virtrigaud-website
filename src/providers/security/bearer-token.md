@@ -5,19 +5,19 @@ SPDX-License-Identifier: Apache-2.0
 
 # Bearer Token Authentication
 
-!!! danger "Bearer-token auth is available in the SDK; it is NOT enabled in the in-tree providers in v0.3.6, and the manager does not currently send a bearer token."
-    The provider SDK exposes `middleware.AuthConfig.BearerTokenAuth` and an operator-supplied `ValidateToken` callback (`sdk/provider/middleware/middleware.go:81-94`). An external provider author can opt in by wiring it through `server.Config.Middleware.Auth`. The four in-tree providers — `cmd/provider-vsphere`, `cmd/provider-libvirt`, `cmd/provider-proxmox`, `cmd/provider-mock` — do **not** enable it; their main files configure only `Logging` and `Recovery` interceptors (verify at `cmd/provider-vsphere/main.go:64-73`).
+!!! note "In v0.3.7 the gRPC channel is secured by mTLS, not bearer tokens. This page is primarily about hypervisor API tokens."
+    As of v0.3.7 the manager↔provider gRPC channel is authenticated by **mutual TLS with a client-cert SAN allow-list** (see [mTLS](mtls.md)), not by a bearer token. A bearer token is unnecessary when the manager is the only legitimate caller, so the in-tree manager does **not** attach an `Authorization: Bearer <token>` metadata header on outbound RPCs.
 
-    Equally important: the manager-side gRPC client (`internal/transport/grpc/client.go`) does **not** attach an `Authorization: Bearer <token>` metadata header on outbound RPCs. If you enable Bearer-token auth on a provider that the in-tree manager dials, the manager will get back `codes.Unauthenticated` and reconciles will fail.
+    The provider SDK still exposes `middleware.AuthConfig.BearerTokenAuth` and an operator-supplied `ValidateToken` callback (`sdk/provider/middleware/middleware.go`) for **external** provider authors who want it in addition to (or instead of) mTLS. If you enable Bearer-token auth on a provider that the in-tree manager dials, the manager will get back `codes.Unauthenticated` and reconciles will fail — so treat gRPC-channel bearer auth as an external-provider feature, not an in-tree production path.
 
     This page therefore covers two distinct scopes:
 
     1. **Provider API tokens to hypervisors** (Proxmox API tokens, future REST-based providers) — these are real, in-production, and the recommended posture for Proxmox.
-    2. **gRPC-channel bearer auth via the SDK** — possible for external provider authors, but the in-tree manager will not interoperate without code changes. Treat this as roadmap, not production-ready.
+    2. **gRPC-channel bearer auth via the SDK** — available for external provider authors; the in-tree manager authenticates with mTLS instead and will not send a bearer token.
 
 ## Scope 1: Hypervisor API tokens
 
-This is the **production-relevant** form of bearer-token-style authentication in v0.3.6. It applies to the Proxmox provider today and is the model for any future REST-API-based provider.
+This is the **production-relevant** form of bearer-token-style authentication in v0.3.7. It applies to the Proxmox provider today and is the model for any future REST-API-based provider.
 
 ### Proxmox API tokens
 
@@ -90,12 +90,12 @@ spec:
   credentialSecretRef:
     name: proxmox-prod-credentials
   runtime:
-    image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.6
+    image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.7
 ```
 
 #### Token rotation
 
-Token rotation is a multi-step operation in v0.3.6:
+Token rotation is a multi-step operation in v0.3.7:
 
 1. Create a new token in PVE.
 2. Update the K8s Secret (or your ExternalSecret) with the new `token_id` / `token_secret`.
@@ -108,7 +108,7 @@ In-process token reload is on the roadmap for v0.4.0+.
 
 The vSphere provider does **not** use bearer-token-style auth. It authenticates via vCenter SSO (username/password). See the [vSphere provider page](../vsphere.md) for the service-account configuration pattern.
 
-A future SAML/OIDC-based vCenter authentication mode could be modelled as a bearer token, but is not implemented in v0.3.6.
+A future SAML/OIDC-based vCenter authentication mode could be modelled as a bearer token, but is not implemented in v0.3.7.
 
 ### Libvirt
 
@@ -116,7 +116,7 @@ Libvirt authentication is SSH-based (key or password). Bearer tokens do not appl
 
 ## Scope 2: gRPC-channel bearer auth (SDK, external providers)
 
-This scope is for operators writing their own **external** provider against `sdk/provider`. It is documented for completeness and as the **roadmap target** for in-tree providers.
+This scope is for operators writing their own **external** provider against `sdk/provider`. It is documented for completeness. In-tree providers authenticate the manager via mTLS (see [mTLS](mtls.md)); bearer-token auth on the gRPC channel is an optional extra that only external provider authors would wire in.
 
 ### SDK API
 
@@ -180,9 +180,10 @@ The in-tree manager's gRPC client does not currently attach a bearer token to ou
 
 There is no `authorization`-header-injecting interceptor. If you enable `BearerTokenAuth: true` on the server side, every RPC from the in-tree manager will fail with `codes.Unauthenticated`.
 
-**Roadmap**: a future v0.4.x release is expected to add a client-side interceptor that reads a token from a Secret referenced by the Provider CR and attaches it to every outbound RPC. The CRD shape will likely extend `ProviderRuntimeSpec.Service` with an optional `bearerTokenSecretRef`. Track this against the project's gap inventory in [Operations -> Security](../../operations/security.md#v036-security-gap-inventory).
+!!! note "The in-tree channel is authenticated by mTLS, not bearer tokens"
+    In v0.3.7 the manager authenticates to providers with a **client certificate** verified against a configured CA and a SAN allow-list (see [mTLS](mtls.md)). That is the in-tree authentication path; there is no plan to also send a bearer token from the in-tree manager. SDK bearer-token auth remains an optional control for external provider authors who want an additional or alternative gate on top of (or instead of) mTLS.
 
-### Why this is not "JWT with scopes" in v0.3.6
+### Why this is not "JWT with scopes" in v0.3.7
 
 The SDK's `ValidateToken` is intentionally a flat `func(ctx, token) error` — it does not encode scopes, claims, expiration, audience, or any other JWT-like structure. Two reasons:
 
@@ -190,11 +191,11 @@ The SDK's `ValidateToken` is intentionally a flat `func(ctx, token) error` — i
     - The provider knowing about scopes (which couples the SDK to a policy model), or
     - A separate authorisation interceptor that lives downstream of `ValidateToken` and inspects `info.FullMethod`.
 
-    Neither is implemented in v0.3.6.
+    Neither is implemented in v0.3.7.
 
-2. **In a one-manager-one-provider trust model, scoping doesn't add much.** The manager is the only legitimate caller, so the question "what is this caller allowed to do?" is just "is this the manager?". The interesting authorisation surface is the K8s RBAC on the `Provider` CR — who is allowed to create/modify it — not the gRPC channel.
+2. **In a one-manager-one-provider trust model, scoping doesn't add much.** The manager is the only legitimate caller, so the question "what is this caller allowed to do?" is just "is this the manager?" — answered in v0.3.7 by mTLS client-cert identity and the SAN allow-list. The interesting authorisation surface is the K8s RBAC on the `Provider` CR — who is allowed to create/modify it — not the gRPC channel.
 
-When and if multi-tenant providers become a thing, the design would extend `ValidateToken` to return a typed context value (claims), and a follow-on interceptor would gate methods on claim values. That is roadmap, not v0.3.6.
+When and if multi-tenant providers become a thing, the design would extend `ValidateToken` to return a typed context value (claims), and a follow-on interceptor would gate methods on claim values. That is roadmap, not v0.3.7.
 
 ## Auditing
 
@@ -203,7 +204,7 @@ For Scope 1 (hypervisor API tokens):
 - **Proxmox audit log** records the token ID on every API call. Configure your PVE cluster to ship audit events to your SIEM.
 - **VirtRigaud-side logs** record `token_id` (the ID, not the secret) at DEBUG level when establishing the PVE client. The token secret is **never** logged.
 
-For Scope 2 (gRPC-channel bearer auth, when wired):
+For Scope 2 (gRPC-channel bearer auth, for external providers that enable it):
 
 - The SDK's `Logging` middleware (enabled in all in-tree providers) logs `method`, `code`, and `duration` per RPC. It does NOT log the `authorization` header value.
 

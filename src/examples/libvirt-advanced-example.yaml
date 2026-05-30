@@ -62,13 +62,20 @@ spec:
   # Remote runtime configuration
   runtime:
     mode: Remote
-    image: ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.2.3
-    version: v0.2.0
+    image: ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.7
+    version: v0.3.7
     replicas: 2
-    
+
     service:
       port: 9443
-    
+      # v0.3.7: a Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false to keep plaintext (dev/lab only).
+      tls:
+        enabled: true
+        secretRef:
+          name: libvirt-provider-tls   # Secret (kubernetes.io/tls or Opaque) with tls.crt, tls.key, ca.crt
+        insecureSkipVerify: false
+
     resources:
       requests:
         cpu: "100m"
@@ -76,11 +83,11 @@ spec:
       limits:
         cpu: "2"
         memory: "1Gi"
-    
+
     # Node selection for provider pods
     nodeSelector:
       virtrigaud.io/provider: "libvirt"
-    
+
     # Security context
     securityContext:
       runAsNonRoot: true
@@ -90,7 +97,7 @@ spec:
       capabilities:
         drop:
         - ALL
-    
+
     # Environment variables for provider
     env:
     - name: PROVIDER_NAMESPACE
@@ -101,12 +108,6 @@ spec:
       valueFrom:
         fieldRef:
           fieldPath: metadata.name
-    
-    # TLS configuration for secure communication
-    tls:
-      enabled: true
-      secretRef:
-        name: libvirt-provider-tls
 
 ---
 # VM Class for remote provider

@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Libvirt Host Preparation
 
-This page is aligned to **VirtRigaud v0.3.6**. It describes what an operator
+This page is aligned to **VirtRigaud v0.3.7**. It describes what an operator
 must set up on a Libvirt/KVM host so the in-tree libvirt provider
 (`internal/providers/libvirt/`) can drive it over SSH.
 
@@ -18,29 +18,19 @@ uses either a password (via `sshpass` + `SSHPASS` env var) or an SSH private
 key, both read from the K8s Secret mounted at
 `/etc/virtrigaud/credentials/` (`internal/providers/libvirt/virsh.go:115-133`).
 
-!!! danger "SSH host-key verification is disabled in v0.3.6 (#149)"
-    The provider sets `no_verify=1` on the libvirt URI
-    (`internal/providers/libvirt/virsh.go:167`), which instructs the libvirt
-    client to **skip SSH host-key verification entirely**. This means:
+!!! note "SSH host-key verification is ON by default in v0.3.7"
+    In v0.3.6 the provider set `no_verify=1` on the libvirt URI, skipping
+    host-key verification entirely. **In v0.3.7 that flag is removed.** The
+    provider now enforces the SSH host key on every connection using the
+    `known_hosts` file mounted at `/etc/virtrigaud/credentials/known_hosts`.
 
-    - A man-in-the-middle on the path between the provider pod and the
-      libvirt host can present any SSH host key and the provider will accept it.
-    - Rotating the libvirt host's SSH key will not break the provider — but
-      that property is the wrong kind of "robust": it eliminates the security
-      property the host key is supposed to provide.
+    A missing or empty `known_hosts` key in the credentials Secret causes a
+    hard-fail connection — the provider will not connect and
+    `ProviderAvailable` will report the failure.
 
-    **You cannot rely on SSH host-key verification as a security control.**
-    Until #149 lands (operator-supplied `known_hosts` enforced via a separate
-    URI flag), the compensating control is:
-
-    1. A `NetworkPolicy` that locks egress from the provider pod to the
-       libvirt host's IP/port only, **and**
-    2. Either a private network between cluster and libvirt host, or an
-       encrypted CNI overlay (Cilium WireGuard, Calico WireGuard, IPsec).
-
-    See [mTLS](../providers/security/mtls.md) and
-    [Security](security.md#what-virtrigaud-is-not-trying-to-protect-against)
-    for the broader compensating-controls posture.
+    See [SSH host-key verification](../providers/libvirt.md#ssh-host-key-verification-v037) in the libvirt provider page and the
+    [SSH key-based auth](#ssh-key-based-auth-preferred) section below for the
+    provisioning steps.
 
 ## Required packages on the libvirt host
 
@@ -166,6 +156,56 @@ stringData:
 
 The provider reads these keys at
 `internal/providers/libvirt/virsh.go:115-133`.
+
+### Seed `known_hosts` for the credentials Secret (v0.3.7+)
+
+SSH host-key verification is on by default in v0.3.7. You must add the libvirt
+host's SSH host key to the credentials Secret before the provider can connect.
+
+Run the following on the operator workstation (or any host with SSH access to
+the network path the provider pod will use):
+
+```bash
+# Collect the host key in hashed form (recommended; avoids exposing the hostname)
+ssh-keyscan -H <libvirt-host> > known_hosts
+cat known_hosts    # verify it looks like:  |1|hash1|hash2 ssh-ed25519 AAAA...
+```
+
+Add the result as the `known_hosts` key in the credentials Secret. Never put a
+real hostname, IP, or key fingerprint in example files — use a placeholder when
+templating:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: libvirt-creds
+  namespace: virtrigaud-system
+type: Opaque
+stringData:
+  username: virt-admin
+  ssh-privatekey: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    ...
+    -----END OPENSSH PRIVATE KEY-----
+  # seed via: ssh-keyscan -H <libvirt-host> >> known_hosts
+  known_hosts: |
+    |1|REDACTED_HASH_1=|REDACTED_HASH_2= ssh-ed25519 REDACTED_HOST_PUBLIC_KEY
+```
+
+The provider mounts the Secret read-only at `/etc/virtrigaud/credentials/` and
+reads `known_hosts` from there on every SSH dial.
+
+If you need to temporarily bypass verification during a migration window, set
+the env var on the Provider CR (lab/migration only; audit-flagged):
+
+```yaml
+spec:
+  runtime:
+    env:
+      - name: LIBVIRT_INSECURE_SKIP_HOST_KEY_VERIFICATION
+        value: "true"
+```
 
 ## Storage pool setup
 
@@ -492,11 +532,14 @@ kubectl -n virtrigaud-system exec deploy/<provider-deployment> -- \
   nc -vz <libvirt-host> 22
 ```
 
-Remember: host-key verification is **disabled** in v0.3.6 (#149), so a host
-key mismatch is *not* what you're hitting. If `nc` works and `virsh
-version` from inside the provider pod still fails, it's almost always a
-credentials / sudo / group-membership issue on the libvirt side, not SSH
-itself.
+In v0.3.7, host-key verification is **enabled** by default. If the
+`known_hosts` key is missing from the credentials Secret, the provider will
+refuse to connect. Check the provider pod logs for `host key verification
+failed` and add the correct `known_hosts` entry as described in
+[Seed known_hosts for the credentials Secret](#seed-known_hosts-for-the-credentials-secret-v037).
+If `nc` works and `virsh version` from inside the provider pod still fails after
+fixing `known_hosts`, it is almost always a credentials / sudo /
+group-membership issue on the libvirt side, not SSH itself.
 
 ### Cloud-init does not run
 
@@ -528,8 +571,10 @@ cloud-init meta-data, see the libvirt provider page at
 - [ ] Sudo grant restricted to the exact commands above. No `ALL`.
 - [ ] `virt-admin` user has no shell login from anywhere except the cluster
       network range (enforced at sshd / firewalld level).
+- [ ] `known_hosts` key in the credentials Secret is populated and correct
+      (v0.3.7: hard-fail connection without it).
 - [ ] `NetworkPolicy` on the libvirt-provider pod that locks egress to the
-      libvirt host's IP/port only (compensates for #149).
+      libvirt host's IP/port only (defence-in-depth).
 - [ ] SELinux/AppArmor on the libvirt host stays in Enforcing/enforce mode.
       Diagnose denials by adjusting the profile, not by disabling it.
 - [ ] Storage pool on a dedicated filesystem with quotas, so a runaway VM
@@ -544,7 +589,8 @@ cloud-init meta-data, see the libvirt provider page at
   capability flags, and Provider CR spec.
 - [Operations / Security](security.md) — full credential flow and the
   STRIDE-style threat model.
-- [mTLS Configuration](../providers/security/mtls.md) — what is and is not
-  wired in v0.3.6 (#147, #149).
-- [Network Policies](../providers/security/network-policies.md) — the
-  compensating control while gRPC and SSH-host-key controls are not wired.
+- [mTLS Configuration](../providers/security/mtls.md) — mTLS is now fully
+  wired in v0.3.7.
+- [Network Policies](../providers/security/network-policies.md) —
+  defence-in-depth that complements the now-wired gRPC mTLS and SSH
+  host-key controls.

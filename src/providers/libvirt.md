@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The Libvirt provider manages VMs on KVM/QEMU via the `libvirt` daemon, talking to it through `virsh` shelled out over SSH. It is the simplest provider to operate against and is widely deployed on-premises.
 
-This page is aligned to **VirtRigaud v0.3.6**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/libvirt/server.go`.
+This page is aligned to **VirtRigaud v0.3.7**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/libvirt/server.go`.
 
 !!! note "Implementation detail: virsh over SSH"
     Unlike most libvirt integrations that use the C `libvirt-go` bindings (which require cgo), VirtRigaud's libvirt provider shells out to the `virsh` CLI over an SSH tunnel to the remote libvirt host (`internal/providers/libvirt/virsh.go`). This keeps the provider image small (no libvirt-dev runtime) and avoids cgo entirely, at the cost of being more sensitive to SSH-host hygiene. See [Troubleshooting](#troubleshooting) for the SSH-host-issue narrative.
@@ -91,13 +91,80 @@ spec:
     name: libvirt-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.6"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.7"
     service:
       port: 9090
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-libvirt-tls
+        insecureSkipVerify: false
 ```
 
-!!! note "SSH known_hosts"
-    The provider sets `no_verify=1` in the URI query to skip host-key verification (`internal/providers/libvirt/virsh.go:167`). This is convenient for dynamic provider pods but it does mean you should treat the network path between the manager and the libvirt host as trusted (mTLS-protected VPC or equivalent). See the [security pages](security/mtls.md) for the mTLS and supply-chain story.
+## TLS / mTLS (v0.3.7+)
+
+Starting in v0.3.7, the manager enforces that every Provider CR has a `spec.runtime.service.tls` block. A Provider without this block fails to reconcile and its status will show `TLSConfigured=False, Reason=TLSBlockMissing` — no Deployment is created.
+
+For full mTLS details see [Security — mTLS](security/mtls.md).
+
+### `spec.runtime.service.tls` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | bool | Set `true` to enable mTLS. Set `false` for plaintext (dev/lab only; audit-flagged). |
+| `secretRef.name` | string | Name of a `kubernetes.io/tls` or `Opaque` Secret containing `tls.crt`, `tls.key`, and `ca.crt`. |
+| `insecureSkipVerify` | bool | Skip server certificate verification. Dev-only; never set in regulated environments. |
+
+TLS material mounts at `/etc/virtrigaud/tls` inside the provider pod. Both manager and provider pin TLS 1.3. The `TLSConfigured` status condition reasons are `TLSBlockMissing`, `ExplicitlyDisabled`, `SecretRefMissing`, and `Enabled`.
+
+## SSH host-key verification (v0.3.7+)
+
+In v0.3.6 the provider set `no_verify=1` on the libvirt URI, skipping SSH host-key verification entirely. **In v0.3.7, host-key verification is on by default.** A missing `known_hosts` entry causes a hard-fail connection — the provider will not connect and the `ProviderAvailable` condition will report the failure.
+
+### Adding `known_hosts` to the credentials Secret
+
+Add a `known_hosts` key to the same Secret referenced by `spec.credentialSecretRef`. The provider reads it from `/etc/virtrigaud/credentials/known_hosts`.
+
+Seed the file on the operator workstation:
+
+```bash
+ssh-keyscan -H <libvirt-host> >> known_hosts
+```
+
+Then include it in the Secret:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: libvirt-credentials
+  namespace: virtrigaud-system
+type: Opaque
+stringData:
+  username: "virtrigaud"
+  ssh-privatekey: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    ...
+    -----END OPENSSH PRIVATE KEY-----
+  # seed via: ssh-keyscan -H <libvirt-host> >> known_hosts
+  known_hosts: |
+    |1|REDACTED_HASH_1=|REDACTED_HASH_2= ssh-ed25519 REDACTED_HOST_PUBLIC_KEY
+```
+
+### Escape hatch: disable host-key verification
+
+For labs and live-migration scenarios where host keys may change, you can disable verification via a provider env var. This is audit-flagged and not suitable for regulated/banking environments:
+
+```yaml
+spec:
+  runtime:
+    env:
+      - name: LIBVIRT_INSECURE_SKIP_HOST_KEY_VERIFICATION
+        value: "true"
+```
+
+!!! warning "Security note"
+    `LIBVIRT_INSECURE_SKIP_HOST_KEY_VERIFICATION=true` removes the SSH host-key verification control. Use only in isolated lab environments or short-lived migration windows. Every use will appear in audit logs.
 
 ## Endpoint formats
 
