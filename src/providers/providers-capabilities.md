@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Capabilities Matrix
 
-This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.3.7**.
+This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.3.8**.
 
 Cells marked ✅ / ❌ in this matrix are cross-referenced against each provider's `GetCapabilities` gRPC response (`internal/providers/{vsphere,libvirt,proxmox}/server.go`) and the capability builder registrations in `internal/providers/{proxmox}/capabilities.go` / `sdk/provider/capabilities/`. Where a feature is implemented in code but not yet exposed through the capability flag (or vice versa), the cell carries a footnote rather than being silently changed.
 
@@ -93,12 +93,12 @@ All providers implement these core operations:
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
 | **Template Deployment** | ✅ | ✅ | ✅ | ✅ | Deploy from templates |
-| **Clone Operations** | ✅ | ✅ | ✅ | ✅ | Full VM duplication with snapshot support |
-| **Linked Clones** | ✅ | ✅[^2] | ✅ | ✅ | COW-based clones (Libvirt: via qcow2 backing files) |
-| **Full Clones** | ✅ | ✅ | ✅ | ✅ | Independent copies |
+| **Clone Operations** | ✅ | ❌[^2] | ✅ | ✅ | Full VM duplication (vSphere/Proxmox `Clone`; libvirt returns `Unimplemented`) |
+| **Linked Clones** | ✅ | ❌[^2] | ✅ | ✅ | COW-based clones (libvirt reports `SupportsLinkedClones=false`) |
+| **Full Clones** | ✅ | ❌[^2] | ✅ | ✅ | Independent copies (libvirt `Clone` is `Unimplemented`) |
 | **VM Reconfiguration** | ✅ | ⚠️ Restart Required | ✅ | ✅ | Online resource modification |
 
-[^2]: Libvirt advertises `SupportsLinkedClones=true` in `internal/providers/libvirt/server.go` GetCapabilities — the previous matrix incorrectly marked this `❌`; corrected in v0.3.6 docs alignment.
+[^2]: Libvirt's `Clone` RPC returns `Unimplemented` and `GetCapabilities` reports `SupportsLinkedClones=false` (`internal/providers/libvirt/server.go`, corrected by #153/#154 in v0.3.8). An earlier doc-alignment footnote claimed libvirt advertised `SupportsLinkedClones=true` and was "corrected in v0.3.6" — that claim is **reversed** as of v0.3.8: libvirt linked clones (and clones generally) are unsupported. The VMClone controller (MVP, #179) drives same-provider full/linked clones on the providers that implement `Clone` (vSphere, Proxmox).
 
 ### Snapshot Operations
 
@@ -118,12 +118,26 @@ All providers implement these core operations:
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
 | **OVA/OVF Import** | ✅ | ❌ | ✅ | ✅ | Standard VM formats |
-| **Cloud Image Download** | ⚠️[^4] | ✅ | ✅ | ✅ | Remote image fetch (vSphere: tracked but no URL-based fetch yet) |
+| **Image Import (URL)** | ⚠️[^4] | ❌[^6] | ✅ | ✅ | Remote image fetch; libvirt `ImagePrepare` returns `Unimplemented` (#153/#154); vSphere tracked but no URL-based fetch yet |
 | **Content Libraries** | ✅ | ❌ | ❌ | ✅ | Centralized image management |
 | **Image Conversion** | ❌ | ✅ | ✅ | ✅ | Format transformation |
 | **Image Caching** | ✅ | ✅ | ✅ | ✅ | Performance optimization |
 
 [^4]: vSphere advertises `SupportsImageImport=true` (OVA/OVF + content library); direct cloud-image URL fetch is not yet implemented. Operators today should land cloud images in the content library out-of-band.
+
+[^6]: As of v0.3.8 (#153/#154), libvirt's `ImagePrepare` RPC returns `Unimplemented` and `GetCapabilities` reports `SupportsImageImport=false`. The earlier docs claimed libvirt fetched images from a URL into a storage pool volume; that path is not implemented. Operators must stage the base image on the libvirt host (or storage pool) out of band.
+
+### Disk Export / Import
+
+| Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
+|------------|---------|---------|---------|------|-------|
+| **Disk Export** | ✅[^7] | ✅[^8] | ❌ | ✅ | `ExportDisk` / `GetDiskInfo`; vSphere also advertises export compression |
+| **Disk Import** | ✅[^7] | ❌[^8] | ❌ | ✅ | `ImportDisk`; libvirt advertises export-only |
+| **Export Formats** | `vmdk`, `qcow2`, `raw` | per `GetDiskInfo` | — | simulated | vSphere `GetCapabilities` advertises all three (#178) |
+
+[^7]: As of v0.3.8 (#178), vSphere's `GetCapabilities` advertises disk **export and import** plus the `vmdk`, `qcow2`, and `raw` formats and export compression. Prior releases understated these flags (export/import reported as unsupported/zero); the cells above match the actual v0.3.8 response in `internal/providers/vsphere/server.go`.
+
+[^8]: As of v0.3.8 (#177), libvirt implements `ExportDisk` / `GetDiskInfo` with accurate capability flags and formats, so disk **export** is supported. Disk **import** remains unsupported per libvirt's real capability flags. These cells feed the cross-provider migration pipeline (vSphere → libvirt export/convert/import).
 
 ### Guest Operating System
 
@@ -163,6 +177,38 @@ All providers implement these core operations:
 
 Every provider implements `GetCapabilities`, which returns a `GetCapabilitiesResponse` containing the boolean flags exposed in the matrix above. The manager calls this RPC at provider connection time and short-circuits unsupported operations rather than letting them fail at the hypervisor — operators see a `NotSupported` condition on the relevant CR rather than a noisy provider error.
 
+### Reported capabilities on the Provider status (v0.3.8, #176)
+
+As of **v0.3.8**, the manager fetches each provider's `GetCapabilities` during reconciliation and **surfaces the result on the Provider CR itself**:
+
+- The negotiated capability set is written to **`Provider.status.reportedCapabilities`** — operators can read exactly what a live provider pod advertised, without grepping logs or source.
+- A **`CapabilitiesReported`** status condition is set once the fetch succeeds (and reflects failures otherwise), so `kubectl wait`/automation can gate on it.
+
+```bash
+kubectl get provider vsphere-prod -n virtrigaud-system \
+  -o jsonpath='{.status.reportedCapabilities}'
+
+kubectl get provider vsphere-prod -n virtrigaud-system \
+  -o jsonpath='{.status.conditions[?(@.type=="CapabilitiesReported")]}'
+```
+
+### Opt-in enforcement: `--enforce-provider-capabilities` (v0.3.8, #176)
+
+A new manager flag **`--enforce-provider-capabilities`** gates snapshot and migration operations on the reported capabilities:
+
+- **Default: OFF (fail-open).** With the flag unset, the manager behaves as before — it surfaces capabilities but does **not** block operations on them. This preserves backward compatibility for existing clusters.
+- **When ON**, the manager refuses to dispatch snapshot/migration work to a provider whose `reportedCapabilities` do not advertise support, returning a clear `NotSupported`-style failure on the relevant CR instead of letting it fail deep in the hypervisor.
+
+```yaml
+# manager Deployment args (Helm values: manager.extraArgs)
+args:
+  - --enforce-provider-capabilities
+```
+
+Enable enforcement once you have confirmed (via `status.reportedCapabilities`) that your providers advertise the operations your workloads depend on.
+
+### Adding a capability
+
 The capability builder lives at `sdk/provider/capabilities/` in the main repo and is the source of truth for what flags exist. Adding a new capability requires:
 
 1. A new constant in `sdk/provider/capabilities/capabilities.go`.
@@ -185,6 +231,7 @@ The capability builder lives at `sdk/provider/capabilities/` in the main repo an
 - **Hot Reconfiguration**: Online CPU/memory/disk changes with hot-add support
 - **TaskStatus Tracking**: Real-time async operation monitoring via govmomi
 - **Clone Operations**: Full and linked clones with automatic snapshot handling
+- **Disk Export/Import**: `ExportDisk` / `ImportDisk` advertising `vmdk` / `qcow2` / `raw` + export compression (#178)
 - **Web Console URLs**: Direct vSphere web client console access
 
 ### Libvirt/KVM Exclusive
@@ -194,11 +241,10 @@ The capability builder lives at `sdk/provider/capabilities/` in the main repo an
 - **KVM Optimization**: Native Linux virtualization
 - **Bridge Networking**: Direct host network bridging
 - **Storage Pool Flexibility**: Multiple storage backend support
-- **Cloud Image Support**: Direct cloud image deployment
 - **Host Device Passthrough**: Hardware device assignment
 - **Reconfiguration Support**: CPU/memory/disk changes via virsh (restart required)
 - **VNC Console Access**: Direct VNC console URL generation for remote viewers
-- **Linked Clones via qcow2 backing**: COW-based clones with shared backing files
+- **Disk Export**: `ExportDisk` / `GetDiskInfo` (#177) — feeds cross-provider migration; import not supported
 
 ### Proxmox VE Exclusive
 
@@ -245,9 +291,9 @@ Reflects each provider's `GetCapabilities.SupportedNetworkTypes` response.
 
 All provider images are available from the GitHub Container Registry:
 
-- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.7`
-- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.7`
-- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.7`
+- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8`
+- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.8`
+- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8`
 
 The mock provider (`provider-mock`) is a development/conformance-testing image only.
 It is **not** published under release tags and is **not** part of the multi-arch
@@ -350,6 +396,7 @@ the container runtime selects the correct layer automatically.
 
 ## Version History
 
+- **v0.3.8**: Capability negotiation surfaced on `Provider.status.reportedCapabilities` + `CapabilitiesReported` condition, with opt-in `--enforce-provider-capabilities` (default off, fail-open) (#176); vSphere `GetCapabilities` now advertises disk export **and** import + `vmdk`/`qcow2`/`raw` formats + export compression (#178); libvirt implements `ExportDisk`/`GetDiskInfo` (#177); libvirt `Clone`/`ImagePrepare` corrected to `Unimplemented` with `SupportsLinkedClones=false` and `SupportsImageImport=false` (#153/#154); VMClone controller MVP (same-provider full/linked, vSphere+Proxmox) (#179); vSphere vCenter session keepalive + live-probe reconnect (#190); libvirt transient-SSH retry with bounded backoff (#191); Helm templated providers disabled by default (#173).
 - **v0.3.7**: mTLS enforced on all Provider CRs (`TLSConfigured` condition); libvirt SSH host-key verification on by default; multi-arch images (amd64+arm64); manager RBAC tightened.
 - **v0.3.6**: Manager-side CircuitBreaker wired on all provider RPCs (G6); G7 metric families completed; H1 build-path consolidation. No new provider-side capabilities.
 - **v0.3.5**: Observability G-track foundation — provider RPC metrics surface for every provider.
@@ -362,4 +409,4 @@ the container runtime selects the correct layer automatically.
 
 ---
 
-*This document reflects VirtRigaud v0.3.7 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*
+*This document reflects VirtRigaud v0.3.8 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*

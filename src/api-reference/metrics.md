@@ -11,7 +11,7 @@ All metrics are registered with controller-runtime's metrics registry and served
 
 ---
 
-## Stable families (v0.3.6)
+## Stable families (v0.3.8)
 
 ### `virtrigaud_build_info`
 
@@ -41,7 +41,9 @@ Label notes:
 
 `outcome` values: `success`, `error`, `requeue`.
 
-`kind` values (as of v0.3.6): `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMAdoption`, `VMSnapshot`, `VMMigration`, `VMSet`, `VMPlacementPolicy`, `VMClone`.
+`kind` values (as of v0.3.8): `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMAdoption`, `VMSnapshot`, `VMMigration`, `VMClone`, `VMSet`, `VMPlacementPolicy`.
+
+Note: `VMClone` and `VMSet` series are seeded to `0` at manager startup even before any resources of those kinds exist. The `VMSet` reconciler is a stub in v0.3.8; it emits `outcome="error"` for every reconcile until the controller is implemented.
 
 ---
 
@@ -68,7 +70,7 @@ Label notes:
 
 `component` values: `manager`, `provider`.
 
-`reason` is a small enum defined per-reconciler via `errReason*` constants. Taxonomy as of v0.3.6 for the VirtualMachine reconciler: `get-vm`, `add-finalizer`, `remove-finalizer`, `deps-not-found`, `deps-error`, `provider-resolve`, `provider-validate`, `provider-describe`, `provider-task-status`, `provider-delete`. Other reconcilers define their own reason sets.
+`reason` is a small enum defined per-reconciler via `errReason*` constants. Taxonomy as of v0.3.8 for the VirtualMachine reconciler: `get-vm`, `add-finalizer`, `remove-finalizer`, `deps-not-found`, `deps-error`, `provider-resolve`, `provider-validate`, `provider-describe`, `provider-task-status`, `provider-delete`. The VMClone reconciler adds: `get-clone`, `source-resolve`, `clone-target-exists`, `provider-clone`. Other reconcilers define their own reason sets.
 
 ---
 

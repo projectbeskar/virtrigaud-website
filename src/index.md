@@ -22,12 +22,14 @@ Hypervisor-specific logic does **not** run inside the manager. Each provider run
                           │  Provider, VMClass,    │
                           │  VMImage, VMNetwork-   │
                           │  Attachment, VM-       │
-                          │  Snapshot, VMMigration │
+                          │  Snapshot, VMMigration,│
+                          │  VMClone, VMSet,       │
+                          │  VMPlacementPolicy     │
                           └───────────┬────────────┘
                                       │ watch / status
                           ┌───────────▼────────────┐
                           │   virtrigaud-manager   │
-                          │  (8 reconcilers)       │
+                          │  (9 reconcilers)       │
                           │                        │
                           │  per-RPC interceptors: │
                           │   1. metrics (G4)      │
@@ -45,7 +47,7 @@ Hypervisor-specific logic does **not** run inside the manager. Each provider run
    vCenter / ESXi              KVM / QEMU host                Proxmox VE host
 ```
 
-One manager binary, one manager Dockerfile (consolidated in v0.3.6 — see H1 below), and one gRPC client per Provider CR. Each outbound RPC passes through two unary interceptors: a metrics interceptor (per-RPC latency and status-code counter, G4) and a CircuitBreaker interceptor (one breaker per Provider CR, G6).
+One manager binary, one manager Dockerfile (consolidated in v0.3.6 — see H1 in that release), and one gRPC client per Provider CR. Each outbound RPC passes through two unary interceptors: a metrics interceptor (per-RPC latency and status-code counter, G4) and a CircuitBreaker interceptor (one breaker per Provider CR, G6).
 
 ## Quick Navigation
 
@@ -71,7 +73,7 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6 — see H1 be
 - [VM Lifecycle Management](guides/advanced/advanced-lifecycle.md) - Advanced VM operations
 - [Nested Virtualization](guides/advanced/nested-virtualization.md) - Run hypervisors in VMs
 - [Graceful Shutdown](guides/advanced/graceful-shutdown.md) - Proper VM shutdown handling
-- [VM Snapshots](guides/advanced/advanced-lifecycle.md#snapshots) - Backup and restore
+- [VM Snapshots](guides/advanced/advanced-lifecycle.md#snapshot-management) - Backup and restore
 - [Remote Providers](guides/advanced/remote-providers.md) - Provider architecture
 
 ### Operations
@@ -109,7 +111,7 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6 — see H1 be
 
 ## Custom Resources
 
-VirtRigaud v0.3.6 ships **10 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
+VirtRigaud v0.3.8 ships **10 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
 
 | Kind | Purpose |
 |---|---|
@@ -120,24 +122,26 @@ VirtRigaud v0.3.6 ships **10 Custom Resource Definitions** in the `infra.virtrig
 | `VMNetworkAttachment` | Logical network the VM attaches to (resolved per-provider). |
 | `VMSnapshot` | A point-in-time snapshot of a VirtualMachine. |
 | `VMMigration` | Inter-provider VM migration (export → import). |
-| `VMSet` | Replica-set of identical VMs. |
-| `VMPlacementPolicy` | Placement / anti-affinity rules. |
-| `VMClone` | One-shot clone of an existing VM. |
+| `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.3.8. |
+| `VMPlacementPolicy` | Placement / anti-affinity rules. Applied via `VirtualMachine.spec.placementRef`; no standalone controller. |
+| `VMClone` | One-shot full or linked clone of an existing VM (MVP — vSphere and Proxmox only). |
 
 The manager also runs a `VMAdoption` reconciler (not a CRD — it reconciles `Provider` resources annotated with `virtrigaud.io/adopt-vms: "true"`, discovers VMs the hypervisor already owns, and creates `VirtualMachine` CRs labelled `virtrigaud.io/adopted=true` for them, plus an `adopted-Ncpu-Nmb` `VMClass` per unique sizing). See the [generated CRD reference](references/generated-crd-docs.md) for the full schema.
 
 ## Version Information
 
-This documentation covers **VirtRigaud v0.3.6**.
+This documentation covers **VirtRigaud v0.3.8**.
 
 ### Recent Releases
 
-- **v0.3.6** — *Observability + supply-chain release.*
-    - **G6 CircuitBreaker now wired on the provider gRPC RPC path.** One breaker per `Provider` CR, default thresholds `FailureThreshold=10, ResetTimeout=60s, HalfOpenMaxCalls=3`. Infrastructure-class gRPC errors (`Unavailable`, `DeadlineExceeded`, `Internal`, `Unknown`) count toward the threshold; business errors (`NotFound`, `InvalidArgument`, …) pass through unchanged. See [Resilience](operations/resilience.md).
-    - **G7 metric family rollout completed.** New families: `virtrigaud_vm_operations_total` (G7.1), `virtrigaud_ip_discovery_duration_seconds` (G7.2), `virtrigaud_provider_tasks_inflight` (G7.3). `virtrigaud_queue_depth` deprecated in favour of controller-runtime's `workqueue_depth{name}` (G7.4) — removal scheduled for v0.4.0 or later.
-    - **H1 build-path consolidation.** One manager entrypoint, one manager Dockerfile. `build/Dockerfile.manager` now parametrised with `BUILDER_IMAGE` / `BASE_IMAGE` / `GOPROXY` / CA-cert handling for corporate / banking deployments. Closes latent bug #113.
-    - **Go toolchain floor: 1.24.0 → 1.26.0.** Source builders need Go 1.26+ installed locally; binary consumers via released images unaffected.
-    - **Security: `go.opentelemetry.io/otel` v1.39.0 → v1.43.0** (closes 3 HIGH-severity CVEs, two of which are PATH-hijacking primitives).
+- **v0.3.8** — *VMClone MVP + VMSet stub + secure-by-default chart.*
+    - **VMClone controller (MVP).** Full and linked clones are now functional via the `VMClone` CRD. Source must be a `vmRef` (same-provider only). Supported on vSphere and Proxmox; libvirt returns `Unimplemented`. See the [VMClone examples](examples/advanced/index.md#vmclone-operations-mvp).
+    - **VMSet: CRD defined, controller not yet active.** A `VMSet` resource is accepted by the API server but the controller emits `Ready=False / Reason=ControllerNotImplemented`. Do not use VMSet for production workloads in v0.3.8.
+    - **VMPlacementPolicy: reference-only.** No standalone controller; placement rules are applied via `VirtualMachine.spec.placementRef`.
+    - **Chart (#173): providers disabled by default.** Templated provider Deployments are now opt-in (`providers.<type>.enabled=true`). A fresh `helm install` deploys only the manager; provider pods must be enabled explicitly or managed as independent Provider CRs. This is a secure-by-default change — existing installations that relied on auto-deployed providers must set `providers.<type>.enabled=true` on upgrade.
+    - **New VMClone and VMSet CRDs + RBAC** land automatically via the chart's CRD-upgrade hook on `helm upgrade`.
+- **v0.3.7** — mTLS enforcement, multi-arch images, circuit-breaker metrics.
+- **v0.3.6** — Observability + supply-chain release (CircuitBreaker, G7 metrics, H1 build consolidation, Go 1.26 floor, OTel CVE fixes).
 - **v0.3.5** — Observability G-track foundation (RPC metrics, error counters, reconcile metrics).
 - **v0.3.3** — Changelog organisation with versioned release headers.
 - **v0.2.3** — Provider feature parity: Reconfigure, Clone, TaskStatus, ConsoleURL.

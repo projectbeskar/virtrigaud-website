@@ -50,12 +50,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `vmAffinity` _[VMAffinity](#vmaffinity)_ | VMAffinity defines affinity rules between VMs |  |  |
-| `hostAffinity` _[HostAffinityRule](#hostaffinityrule)_ | HostAffinity encourages VMs to be placed on the same host |  |  |
-| `clusterAffinity` _[ClusterAffinityRule](#clusteraffinityrule)_ | ClusterAffinity encourages VMs to be placed in the same cluster |  |  |
-| `datastoreAffinity` _[DatastoreAffinityRule](#datastoreaffinityrule)_ | DatastoreAffinity encourages VMs to be placed on the same datastore |  |  |
-| `zoneAffinity` _[ZoneAffinityRule](#zoneaffinityrule)_ | ZoneAffinity encourages VMs to be placed in the same zone |  |  |
-| `applicationAffinity` _[ApplicationAffinityRule](#applicationaffinityrule)_ | ApplicationAffinity encourages VMs from the same application to be co-located |  |  |
+| `vmAffinity` _[VMAffinity](#vmaffinity)_ | VMAffinity defines affinity rules between VMs |  | Optional: \{\} <br /> |
+| `hostAffinity` _[HostAffinityRule](#hostaffinityrule)_ | HostAffinity encourages VMs to be placed on the same host |  | Optional: \{\} <br /> |
+| `clusterAffinity` _[ClusterAffinityRule](#clusteraffinityrule)_ | ClusterAffinity encourages VMs to be placed in the same cluster |  | Optional: \{\} <br /> |
+| `datastoreAffinity` _[DatastoreAffinityRule](#datastoreaffinityrule)_ | DatastoreAffinity encourages VMs to be placed on the same datastore |  | Optional: \{\} <br /> |
+| `zoneAffinity` _[ZoneAffinityRule](#zoneaffinityrule)_ | ZoneAffinity encourages VMs to be placed in the same zone |  | Optional: \{\} <br /> |
+| `applicationAffinity` _[ApplicationAffinityRule](#applicationaffinityrule)_ | ApplicationAffinity encourages VMs from the same application to be co-located |  | Optional: \{\} <br /> |
 
 
 #### AntiAffinityRules
@@ -71,12 +71,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `vmAntiAffinity` _[VMAntiAffinity](#vmantiaffinity)_ | VMAntiAffinity defines anti-affinity rules between VMs |  |  |
-| `hostAntiAffinity` _[HostAntiAffinityRule](#hostantiaffinityrule)_ | HostAntiAffinity prevents VMs from being placed on the same host |  |  |
-| `clusterAntiAffinity` _[ClusterAntiAffinityRule](#clusterantiaffinityrule)_ | ClusterAntiAffinity prevents VMs from being placed in the same cluster |  |  |
-| `datastoreAntiAffinity` _[DatastoreAntiAffinityRule](#datastoreantiaffinityrule)_ | DatastoreAntiAffinity prevents VMs from being placed on the same datastore |  |  |
-| `zoneAntiAffinity` _[ZoneAntiAffinityRule](#zoneantiaffinityrule)_ | ZoneAntiAffinity prevents VMs from being placed in the same zone |  |  |
-| `applicationAntiAffinity` _[ApplicationAntiAffinityRule](#applicationantiaffinityrule)_ | ApplicationAntiAffinity prevents VMs from different applications being co-located |  |  |
+| `vmAntiAffinity` _[VMAntiAffinity](#vmantiaffinity)_ | VMAntiAffinity defines anti-affinity rules between VMs |  | Optional: \{\} <br /> |
+| `hostAntiAffinity` _[HostAntiAffinityRule](#hostantiaffinityrule)_ | HostAntiAffinity prevents VMs from being placed on the same host |  | Optional: \{\} <br /> |
+| `clusterAntiAffinity` _[ClusterAntiAffinityRule](#clusterantiaffinityrule)_ | ClusterAntiAffinity prevents VMs from being placed in the same cluster |  | Optional: \{\} <br /> |
+| `datastoreAntiAffinity` _[DatastoreAntiAffinityRule](#datastoreantiaffinityrule)_ | DatastoreAntiAffinity prevents VMs from being placed on the same datastore |  | Optional: \{\} <br /> |
+| `zoneAntiAffinity` _[ZoneAntiAffinityRule](#zoneantiaffinityrule)_ | ZoneAntiAffinity prevents VMs from being placed in the same zone |  | Optional: \{\} <br /> |
+| `applicationAntiAffinity` _[ApplicationAntiAffinityRule](#applicationantiaffinityrule)_ | ApplicationAntiAffinity prevents VMs from different applications being co-located |  | Optional: \{\} <br /> |
 
 
 #### ApplicationAffinityRule
@@ -93,8 +93,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if application affinity is enabled |  |  |
-| `applicationLabel` _string_ | ApplicationLabel specifies the label key used to identify applications | app |  |
-| `scope` _string_ | Scope defines the scope of the affinity rule |  | Enum: [strict preferred] <br /> |
+| `applicationLabel` _string_ | ApplicationLabel specifies the label key used to identify applications | app | Optional: \{\} <br /> |
+| `scope` _string_ | Scope defines the scope of the affinity rule |  | Enum: [strict preferred] <br />Optional: \{\} <br /> |
 
 
 #### ApplicationAntiAffinityRule
@@ -111,8 +111,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if application anti-affinity is enabled |  |  |
-| `applicationLabel` _string_ | ApplicationLabel specifies the label key used to identify applications | app |  |
-| `scope` _string_ | Scope defines the scope of the anti-affinity rule |  | Enum: [strict preferred] <br /> |
+| `applicationLabel` _string_ | ApplicationLabel specifies the label key used to identify applications | app | Optional: \{\} <br /> |
+| `scope` _string_ | Scope defines the scope of the anti-affinity rule |  | Enum: [strict preferred] <br />Optional: \{\} <br /> |
 
 
 #### BasicAuthConfig
@@ -129,8 +129,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a secret containing username and password |  |  |
-| `usernameKey` _string_ | UsernameKey is the key in the secret containing the username (default: username) | username |  |
-| `passwordKey` _string_ | PasswordKey is the key in the secret containing the password (default: password) | password |  |
+| `usernameKey` _string_ | UsernameKey is the key in the secret containing the username (default: username) | username | Optional: \{\} <br /> |
+| `passwordKey` _string_ | PasswordKey is the key in the secret containing the password (default: password) | password | Optional: \{\} <br /> |
 
 
 #### BearerTokenConfig
@@ -147,7 +147,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a secret containing the bearer token |  |  |
-| `tokenKey` _string_ | TokenKey is the key in the secret containing the token (default: token) | token |  |
+| `tokenKey` _string_ | TokenKey is the key in the secret containing the token (default: token) | token | Optional: \{\} <br /> |
 
 
 #### BridgeConfig
@@ -164,8 +164,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the bridge name |  | MaxLength: 15 <br /> |
-| `stp` _boolean_ | STP enables Spanning Tree Protocol | false |  |
-| `delay` _integer_ | Delay is the STP forwarding delay |  | Maximum: 30 <br />Minimum: 0 <br /> |
+| `stp` _boolean_ | STP enables Spanning Tree Protocol | false | Optional: \{\} <br /> |
+| `delay` _integer_ | Delay is the STP forwarding delay |  | Maximum: 30 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 
 
 #### CertificateSpec
@@ -182,10 +182,10 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the certificate name |  | MaxLength: 255 <br /> |
-| `data` _string_ | Data contains the certificate data (PEM format) |  |  |
-| `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a secret containing the certificate |  |  |
-| `secretKey` _string_ | SecretKey is the key in the secret containing the certificate | tls.crt |  |
-| `store` _string_ | Store specifies the certificate store | root | Enum: [root ca my trust] <br /> |
+| `data` _string_ | Data contains the certificate data (PEM format) |  | Optional: \{\} <br /> |
+| `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a secret containing the certificate |  | Optional: \{\} <br /> |
+| `secretKey` _string_ | SecretKey is the key in the secret containing the certificate | tls.crt | Optional: \{\} <br /> |
+| `store` _string_ | Store specifies the certificate store | root | Enum: [root ca my trust] <br />Optional: \{\} <br /> |
 
 
 #### ChecksumType
@@ -224,8 +224,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a secret containing the client certificate and key |  |  |
-| `certKey` _string_ | CertKey is the key in the secret containing the certificate (default: tls.crt) | tls.crt |  |
-| `keyKey` _string_ | KeyKey is the key in the secret containing the private key (default: tls.key) | tls.key |  |
+| `certKey` _string_ | CertKey is the key in the secret containing the certificate (default: tls.crt) | tls.crt | Optional: \{\} <br /> |
+| `keyKey` _string_ | KeyKey is the key in the secret containing the private key (default: tls.key) | tls.key | Optional: \{\} <br /> |
 
 
 #### CloneMetadata
@@ -241,11 +241,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `purpose` _string_ | Purpose describes the purpose of the clone |  | Enum: [backup testing migration development production staging] <br /> |
-| `createdBy` _string_ | CreatedBy identifies who or what created the clone |  | MaxLength: 255 <br /> |
-| `project` _string_ | Project identifies the project this clone belongs to |  | MaxLength: 255 <br /> |
-| `environment` _string_ | Environment specifies the environment |  | Enum: [dev staging prod test] <br /> |
-| `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing the clone |  | MaxProperties: 50 <br /> |
+| `purpose` _string_ | Purpose describes the purpose of the clone |  | Enum: [backup testing migration development production staging] <br />Optional: \{\} <br /> |
+| `createdBy` _string_ | CreatedBy identifies who or what created the clone |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `project` _string_ | Project identifies the project this clone belongs to |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `environment` _string_ | Environment specifies the environment |  | Enum: [dev staging prod test qa uat] <br />Optional: \{\} <br /> |
+| `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing the clone |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
 
 
 #### CloneOptions
@@ -261,14 +261,14 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _[CloneType](#clonetype)_ | Type specifies the clone type | FullClone | Enum: [FullClone LinkedClone InstantClone] <br /> |
-| `powerOn` _boolean_ | PowerOn indicates whether to power on the cloned VM | false |  |
-| `includeSnapshots` _boolean_ | IncludeSnapshots indicates whether to include snapshots in the clone | false |  |
-| `parallel` _boolean_ | Parallel enables parallel disk cloning (if supported) | false |  |
-| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout defines the maximum time to wait for clone completion | 30m |  |
-| `retryPolicy` _[CloneRetryPolicy](#cloneretrypolicy)_ | RetryPolicy defines retry behavior for failed clones |  |  |
-| `storage` _[CloneStorageOptions](#clonestorageoptions)_ | Storage defines storage-specific clone options |  |  |
-| `performance` _[ClonePerformanceOptions](#cloneperformanceoptions)_ | Performance defines performance-related clone options |  |  |
+| `type` _[CloneType](#clonetype)_ | Type specifies the clone type | FullClone | Enum: [FullClone LinkedClone InstantClone] <br />Optional: \{\} <br /> |
+| `powerOn` _boolean_ | PowerOn indicates whether to power on the cloned VM | false | Optional: \{\} <br /> |
+| `includeSnapshots` _boolean_ | IncludeSnapshots indicates whether to include snapshots in the clone | false | Optional: \{\} <br /> |
+| `parallel` _boolean_ | Parallel enables parallel disk cloning (if supported) | false | Optional: \{\} <br /> |
+| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout defines the maximum time to wait for clone completion | 30m | Optional: \{\} <br /> |
+| `retryPolicy` _[CloneRetryPolicy](#cloneretrypolicy)_ | RetryPolicy defines retry behavior for failed clones |  | Optional: \{\} <br /> |
+| `storage` _[CloneStorageOptions](#clonestorageoptions)_ | Storage defines storage-specific clone options |  | Optional: \{\} <br /> |
+| `performance` _[ClonePerformanceOptions](#cloneperformanceoptions)_ | Performance defines performance-related clone options |  | Optional: \{\} <br /> |
 
 
 #### ClonePerformanceOptions
@@ -284,10 +284,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `priority` _string_ | Priority specifies the clone operation priority | Normal | Enum: [Low Normal High] <br /> |
-| `ioThrottling` _boolean_ | IOThrottling enables I/O throttling during clone operations | false |  |
-| `maxIOPS` _integer_ | MaxIOPS limits the maximum IOPS during clone operations |  | Maximum: 100000 <br />Minimum: 100 <br /> |
-| `concurrentDisks` _integer_ | ConcurrentDisks limits the number of disks cloned concurrently | 2 | Maximum: 10 <br />Minimum: 1 <br /> |
+| `priority` _string_ | Priority specifies the clone operation priority | Normal | Enum: [Low Normal High] <br />Optional: \{\} <br /> |
+| `ioThrottling` _boolean_ | IOThrottling enables I/O throttling during clone operations | false | Optional: \{\} <br /> |
+| `maxIOPS` _integer_ | MaxIOPS limits the maximum IOPS during clone operations |  | Maximum: 100000 <br />Minimum: 100 <br />Optional: \{\} <br /> |
+| `concurrentDisks` _integer_ | ConcurrentDisks limits the number of disks cloned concurrently | 2 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### ClonePhase
@@ -326,11 +326,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `totalDisks` _integer_ | TotalDisks is the total number of disks to clone |  |  |
-| `completedDisks` _integer_ | CompletedDisks is the number of disks completed |  |  |
-| `currentDisk` _[DiskCloneProgress](#diskcloneprogress)_ | CurrentDisk shows progress of the current disk being cloned |  |  |
-| `overallPercentage` _integer_ | OverallPercentage is the overall completion percentage (0-100) |  | Maximum: 100 <br />Minimum: 0 <br /> |
-| `eta` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | ETA is the estimated time to completion |  |  |
+| `totalDisks` _integer_ | TotalDisks is the total number of disks to clone |  | Optional: \{\} <br /> |
+| `completedDisks` _integer_ | CompletedDisks is the number of disks completed |  | Optional: \{\} <br /> |
+| `currentDisk` _[DiskCloneProgress](#diskcloneprogress)_ | CurrentDisk shows progress of the current disk being cloned |  | Optional: \{\} <br /> |
+| `overallPercentage` _integer_ | OverallPercentage is the overall completion percentage (0-100) |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `eta` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | ETA is the estimated time to completion |  | Optional: \{\} <br /> |
 
 
 #### CloneRetryPolicy
@@ -346,9 +346,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `maxRetries` _integer_ | MaxRetries is the maximum number of retry attempts | 3 | Maximum: 10 <br />Minimum: 0 <br /> |
-| `retryDelay` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | RetryDelay is the delay between retry attempts | 5m |  |
-| `backoffMultiplier` _integer_ | BackoffMultiplier is the multiplier for exponential backoff | 2 |  |
+| `maxRetries` _integer_ | MaxRetries is the maximum number of retry attempts | 3 | Maximum: 10 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `retryDelay` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | RetryDelay is the delay between retry attempts | 5m | Optional: \{\} <br /> |
+| `backoffMultiplier` _integer_ | BackoffMultiplier is the multiplier for exponential backoff | 2 | Optional: \{\} <br /> |
 
 
 #### CloneSource
@@ -364,10 +364,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `vmRef` _[LocalObjectReference](#localobjectreference)_ | VMRef references the source virtual machine to clone |  |  |
-| `snapshotRef` _[LocalObjectReference](#localobjectreference)_ | SnapshotRef references a specific snapshot to clone from |  |  |
-| `templateRef` _[ObjectRef](#objectref)_ | TemplateRef references a VM template to clone from |  |  |
-| `imageRef` _[ObjectRef](#objectref)_ | ImageRef references a VM image to clone from |  |  |
+| `vmRef` _[LocalObjectReference](#localobjectreference)_ | VMRef references the source virtual machine to clone |  | Optional: \{\} <br /> |
+| `snapshotRef` _[LocalObjectReference](#localobjectreference)_ | SnapshotRef references a specific snapshot to clone from |  | Optional: \{\} <br /> |
+| `templateRef` _[ObjectRef](#objectref)_ | TemplateRef references a VM template to clone from |  | Optional: \{\} <br /> |
+| `imageRef` _[ObjectRef](#objectref)_ | ImageRef references a VM image to clone from |  | Optional: \{\} <br /> |
 
 
 #### CloneStorageOptions
@@ -383,12 +383,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `preferThinProvisioning` _boolean_ | PreferThinProvisioning prefers thin provisioning for cloned disks | true |  |
-| `diskFormat` _[DiskType](#disktype)_ | DiskFormat specifies the preferred disk format for cloned disks |  | Enum: [thin thick eagerzeroedthick ssd hdd nvme] <br /> |
-| `storageClass` _string_ | StorageClass specifies the storage class for cloned disks |  | MaxLength: 253 <br /> |
-| `datastore` _string_ | Datastore specifies the target datastore for cloned disks |  | MaxLength: 255 <br /> |
-| `folder` _string_ | Folder specifies the target folder for the cloned VM |  | MaxLength: 255 <br /> |
-| `enableCompression` _boolean_ | EnableCompression enables compression during clone operations | false |  |
+| `preferThinProvisioning` _boolean_ | PreferThinProvisioning prefers thin provisioning for cloned disks | true | Optional: \{\} <br /> |
+| `diskFormat` _[DiskType](#disktype)_ | DiskFormat specifies the preferred disk format for cloned disks |  | Enum: [thin thick eagerzeroedthick ssd hdd nvme] <br />Optional: \{\} <br /> |
+| `storageClass` _string_ | StorageClass specifies the storage class for cloned disks |  | MaxLength: 253 <br />Optional: \{\} <br /> |
+| `datastore` _string_ | Datastore specifies the target datastore for cloned disks |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `folder` _string_ | Folder specifies the target folder for the cloned VM |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `enableCompression` _boolean_ | EnableCompression enables compression during clone operations | false | Optional: \{\} <br /> |
 
 
 #### CloneType
@@ -424,8 +424,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `inline` _string_ | Inline contains inline cloud-init data |  |  |
-| `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a Secret containing cloud-init data |  |  |
+| `inline` _string_ | Inline contains inline cloud-init data |  | Optional: \{\} <br /> |
+| `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a Secret containing cloud-init data |  | Optional: \{\} <br /> |
 
 
 #### CloudInitMetaData
@@ -441,8 +441,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `inline` _string_ | Inline contains inline cloud-init metadata in YAML format |  |  |
-| `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a Secret containing cloud-init metadata |  |  |
+| `inline` _string_ | Inline contains inline cloud-init metadata in YAML format |  | Optional: \{\} <br /> |
+| `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a Secret containing cloud-init metadata |  | Optional: \{\} <br /> |
 
 
 #### ClusterAffinityRule
@@ -459,8 +459,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if cluster affinity is enabled |  |  |
-| `preferredClusters` _string array_ | PreferredClusters lists preferred clusters |  | MaxItems: 20 <br /> |
-| `scope` _string_ | Scope defines the scope of the affinity rule |  | Enum: [strict preferred] <br /> |
+| `preferredClusters` _string array_ | PreferredClusters lists preferred clusters |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `scope` _string_ | Scope defines the scope of the affinity rule |  | Enum: [strict preferred] <br />Optional: \{\} <br /> |
 
 
 #### ClusterAntiAffinityRule
@@ -477,8 +477,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if cluster anti-affinity is enabled |  |  |
-| `maxVMsPerCluster` _integer_ | MaxVMsPerCluster limits the number of VMs per cluster |  | Maximum: 10000 <br />Minimum: 1 <br /> |
-| `scope` _string_ | Scope defines the scope of the anti-affinity rule |  | Enum: [strict preferred] <br /> |
+| `maxVMsPerCluster` _integer_ | MaxVMsPerCluster limits the number of VMs per cluster |  | Maximum: 10000 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `scope` _string_ | Scope defines the scope of the anti-affinity rule |  | Enum: [strict preferred] <br />Optional: \{\} <br /> |
 
 
 #### ConnectionPooling
@@ -494,10 +494,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `maxConnections` _integer_ | MaxConnections is the maximum number of connections to maintain | 10 | Maximum: 100 <br />Minimum: 1 <br /> |
-| `maxIdleConnections` _integer_ | MaxIdleConnections is the maximum number of idle connections | 5 | Minimum: 1 <br /> |
-| `connectionTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | ConnectionTimeout is the timeout for establishing connections | 30s |  |
-| `idleTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | IdleTimeout is the timeout for idle connections | 5m |  |
+| `maxConnections` _integer_ | MaxConnections is the maximum number of connections to maintain | 10 | Maximum: 100 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `maxIdleConnections` _integer_ | MaxIdleConnections is the maximum number of idle connections | 5 | Minimum: 1 <br />Optional: \{\} <br /> |
+| `connectionTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | ConnectionTimeout is the timeout for establishing connections | 30s | Optional: \{\} <br /> |
+| `idleTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | IdleTimeout is the timeout for idle connections | 5m | Optional: \{\} <br /> |
 
 
 #### ContentLibraryRef
@@ -515,7 +515,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `library` _string_ | Library is the name of the content library |  | MaxLength: 255 <br /> |
 | `item` _string_ | Item is the name of the library item |  | MaxLength: 255 <br /> |
-| `version` _string_ | Version specifies the item version (optional) |  |  |
+| `version` _string_ | Version specifies the item version (optional) |  | Optional: \{\} <br /> |
 
 
 #### CustomizationStatus
@@ -531,12 +531,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `started` _boolean_ | Started indicates if customization has started |  |  |
-| `completed` _boolean_ | Completed indicates if customization has completed |  |  |
-| `completedSteps` _string array_ | CompletedSteps lists completed customization steps |  |  |
-| `failedSteps` _string array_ | FailedSteps lists failed customization steps |  |  |
-| `currentStep` _string_ | CurrentStep is the current customization step |  |  |
-| `message` _string_ | Message provides customization status details |  |  |
+| `started` _boolean_ | Started indicates if customization has started |  | Optional: \{\} <br /> |
+| `completed` _boolean_ | Completed indicates if customization has completed |  | Optional: \{\} <br /> |
+| `completedSteps` _string array_ | CompletedSteps lists completed customization steps |  | Optional: \{\} <br /> |
+| `failedSteps` _string array_ | FailedSteps lists failed customization steps |  | Optional: \{\} <br /> |
+| `currentStep` _string_ | CurrentStep is the current customization step |  | Optional: \{\} <br /> |
+| `message` _string_ | Message provides customization status details |  | Optional: \{\} <br /> |
 
 
 #### DHCPConfig
@@ -552,9 +552,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `clientID` _string_ | ClientID specifies the DHCP client ID |  | MaxLength: 255 <br /> |
-| `hostname` _string_ | Hostname specifies the hostname to request |  | MaxLength: 255 <br /> |
-| `options` _object (keys:string, values:string)_ | Options contains DHCP options |  | MaxProperties: 20 <br /> |
+| `clientID` _string_ | ClientID specifies the DHCP client ID |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `hostname` _string_ | Hostname specifies the hostname to request |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `options` _object (keys:string, values:string)_ | Options contains DHCP options |  | MaxProperties: 20 <br />Optional: \{\} <br /> |
 
 
 #### DNSConfig
@@ -570,9 +570,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `servers` _string array_ | Servers contains DNS server addresses |  | MaxItems: 10 <br /> |
-| `searchDomains` _string array_ | SearchDomains contains DNS search domains |  | MaxItems: 10 <br /> |
-| `options` _object (keys:string, values:string)_ | Options contains DNS resolver options |  | MaxProperties: 10 <br /> |
+| `servers` _string array_ | Servers contains DNS server addresses |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `searchDomains` _string array_ | SearchDomains contains DNS search domains |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `options` _object (keys:string, values:string)_ | Options contains DNS resolver options |  | MaxProperties: 10 <br />Optional: \{\} <br /> |
 
 
 #### DataVolumeImageSource
@@ -589,7 +589,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the name of the DataVolume |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
-| `namespace` _string_ | Namespace is the namespace of the DataVolume (defaults to image namespace) |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
+| `namespace` _string_ | Namespace is the namespace of the DataVolume (defaults to image namespace) |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### DatastoreAffinityRule
@@ -606,8 +606,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if datastore affinity is enabled |  |  |
-| `preferredDatastores` _string array_ | PreferredDatastores lists preferred datastores |  | MaxItems: 50 <br /> |
-| `scope` _string_ | Scope defines the scope of the affinity rule |  | Enum: [strict preferred] <br /> |
+| `preferredDatastores` _string array_ | PreferredDatastores lists preferred datastores |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `scope` _string_ | Scope defines the scope of the affinity rule |  | Enum: [strict preferred] <br />Optional: \{\} <br /> |
 
 
 #### DatastoreAntiAffinityRule
@@ -624,8 +624,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if datastore anti-affinity is enabled |  |  |
-| `maxVMsPerDatastore` _integer_ | MaxVMsPerDatastore limits the number of VMs per datastore |  | Maximum: 10000 <br />Minimum: 1 <br /> |
-| `scope` _string_ | Scope defines the scope of the anti-affinity rule |  | Enum: [strict preferred] <br /> |
+| `maxVMsPerDatastore` _integer_ | MaxVMsPerDatastore limits the number of VMs per datastore |  | Maximum: 10000 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `scope` _string_ | Scope defines the scope of the anti-affinity rule |  | Enum: [strict preferred] <br />Optional: \{\} <br /> |
 
 
 #### DiskCloneProgress
@@ -642,10 +642,10 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the disk name |  |  |
-| `totalBytes` _integer_ | TotalBytes is the total size of the disk |  |  |
-| `completedBytes` _integer_ | CompletedBytes is the number of bytes completed |  |  |
-| `percentage` _integer_ | Percentage is the completion percentage (0-100) |  | Maximum: 100 <br />Minimum: 0 <br /> |
-| `transferRate` _integer_ | TransferRate is the current transfer rate in bytes per second |  |  |
+| `totalBytes` _integer_ | TotalBytes is the total size of the disk |  | Optional: \{\} <br /> |
+| `completedBytes` _integer_ | CompletedBytes is the number of bytes completed |  | Optional: \{\} <br /> |
+| `percentage` _integer_ | Percentage is the completion percentage (0-100) |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `transferRate` _integer_ | TransferRate is the current transfer rate in bytes per second |  | Optional: \{\} <br /> |
 
 
 #### DiskDefaults
@@ -661,10 +661,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _[DiskType](#disktype)_ | Type specifies the default disk type | thin | Enum: [thin thick eagerzeroedthick ssd hdd nvme] <br /> |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size specifies the default root disk size | 40Gi |  |
-| `iops` _integer_ | IOPS specifies the default IOPS limit |  | Maximum: 100000 <br />Minimum: 100 <br /> |
-| `storageClass` _string_ | StorageClass specifies the default storage class |  | MaxLength: 253 <br /> |
+| `type` _[DiskType](#disktype)_ | Type specifies the default disk type | thin | Enum: [thin thick eagerzeroedthick ssd hdd nvme] <br />Optional: \{\} <br /> |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size specifies the default root disk size | 40Gi | Optional: \{\} <br /> |
+| `iops` _integer_ | IOPS specifies the default IOPS limit |  | Maximum: 100000 <br />Minimum: 100 <br />Optional: \{\} <br /> |
+| `storageClass` _string_ | StorageClass specifies the default storage class |  | MaxLength: 253 <br />Optional: \{\} <br /> |
 
 
 #### DiskSpec
@@ -684,10 +684,10 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the disk identifier |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
 | `sizeGiB` _integer_ | SizeGiB is the size of the disk in GiB |  | Maximum: 65536 <br />Minimum: 1 <br /> |
-| `type` _string_ | Type specifies the disk type (provider-specific) | thin | Enum: [thin thick eagerzeroedthick ssd hdd] <br /> |
-| `expandPolicy` _string_ | ExpandPolicy defines how the disk can be expanded | Offline | Enum: [Online Offline] <br /> |
-| `storageClass` _string_ | StorageClass specifies the storage class (optional) |  |  |
-| `scsi` _[SCSIControllerSpec](#scsicontrollerspec)_ | SCSI specifies SCSI controller configuration (vSphere only) |  |  |
+| `type` _string_ | Type specifies the disk type (provider-specific) | thin | Enum: [thin thick eagerzeroedthick ssd hdd] <br />Optional: \{\} <br /> |
+| `expandPolicy` _string_ | ExpandPolicy defines how the disk can be expanded | Offline | Enum: [Online Offline] <br />Optional: \{\} <br /> |
+| `storageClass` _string_ | StorageClass specifies the storage class (optional) |  | Optional: \{\} <br /> |
+| `scsi` _[SCSIControllerSpec](#scsicontrollerspec)_ | SCSI specifies SCSI controller configuration (vSphere only) |  | Optional: \{\} <br /> |
 
 
 #### DiskType
@@ -727,8 +727,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the name of the distributed switch |  | MaxLength: 255 <br /> |
-| `uuid` _string_ | UUID is the UUID of the distributed switch (optional) |  |  |
-| `portgroupType` _string_ | PortgroupType specifies the type of portgroup |  | Enum: [ephemeral distributed] <br /> |
+| `uuid` _string_ | UUID is the UUID of the distributed switch (optional) |  | Optional: \{\} <br /> |
+| `portgroupType` _string_ | PortgroupType specifies the type of portgroup |  | Enum: [ephemeral distributed] <br />Optional: \{\} <br /> |
 
 
 #### DomainJoinSpec
@@ -747,7 +747,7 @@ _Appears in:_
 | `domain` _string_ | Domain is the domain name to join |  | MaxLength: 255 <br /> |
 | `username` _string_ | Username is the domain join username |  | MaxLength: 255 <br /> |
 | `password` _[PasswordSpec](#passwordspec)_ | Password is the domain join password |  |  |
-| `organizationalUnit` _string_ | OrganizationalUnit specifies the OU for the computer account |  | MaxLength: 500 <br /> |
+| `organizationalUnit` _string_ | OrganizationalUnit specifies the OU for the computer account |  | MaxLength: 500 <br />Optional: \{\} <br /> |
 
 
 #### EncryptionPolicy
@@ -764,8 +764,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if encryption should be used | false |  |
-| `keyProvider` _string_ | KeyProvider specifies the encryption key provider |  | Enum: [standard hardware external] <br /> |
-| `requireEncryption` _boolean_ | RequireEncryption mandates encryption (fails if not available) | false |  |
+| `keyProvider` _string_ | KeyProvider specifies the encryption key provider |  | Enum: [standard hardware external] <br />Optional: \{\} <br /> |
+| `requireEncryption` _boolean_ | RequireEncryption mandates encryption (fails if not available) | false | Optional: \{\} <br /> |
 
 
 #### ExecAction
@@ -797,9 +797,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled indicates if firewall is enabled | false |  |
-| `defaultPolicy` _string_ | DefaultPolicy specifies the default firewall policy | ACCEPT | Enum: [ACCEPT DROP REJECT] <br /> |
-| `rules` _[FirewallRule](#firewallrule) array_ | Rules contains firewall rules |  | MaxItems: 100 <br /> |
+| `enabled` _boolean_ | Enabled indicates if firewall is enabled | false | Optional: \{\} <br /> |
+| `defaultPolicy` _string_ | DefaultPolicy specifies the default firewall policy | ACCEPT | Enum: [ACCEPT DROP REJECT] <br />Optional: \{\} <br /> |
+| `rules` _[FirewallRule](#firewallrule) array_ | Rules contains firewall rules |  | MaxItems: 100 <br />Optional: \{\} <br /> |
 
 
 #### FirewallRule
@@ -818,11 +818,11 @@ _Appears in:_
 | `name` _string_ | Name is the rule name |  | MaxLength: 255 <br /> |
 | `action` _string_ | Action specifies the rule action |  | Enum: [ACCEPT DROP REJECT] <br /> |
 | `direction` _string_ | Direction specifies the traffic direction |  | Enum: [in out inout] <br /> |
-| `protocol` _string_ | Protocol specifies the protocol |  | Enum: [tcp udp icmp all] <br /> |
-| `sourceCIDR` _string_ | SourceCIDR specifies the source CIDR |  |  |
-| `destinationCIDR` _string_ | DestinationCIDR specifies the destination CIDR |  |  |
-| `ports` _[PortRange](#portrange)_ | Ports specifies the port range |  |  |
-| `priority` _integer_ | Priority specifies the rule priority |  | Maximum: 1000 <br />Minimum: 1 <br /> |
+| `protocol` _string_ | Protocol specifies the protocol |  | Enum: [tcp udp icmp all] <br />Optional: \{\} <br /> |
+| `sourceCIDR` _string_ | SourceCIDR specifies the source CIDR |  | Optional: \{\} <br /> |
+| `destinationCIDR` _string_ | DestinationCIDR specifies the destination CIDR |  | Optional: \{\} <br /> |
+| `ports` _[PortRange](#portrange)_ | Ports specifies the port range |  | Optional: \{\} <br /> |
+| `priority` _integer_ | Priority specifies the rule priority |  | Maximum: 1000 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### FirmwareType
@@ -858,8 +858,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `count` _integer_ | Count specifies the number of GPUs to assign |  | Maximum: 8 <br />Minimum: 1 <br /> |
-| `type` _string_ | Type specifies the GPU type (provider-specific) |  | Pattern: `^[a-zA-Z0-9-_]+$` <br /> |
-| `memory` _integer_ | Memory specifies GPU memory in MiB |  | Minimum: 512 <br /> |
+| `type` _string_ | Type specifies the GPU type (provider-specific) |  | Pattern: `^[a-zA-Z0-9-_]+$` <br />Optional: \{\} <br /> |
+| `memory` _integer_ | Memory specifies GPU memory in MiB |  | Minimum: 512 <br />Optional: \{\} <br /> |
 
 
 #### GuestCommand
@@ -876,11 +876,11 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `command` _string_ | Command is the command to execute |  | MaxLength: 1000 <br /> |
-| `arguments` _string array_ | Arguments contains command arguments |  | MaxItems: 20 <br /> |
-| `workingDirectory` _string_ | WorkingDirectory specifies the working directory |  | MaxLength: 500 <br /> |
-| `runAsUser` _string_ | RunAsUser specifies the user to run the command as |  | MaxLength: 255 <br /> |
-| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout specifies the command timeout | 5m |  |
-| `stage` _string_ | Stage specifies when to run the command | post-customization | Enum: [pre-customization post-customization first-boot] <br /> |
+| `arguments` _string array_ | Arguments contains command arguments |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `workingDirectory` _string_ | WorkingDirectory specifies the working directory |  | MaxLength: 500 <br />Optional: \{\} <br /> |
+| `runAsUser` _string_ | RunAsUser specifies the user to run the command as |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout specifies the command timeout | 5m | Optional: \{\} <br /> |
+| `stage` _string_ | Stage specifies when to run the command | post-customization | Enum: [pre-customization post-customization first-boot] <br />Optional: \{\} <br /> |
 
 
 #### GuestToolsPolicy
@@ -916,9 +916,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `basicAuth` _[BasicAuthConfig](#basicauthconfig)_ | BasicAuth contains basic authentication configuration |  |  |
-| `bearer` _[BearerTokenConfig](#bearertokenconfig)_ | Bearer contains bearer token authentication |  |  |
-| `clientCert` _[ClientCertConfig](#clientcertconfig)_ | ClientCert contains client certificate authentication |  |  |
+| `basicAuth` _[BasicAuthConfig](#basicauthconfig)_ | BasicAuth contains basic authentication configuration |  | Optional: \{\} <br /> |
+| `bearer` _[BearerTokenConfig](#bearertokenconfig)_ | Bearer contains bearer token authentication |  | Optional: \{\} <br /> |
+| `clientCert` _[ClientCertConfig](#clientcertconfig)_ | ClientCert contains client certificate authentication |  | Optional: \{\} <br /> |
 
 
 #### HTTPGetAction
@@ -936,8 +936,8 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `path` _string_ | Path is the HTTP path to access |  |  |
 | `port` _integer_ | Port is the port to access |  | Maximum: 65535 <br />Minimum: 1 <br /> |
-| `host` _string_ | Host name to connect to (defaults to VM IP) |  |  |
-| `scheme` _string_ | Scheme to use for connecting (HTTP or HTTPS) | HTTP | Enum: [HTTP HTTPS] <br /> |
+| `host` _string_ | Host name to connect to (defaults to VM IP) |  | Optional: \{\} <br /> |
+| `scheme` _string_ | Scheme to use for connecting (HTTP or HTTPS) | HTTP | Enum: [HTTP HTTPS] <br />Optional: \{\} <br /> |
 
 
 #### HTTPImageSource
@@ -954,11 +954,11 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `url` _string_ | URL is the HTTP/HTTPS URL to download the image |  | Pattern: `^https?://.*` <br /> |
-| `headers` _object (keys:string, values:string)_ | Headers contains HTTP headers to include in the request |  | MaxProperties: 20 <br /> |
-| `checksum` _string_ | Checksum provides expected checksum for verification |  |  |
-| `checksumType` _[ChecksumType](#checksumtype)_ | ChecksumType specifies the checksum algorithm | sha256 | Enum: [md5 sha1 sha256 sha512] <br /> |
-| `authentication` _[HTTPAuthentication](#httpauthentication)_ | Authentication contains authentication configuration |  |  |
-| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout specifies the download timeout | 30m |  |
+| `headers` _object (keys:string, values:string)_ | Headers contains HTTP headers to include in the request |  | MaxProperties: 20 <br />Optional: \{\} <br /> |
+| `checksum` _string_ | Checksum provides expected checksum for verification |  | Optional: \{\} <br /> |
+| `checksumType` _[ChecksumType](#checksumtype)_ | ChecksumType specifies the checksum algorithm | sha256 | Enum: [md5 sha1 sha256 sha512] <br />Optional: \{\} <br /> |
+| `authentication` _[HTTPAuthentication](#httpauthentication)_ | Authentication contains authentication configuration |  | Optional: \{\} <br /> |
+| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout specifies the download timeout | 30m | Optional: \{\} <br /> |
 
 
 #### HostAffinityRule
@@ -975,8 +975,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if host affinity is enabled |  |  |
-| `preferredHosts` _string array_ | PreferredHosts lists preferred hosts |  | MaxItems: 50 <br /> |
-| `scope` _string_ | Scope defines the scope of the affinity rule |  | Enum: [strict preferred] <br /> |
+| `preferredHosts` _string array_ | PreferredHosts lists preferred hosts |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `scope` _string_ | Scope defines the scope of the affinity rule |  | Enum: [strict preferred] <br />Optional: \{\} <br /> |
 
 
 #### HostAntiAffinityRule
@@ -993,8 +993,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if host anti-affinity is enabled |  |  |
-| `maxVMsPerHost` _integer_ | MaxVMsPerHost limits the number of VMs per host |  | Maximum: 1000 <br />Minimum: 1 <br /> |
-| `scope` _string_ | Scope defines the scope of the anti-affinity rule |  | Enum: [strict preferred] <br /> |
+| `maxVMsPerHost` _integer_ | MaxVMsPerHost limits the number of VMs per host |  | Maximum: 1000 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `scope` _string_ | Scope defines the scope of the anti-affinity rule |  | Enum: [strict preferred] <br />Optional: \{\} <br /> |
 
 
 #### IPAllocation
@@ -1012,9 +1012,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `vm` _string_ | VM is the VM name that has the IP allocated |  |  |
 | `ip` _string_ | IP is the allocated IP address |  |  |
-| `mac` _string_ | MAC is the allocated MAC address |  |  |
-| `allocatedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | AllocatedAt is when the IP was allocated |  |  |
-| `leaseExpiry` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LeaseExpiry is when the IP lease expires (for DHCP) |  |  |
+| `mac` _string_ | MAC is the allocated MAC address |  | Optional: \{\} <br /> |
+| `allocatedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | AllocatedAt is when the IP was allocated |  | Optional: \{\} <br /> |
+| `leaseExpiry` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LeaseExpiry is when the IP lease expires (for DHCP) |  | Optional: \{\} <br /> |
 
 
 #### IPAllocationConfig
@@ -1030,11 +1030,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _[IPAllocationType](#ipallocationtype)_ | Type specifies the IP allocation type | DHCP | Enum: [DHCP Static Pool None] <br /> |
-| `staticConfig` _[StaticIPConfig](#staticipconfig)_ | StaticConfig contains static IP configuration |  |  |
-| `poolConfig` _[IPPoolConfig](#ippoolconfig)_ | PoolConfig contains IP pool configuration |  |  |
-| `dhcpConfig` _[DHCPConfig](#dhcpconfig)_ | DHCPConfig contains DHCP configuration |  |  |
-| `dnsConfig` _[DNSConfig](#dnsconfig)_ | DNSConfig contains DNS configuration |  |  |
+| `type` _[IPAllocationType](#ipallocationtype)_ | Type specifies the IP allocation type | DHCP | Enum: [DHCP Static Pool None] <br />Optional: \{\} <br /> |
+| `staticConfig` _[StaticIPConfig](#staticipconfig)_ | StaticConfig contains static IP configuration |  | Optional: \{\} <br /> |
+| `poolConfig` _[IPPoolConfig](#ippoolconfig)_ | PoolConfig contains IP pool configuration |  | Optional: \{\} <br /> |
+| `dhcpConfig` _[DHCPConfig](#dhcpconfig)_ | DHCPConfig contains DHCP configuration |  | Optional: \{\} <br /> |
+| `dnsConfig` _[DNSConfig](#dnsconfig)_ | DNSConfig contains DNS configuration |  | Optional: \{\} <br /> |
 
 
 #### IPAllocationType
@@ -1071,7 +1071,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `poolRef` _[LocalObjectReference](#localobjectreference)_ | PoolRef references an IP pool resource |  |  |
-| `preferredIP` _string_ | PreferredIP requests a preferred IP from the pool |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br /> |
+| `preferredIP` _string_ | PreferredIP requests a preferred IP from the pool |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br />Optional: \{\} <br /> |
 
 
 #### Ignition
@@ -1087,8 +1087,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `inline` _string_ | Inline contains inline Ignition data |  |  |
-| `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a Secret containing Ignition data |  |  |
+| `inline` _string_ | Inline contains inline Ignition data |  | Optional: \{\} <br /> |
+| `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a Secret containing Ignition data |  | Optional: \{\} <br /> |
 
 
 #### ImageFormat
@@ -1132,12 +1132,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `totalBytes` _integer_ | TotalBytes is the total size of the image being imported |  |  |
-| `transferredBytes` _integer_ | TransferredBytes is the number of bytes transferred so far |  |  |
-| `percentage` _integer_ | Percentage is the completion percentage (0-100) |  | Maximum: 100 <br />Minimum: 0 <br /> |
-| `transferRate` _integer_ | TransferRate is the current transfer rate in bytes per second |  |  |
-| `eta` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | ETA is the estimated time to completion |  |  |
-| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | StartTime is when the import started |  |  |
+| `totalBytes` _integer_ | TotalBytes is the total size of the image being imported |  | Optional: \{\} <br /> |
+| `transferredBytes` _integer_ | TransferredBytes is the number of bytes transferred so far |  | Optional: \{\} <br /> |
+| `percentage` _integer_ | Percentage is the completion percentage (0-100) |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `transferRate` _integer_ | TransferRate is the current transfer rate in bytes per second |  | Optional: \{\} <br /> |
+| `eta` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | ETA is the estimated time to completion |  | Optional: \{\} <br /> |
+| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | StartTime is when the import started |  | Optional: \{\} <br /> |
 
 
 #### ImageMetadata
@@ -1153,12 +1153,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `displayName` _string_ | DisplayName is a human-readable name for the image |  | MaxLength: 255 <br /> |
-| `description` _string_ | Description provides a description of the image |  | MaxLength: 1024 <br /> |
-| `version` _string_ | Version specifies the image version |  | MaxLength: 100 <br /> |
-| `architecture` _string_ | Architecture specifies the CPU architecture | amd64 | Enum: [amd64 arm64 x86_64 aarch64] <br /> |
-| `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing the image |  | MaxProperties: 50 <br /> |
-| `annotations` _object (keys:string, values:string)_ | Annotations are additional metadata annotations |  | MaxProperties: 50 <br /> |
+| `displayName` _string_ | DisplayName is a human-readable name for the image |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `description` _string_ | Description provides a description of the image |  | MaxLength: 1024 <br />Optional: \{\} <br /> |
+| `version` _string_ | Version specifies the image version |  | MaxLength: 100 <br />Optional: \{\} <br /> |
+| `architecture` _string_ | Architecture specifies the CPU architecture | amd64 | Enum: [amd64 arm64 x86_64 aarch64] <br />Optional: \{\} <br /> |
+| `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing the image |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
+| `annotations` _object (keys:string, values:string)_ | Annotations are additional metadata annotations |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
 
 
 #### ImageMissingAction
@@ -1193,10 +1193,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enableCompression` _boolean_ | EnableCompression enables image compression | false |  |
-| `removeUnusedSpace` _boolean_ | RemoveUnusedSpace removes unused space from the image | false |  |
-| `convertFormat` _[ImageFormat](#imageformat)_ | ConvertFormat converts the image to a more optimal format |  | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br /> |
-| `enableDeltaSync` _boolean_ | EnableDeltaSync enables delta synchronization for updates | false |  |
+| `enableCompression` _boolean_ | EnableCompression enables image compression | false | Optional: \{\} <br /> |
+| `removeUnusedSpace` _boolean_ | RemoveUnusedSpace removes unused space from the image | false | Optional: \{\} <br /> |
+| `convertFormat` _[ImageFormat](#imageformat)_ | ConvertFormat converts the image to a more optimal format |  | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br />Optional: \{\} <br /> |
+| `enableDeltaSync` _boolean_ | EnableDeltaSync enables delta synchronization for updates | false | Optional: \{\} <br /> |
 
 
 #### ImagePhase
@@ -1235,13 +1235,13 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `onMissing` _[ImageMissingAction](#imagemissingaction)_ | OnMissing defines the action to take when image is missing | Import | Enum: [Import Fail Wait] <br /> |
-| `validateChecksum` _boolean_ | ValidateChecksum validates the image checksum | true |  |
-| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout defines the maximum time to wait for preparation | 30m |  |
-| `retries` _integer_ | Retries defines the number of retry attempts for failed operations | 3 | Maximum: 10 <br />Minimum: 0 <br /> |
-| `force` _boolean_ | Force forces re-import even if image exists |  |  |
-| `storage` _[StoragePrepareOptions](#storageprepareoptions)_ | Storage defines storage-specific preparation options |  |  |
-| `optimization` _[ImageOptimization](#imageoptimization)_ | Optimization defines image optimization options |  |  |
+| `onMissing` _[ImageMissingAction](#imagemissingaction)_ | OnMissing defines the action to take when image is missing | Import | Enum: [Import Fail Wait] <br />Optional: \{\} <br /> |
+| `validateChecksum` _boolean_ | ValidateChecksum validates the image checksum | true | Optional: \{\} <br /> |
+| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout defines the maximum time to wait for preparation | 30m | Optional: \{\} <br /> |
+| `retries` _integer_ | Retries defines the number of retry attempts for failed operations | 3 | Maximum: 10 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `force` _boolean_ | Force forces re-import even if image exists |  | Optional: \{\} <br /> |
+| `storage` _[StoragePrepareOptions](#storageprepareoptions)_ | Storage defines storage-specific preparation options |  | Optional: \{\} <br /> |
+| `optimization` _[ImageOptimization](#imageoptimization)_ | Optimization defines image optimization options |  | Optional: \{\} <br /> |
 
 
 #### ImageSource
@@ -1257,12 +1257,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `vsphere` _[VSphereImageSource](#vsphereimagesource)_ | VSphere contains vSphere-specific image configuration |  |  |
-| `libvirt` _[LibvirtImageSource](#libvirtimagesource)_ | Libvirt contains Libvirt-specific image configuration |  |  |
-| `http` _[HTTPImageSource](#httpimagesource)_ | HTTP contains HTTP/HTTPS download configuration |  |  |
-| `registry` _[RegistryImageSource](#registryimagesource)_ | Registry contains container registry image configuration |  |  |
-| `dataVolume` _[DataVolumeImageSource](#datavolumeimagesource)_ | DataVolume contains DataVolume-based image configuration |  |  |
-| `proxmox` _[ProxmoxImageSource](#proxmoximagesource)_ | Proxmox contains Proxmox VE-specific image configuration |  |  |
+| `vsphere` _[VSphereImageSource](#vsphereimagesource)_ | VSphere contains vSphere-specific image configuration |  | Optional: \{\} <br /> |
+| `libvirt` _[LibvirtImageSource](#libvirtimagesource)_ | Libvirt contains Libvirt-specific image configuration |  | Optional: \{\} <br /> |
+| `http` _[HTTPImageSource](#httpimagesource)_ | HTTP contains HTTP/HTTPS download configuration |  | Optional: \{\} <br /> |
+| `registry` _[RegistryImageSource](#registryimagesource)_ | Registry contains container registry image configuration |  | Optional: \{\} <br /> |
+| `dataVolume` _[DataVolumeImageSource](#datavolumeimagesource)_ | DataVolume contains DataVolume-based image configuration |  | Optional: \{\} <br /> |
+| `proxmox` _[ProxmoxImageSource](#proxmoximagesource)_ | Proxmox contains Proxmox VE-specific image configuration |  | Optional: \{\} <br /> |
 
 
 #### ImportedDiskRef
@@ -1280,11 +1280,11 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `diskID` _string_ | DiskID is the provider-specific disk identifier.<br />For libvirt, this is typically the volume name. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
-| `path` _string_ | Path is the optional disk path on the provider (e.g., /var/lib/libvirt/images/disk.qcow2).<br />If not specified, the provider will determine the path based on DiskID. |  |  |
-| `format` _string_ | Format specifies the disk format (qcow2, vmdk, raw, etc.). | qcow2 | Enum: [qcow2 vmdk raw vdi vhdx] <br /> |
-| `source` _string_ | Source indicates where the disk came from. |  | Enum: [migration clone import snapshot manual] <br /> |
-| `migrationRef` _[LocalObjectReference](#localobjectreference)_ | MigrationRef references the VMMigration that imported this disk.<br />This provides traceability and audit trail for migrated disks. |  |  |
-| `sizeGiB` _integer_ | SizeGiB specifies the expected disk size in GiB.<br />Used for validation and capacity planning. |  | Minimum: 1 <br /> |
+| `path` _string_ | Path is the optional disk path on the provider (e.g., /var/lib/libvirt/images/disk.qcow2).<br />If not specified, the provider will determine the path based on DiskID. |  | Optional: \{\} <br /> |
+| `format` _string_ | Format specifies the disk format (qcow2, vmdk, raw, etc.). | qcow2 | Enum: [qcow2 vmdk raw vdi vhdx] <br />Optional: \{\} <br /> |
+| `source` _string_ | Source indicates where the disk came from. |  | Enum: [migration clone import snapshot manual] <br />Optional: \{\} <br /> |
+| `migrationRef` _[LocalObjectReference](#localobjectreference)_ | MigrationRef references the VMMigration that imported this disk.<br />This provides traceability and audit trail for migrated disks. |  | Optional: \{\} <br /> |
+| `sizeGiB` _integer_ | SizeGiB specifies the expected disk size in GiB.<br />Used for validation and capacity planning. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### KernelInfo
@@ -1300,8 +1300,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `version` _string_ | Version is the kernel version |  |  |
-| `type` _string_ | Type is the kernel type |  | Enum: [linux windows freebsd other] <br /> |
+| `version` _string_ | Version is the kernel version |  | Optional: \{\} <br /> |
+| `type` _string_ | Type is the kernel type |  | Enum: [linux windows freebsd other] <br />Optional: \{\} <br /> |
 
 
 #### LibvirtImageSource
@@ -1317,12 +1317,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `path` _string_ | Path specifies the path to the image file on the host |  |  |
-| `url` _string_ | URL provides a URL to download the image |  | Pattern: `^(https?\|ftp)://.*` <br /> |
-| `format` _[ImageFormat](#imageformat)_ | Format specifies the image format | qcow2 | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br /> |
-| `checksum` _string_ | Checksum provides expected checksum for verification |  |  |
-| `checksumType` _[ChecksumType](#checksumtype)_ | ChecksumType specifies the checksum algorithm | sha256 | Enum: [md5 sha1 sha256 sha512] <br /> |
-| `storagePool` _string_ | StoragePool specifies the libvirt storage pool |  | MaxLength: 255 <br /> |
+| `path` _string_ | Path specifies the path to the image file on the host |  | Optional: \{\} <br /> |
+| `url` _string_ | URL provides a URL to download the image |  | Pattern: `^(https?\|ftp)://.*` <br />Optional: \{\} <br /> |
+| `format` _[ImageFormat](#imageformat)_ | Format specifies the image format | qcow2 | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br />Optional: \{\} <br /> |
+| `checksum` _string_ | Checksum provides expected checksum for verification |  | Optional: \{\} <br /> |
+| `checksumType` _[ChecksumType](#checksumtype)_ | ChecksumType specifies the checksum algorithm | sha256 | Enum: [md5 sha1 sha256 sha512] <br />Optional: \{\} <br /> |
+| `storagePool` _string_ | StoragePool specifies the libvirt storage pool |  | MaxLength: 255 <br />Optional: \{\} <br /> |
 
 
 #### LibvirtNetworkConfig
@@ -1338,11 +1338,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `networkName` _string_ | NetworkName specifies the Libvirt network name |  | MaxLength: 255 <br /> |
-| `bridge` _[BridgeConfig](#bridgeconfig)_ | Bridge specifies the bridge configuration |  |  |
-| `model` _string_ | Model specifies the network device model | virtio | Enum: [virtio e1000 e1000e rtl8139 pcnet ne2k_pci] <br /> |
-| `driver` _[NetworkDriverConfig](#networkdriverconfig)_ | Driver specifies the network driver configuration |  |  |
-| `filterRef` _[NetworkFilterRef](#networkfilterref)_ | FilterRef specifies network filter configuration |  |  |
+| `networkName` _string_ | NetworkName specifies the Libvirt network name |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `bridge` _[BridgeConfig](#bridgeconfig)_ | Bridge specifies the bridge configuration |  | Optional: \{\} <br /> |
+| `model` _string_ | Model specifies the network device model | virtio | Enum: [virtio e1000 e1000e rtl8139 pcnet ne2k_pci] <br />Optional: \{\} <br /> |
+| `driver` _[NetworkDriverConfig](#networkdriverconfig)_ | Driver specifies the network driver configuration |  | Optional: \{\} <br /> |
+| `filterRef` _[NetworkFilterRef](#networkfilterref)_ | FilterRef specifies network filter configuration |  | Optional: \{\} <br /> |
 
 
 #### LibvirtStorageOptions
@@ -1358,9 +1358,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `storagePool` _string_ | StoragePool specifies the target storage pool for import |  | MaxLength: 255 <br /> |
-| `allocationPolicy` _string_ | AllocationPolicy defines how storage is allocated |  | Enum: [eager lazy] <br /> |
-| `preallocation` _string_ | Preallocation specifies preallocation mode |  | Enum: [off metadata falloc full] <br /> |
+| `storagePool` _string_ | StoragePool specifies the target storage pool for import |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `allocationPolicy` _string_ | AllocationPolicy defines how storage is allocated |  | Enum: [eager lazy] <br />Optional: \{\} <br /> |
+| `preallocation` _string_ | Preallocation specifies preallocation mode |  | Enum: [off metadata falloc full] <br />Optional: \{\} <br /> |
 
 
 #### LifecycleHandler
@@ -1376,9 +1376,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `exec` _[ExecAction](#execaction)_ | Exec specifies a command to execute |  |  |
-| `httpGet` _[HTTPGetAction](#httpgetaction)_ | HTTPGet specifies an HTTP GET request |  |  |
-| `snapshot` _[SnapshotAction](#snapshotaction)_ | Snapshot specifies a snapshot to create |  |  |
+| `exec` _[ExecAction](#execaction)_ | Exec specifies a command to execute |  | Optional: \{\} <br /> |
+| `httpGet` _[HTTPGetAction](#httpgetaction)_ | HTTPGet specifies an HTTP GET request |  | Optional: \{\} <br /> |
+| `snapshot` _[SnapshotAction](#snapshotaction)_ | Snapshot specifies a snapshot to create |  | Optional: \{\} <br /> |
 
 
 #### LocalObjectReference
@@ -1433,7 +1433,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `cloudInit` _[CloudInitMetaData](#cloudinitmetadata)_ | CloudInit contains cloud-init metadata configuration |  |  |
+| `cloudInit` _[CloudInitMetaData](#cloudinitmetadata)_ | CloudInit contains cloud-init metadata configuration |  | Optional: \{\} <br /> |
 
 
 #### MigrationDiskInfo
@@ -1452,12 +1452,12 @@ _Appears in:_
 | `sourceDiskID` _string_ | SourceDiskID is the source disk identifier |  |  |
 | `sourceFormat` _string_ | SourceFormat is the source disk format |  |  |
 | `sourceSize` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | SourceSize is the source disk size in bytes |  |  |
-| `targetDiskID` _string_ | TargetDiskID is the target disk identifier |  |  |
-| `targetFormat` _string_ | TargetFormat is the target disk format |  |  |
-| `targetSize` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | TargetSize is the target disk size in bytes |  |  |
-| `checksum` _string_ | Checksum is the SHA256 checksum of the disk |  |  |
-| `sourceChecksum` _string_ | SourceChecksum is the SHA256 checksum of the source disk |  |  |
-| `targetChecksum` _string_ | TargetChecksum is the SHA256 checksum of the target disk |  |  |
+| `targetDiskID` _string_ | TargetDiskID is the target disk identifier |  | Optional: \{\} <br /> |
+| `targetFormat` _string_ | TargetFormat is the target disk format |  | Optional: \{\} <br /> |
+| `targetSize` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | TargetSize is the target disk size in bytes |  | Optional: \{\} <br /> |
+| `checksum` _string_ | Checksum is the SHA256 checksum of the disk |  | Optional: \{\} <br /> |
+| `sourceChecksum` _string_ | SourceChecksum is the SHA256 checksum of the source disk |  | Optional: \{\} <br /> |
+| `targetChecksum` _string_ | TargetChecksum is the SHA256 checksum of the target disk |  | Optional: \{\} <br /> |
 
 
 #### MigrationMetadata
@@ -1473,11 +1473,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `purpose` _string_ | Purpose describes the purpose of the migration |  | Enum: [disaster-recovery cloud-migration provider-change testing maintenance] <br /> |
-| `createdBy` _string_ | CreatedBy identifies who or what created the migration |  | MaxLength: 255 <br /> |
-| `project` _string_ | Project identifies the project this migration belongs to |  | MaxLength: 255 <br /> |
-| `environment` _string_ | Environment specifies the environment |  | Enum: [dev staging prod test qa uat] <br /> |
-| `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing the migration |  | MaxProperties: 50 <br /> |
+| `purpose` _string_ | Purpose describes the purpose of the migration |  | Enum: [disaster-recovery cloud-migration provider-change testing maintenance] <br />Optional: \{\} <br /> |
+| `createdBy` _string_ | CreatedBy identifies who or what created the migration |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `project` _string_ | Project identifies the project this migration belongs to |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `environment` _string_ | Environment specifies the environment |  | Enum: [dev staging prod test qa uat] <br />Optional: \{\} <br /> |
+| `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing the migration |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
 
 
 #### MigrationOptions
@@ -1493,13 +1493,13 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `diskFormat` _string_ | DiskFormat specifies the desired disk format for the target |  | Enum: [qcow2 vmdk raw] <br /> |
-| `compress` _boolean_ | Compress enables compression during transfer | false |  |
-| `verifyChecksums` _boolean_ | VerifyChecksums enables checksum verification | true |  |
-| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout defines the maximum time for the entire migration | 4h |  |
-| `retryPolicy` _[MigrationRetryPolicy](#migrationretrypolicy)_ | RetryPolicy defines retry behavior for failed operations |  |  |
-| `cleanupPolicy` _string_ | CleanupPolicy defines cleanup behavior | OnSuccess | Enum: [Always OnSuccess Never] <br /> |
-| `validationChecks` _[ValidationChecks](#validationchecks)_ | ValidationChecks defines validation checks to perform |  |  |
+| `diskFormat` _string_ | DiskFormat specifies the desired disk format for the target |  | Enum: [qcow2 vmdk raw] <br />Optional: \{\} <br /> |
+| `compress` _boolean_ | Compress enables compression during transfer | false | Optional: \{\} <br /> |
+| `verifyChecksums` _boolean_ | VerifyChecksums enables checksum verification | true | Optional: \{\} <br /> |
+| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout defines the maximum time for the entire migration | 4h | Optional: \{\} <br /> |
+| `retryPolicy` _[MigrationRetryPolicy](#migrationretrypolicy)_ | RetryPolicy defines retry behavior for failed operations |  | Optional: \{\} <br /> |
+| `cleanupPolicy` _string_ | CleanupPolicy defines cleanup behavior | OnSuccess | Enum: [Always OnSuccess Never] <br />Optional: \{\} <br /> |
+| `validationChecks` _[ValidationChecks](#validationchecks)_ | ValidationChecks defines validation checks to perform |  | Optional: \{\} <br /> |
 
 
 #### MigrationPhase
@@ -1544,12 +1544,12 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `currentPhase` _[MigrationPhase](#migrationphase)_ | CurrentPhase is the current phase being executed |  | Enum: [Pending Validating Snapshotting Exporting Transferring Converting Importing Creating Validating-Target Ready Failed] <br /> |
-| `totalBytes` _integer_ | TotalBytes is the total bytes to transfer |  |  |
-| `transferredBytes` _integer_ | TransferredBytes is the bytes transferred so far |  |  |
-| `percentage` _integer_ | Percentage is the overall completion percentage (0-100) |  | Maximum: 100 <br />Minimum: 0 <br /> |
-| `eta` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | ETA is the estimated time to completion |  |  |
-| `transferRate` _integer_ | TransferRate is the current transfer rate in bytes per second |  |  |
-| `phaseStartTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | PhaseStartTime is when the current phase started |  |  |
+| `totalBytes` _integer_ | TotalBytes is the total bytes to transfer |  | Optional: \{\} <br /> |
+| `transferredBytes` _integer_ | TransferredBytes is the bytes transferred so far |  | Optional: \{\} <br /> |
+| `percentage` _integer_ | Percentage is the overall completion percentage (0-100) |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `eta` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | ETA is the estimated time to completion |  | Optional: \{\} <br /> |
+| `transferRate` _integer_ | TransferRate is the current transfer rate in bytes per second |  | Optional: \{\} <br /> |
+| `phaseStartTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | PhaseStartTime is when the current phase started |  | Optional: \{\} <br /> |
 
 
 #### MigrationRetryPolicy
@@ -1565,9 +1565,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `maxRetries` _integer_ | MaxRetries is the maximum number of retry attempts | 3 | Maximum: 10 <br />Minimum: 0 <br /> |
-| `retryDelay` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | RetryDelay is the delay between retry attempts | 5m |  |
-| `backoffMultiplier` _integer_ | BackoffMultiplier is the multiplier for exponential backoff | 2 | Maximum: 10 <br />Minimum: 1 <br /> |
+| `maxRetries` _integer_ | MaxRetries is the maximum number of retry attempts | 3 | Maximum: 10 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `retryDelay` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | RetryDelay is the delay between retry attempts | 5m | Optional: \{\} <br /> |
+| `backoffMultiplier` _integer_ | BackoffMultiplier is the multiplier for exponential backoff | 2 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### MigrationSource
@@ -1584,11 +1584,11 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `vmRef` _[LocalObjectReference](#localobjectreference)_ | VMRef references the source virtual machine |  |  |
-| `providerRef` _[ObjectRef](#objectref)_ | ProviderRef explicitly specifies the source provider (optional, auto-detected from VM) |  |  |
-| `snapshotRef` _[LocalObjectReference](#localobjectreference)_ | SnapshotRef references a specific snapshot to migrate from |  |  |
-| `createSnapshot` _boolean_ | CreateSnapshot indicates whether to create a snapshot before migration | true |  |
-| `powerOffBeforeMigration` _boolean_ | PowerOffBeforeMigration ensures VM is powered off before migration | false |  |
-| `deleteAfterMigration` _boolean_ | DeleteAfterMigration deletes source VM after successful migration | false |  |
+| `providerRef` _[ObjectRef](#objectref)_ | ProviderRef explicitly specifies the source provider (optional, auto-detected from VM) |  | Optional: \{\} <br /> |
+| `snapshotRef` _[LocalObjectReference](#localobjectreference)_ | SnapshotRef references a specific snapshot to migrate from |  | Optional: \{\} <br /> |
+| `createSnapshot` _boolean_ | CreateSnapshot indicates whether to create a snapshot before migration | true | Optional: \{\} <br /> |
+| `powerOffBeforeMigration` _boolean_ | PowerOffBeforeMigration ensures VM is powered off before migration | false | Optional: \{\} <br /> |
+| `deleteAfterMigration` _boolean_ | DeleteAfterMigration deletes source VM after successful migration | false | Optional: \{\} <br /> |
 
 
 #### MigrationStorage
@@ -1605,7 +1605,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `type` _string_ | Type specifies the storage backend type | pvc | Enum: [pvc] <br /> |
-| `pvc` _[PVCStorageConfig](#pvcstorageconfig)_ | PVC specifies PVC-based storage configuration |  |  |
+| `pvc` _[PVCStorageConfig](#pvcstorageconfig)_ | PVC specifies PVC-based storage configuration |  | Optional: \{\} <br /> |
 
 
 #### MigrationStorageInfo
@@ -1621,10 +1621,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `url` _string_ | URL is the intermediate storage URL |  |  |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the size of data in intermediate storage |  |  |
-| `uploadedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | UploadedAt is when the data was uploaded |  |  |
-| `cleanedUp` _boolean_ | CleanedUp indicates if intermediate storage was cleaned up |  |  |
+| `url` _string_ | URL is the intermediate storage URL |  | Optional: \{\} <br /> |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the size of data in intermediate storage |  | Optional: \{\} <br /> |
+| `uploadedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | UploadedAt is when the data was uploaded |  | Optional: \{\} <br /> |
+| `cleanedUp` _boolean_ | CleanedUp indicates if intermediate storage was cleaned up |  | Optional: \{\} <br /> |
 
 
 #### MigrationTarget
@@ -1641,16 +1641,16 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the name for the target VM |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
-| `namespace` _string_ | Namespace is the namespace for the target VM (defaults to source namespace) |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
+| `namespace` _string_ | Namespace is the namespace for the target VM (defaults to source namespace) |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 | `providerRef` _[ObjectRef](#objectref)_ | ProviderRef references the target provider |  |  |
-| `classRef` _[LocalObjectReference](#localobjectreference)_ | ClassRef references the VM class for resource allocation |  |  |
-| `imageRef` _[LocalObjectReference](#localobjectreference)_ | ImageRef references the VM image (usually not needed for migration) |  |  |
-| `networks` _[VMNetworkRef](#vmnetworkref) array_ | Networks defines network configuration for target VM |  | MaxItems: 10 <br /> |
-| `disks` _[DiskSpec](#diskspec) array_ | Disks defines disk configuration overrides |  | MaxItems: 20 <br /> |
-| `placementRef` _[LocalObjectReference](#localobjectreference)_ | PlacementRef references placement policy for the target VM |  |  |
-| `powerOn` _boolean_ | PowerOn indicates whether to power on the target VM after migration | false |  |
-| `labels` _object (keys:string, values:string)_ | Labels defines labels to apply to the target VM |  | MaxProperties: 50 <br /> |
-| `annotations` _object (keys:string, values:string)_ | Annotations defines annotations to apply to the target VM |  | MaxProperties: 50 <br /> |
+| `classRef` _[LocalObjectReference](#localobjectreference)_ | ClassRef references the VM class for resource allocation |  | Optional: \{\} <br /> |
+| `imageRef` _[LocalObjectReference](#localobjectreference)_ | ImageRef references the VM image (usually not needed for migration) |  | Optional: \{\} <br /> |
+| `networks` _[VMNetworkRef](#vmnetworkref) array_ | Networks defines network configuration for target VM |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `disks` _[DiskSpec](#diskspec) array_ | Disks defines disk configuration overrides |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `placementRef` _[LocalObjectReference](#localobjectreference)_ | PlacementRef references placement policy for the target VM |  | Optional: \{\} <br /> |
+| `powerOn` _boolean_ | PowerOn indicates whether to power on the target VM after migration | false | Optional: \{\} <br /> |
+| `labels` _object (keys:string, values:string)_ | Labels defines labels to apply to the target VM |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
+| `annotations` _object (keys:string, values:string)_ | Annotations defines annotations to apply to the target VM |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
 
 
 #### NetworkAttachmentPhase
@@ -1686,11 +1686,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `vsphere` _[VSphereNetworkConfig](#vspherenetworkconfig)_ | VSphere contains vSphere-specific network configuration |  |  |
-| `libvirt` _[LibvirtNetworkConfig](#libvirtnetworkconfig)_ | Libvirt contains Libvirt-specific network configuration |  |  |
-| `proxmox` _[ProxmoxNetworkConfig](#proxmoxnetworkconfig)_ | Proxmox contains Proxmox VE-specific network configuration |  |  |
-| `type` _[NetworkType](#networktype)_ | Type specifies the network type | bridged | Enum: [bridged nat isolated host-only external] <br /> |
-| `mtu` _integer_ | MTU specifies the Maximum Transmission Unit | 1500 | Maximum: 9000 <br />Minimum: 68 <br /> |
+| `vsphere` _[VSphereNetworkConfig](#vspherenetworkconfig)_ | VSphere contains vSphere-specific network configuration |  | Optional: \{\} <br /> |
+| `libvirt` _[LibvirtNetworkConfig](#libvirtnetworkconfig)_ | Libvirt contains Libvirt-specific network configuration |  | Optional: \{\} <br /> |
+| `proxmox` _[ProxmoxNetworkConfig](#proxmoxnetworkconfig)_ | Proxmox contains Proxmox VE-specific network configuration |  | Optional: \{\} <br /> |
+| `type` _[NetworkType](#networktype)_ | Type specifies the network type | bridged | Enum: [bridged nat isolated host-only external] <br />Optional: \{\} <br /> |
+| `mtu` _integer_ | MTU specifies the Maximum Transmission Unit | 1500 | Maximum: 9000 <br />Minimum: 68 <br />Optional: \{\} <br /> |
 
 
 #### NetworkCustomization
@@ -1707,12 +1707,12 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name identifies the network to customize |  | MaxLength: 255 <br /> |
-| `ipAddress` _string_ | IPAddress sets a static IP address |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br /> |
-| `subnetMask` _string_ | SubnetMask sets the subnet mask |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br /> |
-| `gateway` _string_ | Gateway sets the network gateway |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br /> |
-| `dns` _string array_ | DNS sets DNS servers |  | MaxItems: 5 <br /> |
-| `macAddress` _string_ | MACAddress sets a custom MAC address |  | Pattern: `^([0-9A-Fa-f]\{2\}[:-])\{5\}([0-9A-Fa-f]\{2\})$` <br /> |
-| `dhcp` _boolean_ | DHCP enables DHCP for this network |  |  |
+| `ipAddress` _string_ | IPAddress sets a static IP address |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br />Optional: \{\} <br /> |
+| `subnetMask` _string_ | SubnetMask sets the subnet mask |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br />Optional: \{\} <br /> |
+| `gateway` _string_ | Gateway sets the network gateway |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br />Optional: \{\} <br /> |
+| `dns` _string array_ | DNS sets DNS servers |  | MaxItems: 5 <br />Optional: \{\} <br /> |
+| `macAddress` _string_ | MACAddress sets a custom MAC address |  | Pattern: `^([0-9A-Fa-f]\{2\}[:-])\{5\}([0-9A-Fa-f]\{2\})$` <br />Optional: \{\} <br /> |
+| `dhcp` _boolean_ | DHCP enables DHCP for this network |  | Optional: \{\} <br /> |
 
 
 #### NetworkDriverConfig
@@ -1728,11 +1728,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name is the driver name |  | Enum: [kvm vfio uio] <br /> |
-| `queues` _integer_ | Queues specifies the number of queues |  | Maximum: 16 <br />Minimum: 1 <br /> |
-| `txMode` _string_ | TxMode specifies the TX mode |  | Enum: [iothread timer] <br /> |
-| `ioEventFD` _boolean_ | IOEventFD enables IO event file descriptor |  |  |
-| `eventIDX` _boolean_ | EventIDX enables event index |  |  |
+| `name` _string_ | Name is the driver name |  | Enum: [kvm vfio uio] <br />Optional: \{\} <br /> |
+| `queues` _integer_ | Queues specifies the number of queues |  | Maximum: 16 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `txMode` _string_ | TxMode specifies the TX mode |  | Enum: [iothread timer] <br />Optional: \{\} <br /> |
+| `ioEventFD` _boolean_ | IOEventFD enables IO event file descriptor |  | Optional: \{\} <br /> |
+| `eventIDX` _boolean_ | EventIDX enables event index |  | Optional: \{\} <br /> |
 
 
 #### NetworkEncryptionConfig
@@ -1748,9 +1748,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled indicates if encryption is enabled | false |  |
-| `protocol` _string_ | Protocol specifies the encryption protocol |  | Enum: [ipsec wireguard openvpn] <br /> |
-| `keyRef` _[LocalObjectReference](#localobjectreference)_ | KeyRef references encryption keys |  |  |
+| `enabled` _boolean_ | Enabled indicates if encryption is enabled | false | Optional: \{\} <br /> |
+| `protocol` _string_ | Protocol specifies the encryption protocol |  | Enum: [ipsec wireguard openvpn] <br />Optional: \{\} <br /> |
+| `keyRef` _[LocalObjectReference](#localobjectreference)_ | KeyRef references encryption keys |  | Optional: \{\} <br /> |
 
 
 #### NetworkFilterRef
@@ -1767,7 +1767,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `filter` _string_ | Filter is the filter name |  | MaxLength: 255 <br /> |
-| `parameters` _object (keys:string, values:string)_ | Parameters contains filter parameters |  | MaxProperties: 20 <br /> |
+| `parameters` _object (keys:string, values:string)_ | Parameters contains filter parameters |  | MaxProperties: 20 <br />Optional: \{\} <br /> |
 
 
 #### NetworkIsolationConfig
@@ -1783,9 +1783,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mode` _string_ | Mode specifies the isolation mode |  | Enum: [none strict custom] <br /> |
-| `allowedNetworks` _string array_ | AllowedNetworks contains allowed network CIDRs |  | MaxItems: 50 <br /> |
-| `deniedNetworks` _string array_ | DeniedNetworks contains denied network CIDRs |  | MaxItems: 50 <br /> |
+| `mode` _string_ | Mode specifies the isolation mode |  | Enum: [none strict custom] <br />Optional: \{\} <br /> |
+| `allowedNetworks` _string array_ | AllowedNetworks contains allowed network CIDRs |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `deniedNetworks` _string array_ | DeniedNetworks contains denied network CIDRs |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 
 
 #### NetworkMetadata
@@ -1801,10 +1801,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `displayName` _string_ | DisplayName is a human-readable name |  | MaxLength: 255 <br /> |
-| `description` _string_ | Description provides a description |  | MaxLength: 1024 <br /> |
-| `environment` _string_ | Environment specifies the environment |  | Enum: [dev staging prod test qa uat] <br /> |
-| `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing |  | MaxProperties: 50 <br /> |
+| `displayName` _string_ | DisplayName is a human-readable name |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `description` _string_ | Description provides a description |  | MaxLength: 1024 <br />Optional: \{\} <br /> |
+| `environment` _string_ | Environment specifies the environment (dev, staging, prod, qa, uat) |  | Enum: [dev staging prod test qa uat] <br />Optional: \{\} <br /> |
+| `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
 
 
 #### NetworkQoSConfig
@@ -1820,10 +1820,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `ingressLimit` _integer_ | IngressLimit limits inbound traffic in bits per second |  | Minimum: 1000 <br /> |
-| `egressLimit` _integer_ | EgressLimit limits outbound traffic in bits per second |  | Minimum: 1000 <br /> |
-| `priority` _integer_ | Priority specifies traffic priority |  | Maximum: 7 <br />Minimum: 0 <br /> |
-| `dscp` _integer_ | DSCP specifies DSCP marking |  | Maximum: 63 <br />Minimum: 0 <br /> |
+| `ingressLimit` _integer_ | IngressLimit limits inbound traffic in bits per second |  | Minimum: 1000 <br />Optional: \{\} <br /> |
+| `egressLimit` _integer_ | EgressLimit limits outbound traffic in bits per second |  | Minimum: 1000 <br />Optional: \{\} <br /> |
+| `priority` _integer_ | Priority specifies traffic priority |  | Maximum: 7 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `dscp` _integer_ | DSCP specifies DSCP marking |  | Maximum: 63 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 
 
 #### NetworkSecurityConfig
@@ -1839,9 +1839,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `firewall` _[FirewallConfig](#firewallconfig)_ | Firewall contains firewall configuration |  |  |
-| `isolation` _[NetworkIsolationConfig](#networkisolationconfig)_ | Isolation contains network isolation settings |  |  |
-| `encryption` _[NetworkEncryptionConfig](#networkencryptionconfig)_ | Encryption contains network encryption settings |  |  |
+| `firewall` _[FirewallConfig](#firewallconfig)_ | Firewall contains firewall configuration |  | Optional: \{\} <br /> |
+| `isolation` _[NetworkIsolationConfig](#networkisolationconfig)_ | Isolation contains network isolation settings |  | Optional: \{\} <br /> |
+| `encryption` _[NetworkEncryptionConfig](#networkencryptionconfig)_ | Encryption contains network encryption settings |  | Optional: \{\} <br /> |
 
 
 #### NetworkType
@@ -1878,10 +1878,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `bytesReceived` _integer_ | BytesReceived is the total bytes received |  |  |
-| `bytesSent` _integer_ | BytesSent is the total bytes sent |  |  |
-| `packetsReceived` _integer_ | PacketsReceived is the total packets received |  |  |
-| `packetsSent` _integer_ | PacketsSent is the total packets sent |  |  |
+| `bytesReceived` _integer_ | BytesReceived is the total bytes received |  | Optional: \{\} <br /> |
+| `bytesSent` _integer_ | BytesSent is the total bytes sent |  | Optional: \{\} <br /> |
+| `packetsReceived` _integer_ | PacketsReceived is the total packets received |  | Optional: \{\} <br /> |
+| `packetsSent` _integer_ | PacketsSent is the total packets sent |  | Optional: \{\} <br /> |
 
 
 #### OSDistribution
@@ -1897,11 +1897,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name is the OS distribution name |  | Enum: [ubuntu centos rhel fedora debian suse windows freebsd coreos other] <br /> |
-| `version` _string_ | Version is the distribution version |  | MaxLength: 100 <br /> |
-| `variant` _string_ | Variant is the distribution variant (e.g., server, desktop) |  | MaxLength: 100 <br /> |
-| `family` _string_ | Family is the OS family |  | Enum: [linux windows bsd other] <br /> |
-| `kernel` _[KernelInfo](#kernelinfo)_ | Kernel specifies kernel information |  |  |
+| `name` _string_ | Name is the OS distribution name |  | Enum: [ubuntu centos rhel fedora debian suse windows freebsd coreos other] <br />Optional: \{\} <br /> |
+| `version` _string_ | Version is the distribution version |  | MaxLength: 100 <br />Optional: \{\} <br /> |
+| `variant` _string_ | Variant is the distribution variant (e.g., server, desktop) |  | MaxLength: 100 <br />Optional: \{\} <br /> |
+| `family` _string_ | Family is the OS family |  | Enum: [linux windows bsd other] <br />Optional: \{\} <br /> |
+| `kernel` _[KernelInfo](#kernelinfo)_ | Kernel specifies kernel information |  | Optional: \{\} <br /> |
 
 
 #### ObjectRef
@@ -1924,7 +1924,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name of the referenced object |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
-| `namespace` _string_ | Namespace of the referenced object (defaults to current namespace) |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
+| `namespace` _string_ | Namespace of the referenced object (defaults to current namespace) |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### PVCStorageConfig
@@ -1940,11 +1940,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name of an existing PVC to use for migration storage<br />If not specified, a temporary PVC will be created |  |  |
-| `storageClassName` _string_ | StorageClassName for auto-created PVC<br />Required if Name is not specified |  |  |
-| `size` _string_ | Size for auto-created PVC (e.g., "100Gi")<br />Required if Name is not specified |  | Pattern: `^[0-9]+(\.[0-9]+)?(Ei?\|Pi?\|Ti?\|Gi?\|Mi?\|Ki?)$` <br /> |
-| `accessMode` _string_ | AccessMode for auto-created PVC | ReadWriteMany | Enum: [ReadWriteOnce ReadWriteMany ReadOnlyMany] <br /> |
-| `mountPath` _string_ | MountPath within pods where PVC is mounted | /mnt/migration-storage |  |
+| `name` _string_ | Name of an existing PVC to use for migration storage<br />If not specified, a temporary PVC will be created |  | Optional: \{\} <br /> |
+| `storageClassName` _string_ | StorageClassName for auto-created PVC<br />Required if Name is not specified |  | Optional: \{\} <br /> |
+| `size` _string_ | Size for auto-created PVC (e.g., "100Gi")<br />Required if Name is not specified |  | Pattern: `^[0-9]+(\.[0-9]+)?(Ei?\|Pi?\|Ti?\|Gi?\|Mi?\|Ki?)$` <br />Optional: \{\} <br /> |
+| `accessMode` _string_ | AccessMode for auto-created PVC | ReadWriteMany | Enum: [ReadWriteOnce ReadWriteMany ReadOnlyMany] <br />Optional: \{\} <br /> |
+| `mountPath` _string_ | MountPath within pods where PVC is mounted | /mnt/migration-storage | Optional: \{\} <br /> |
 
 
 #### PasswordSpec
@@ -1961,9 +1961,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `value` _string_ | Value is the plaintext password (not recommended for production) |  |  |
-| `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a secret containing the password |  |  |
-| `secretKey` _string_ | SecretKey is the key in the secret containing the password | password |  |
+| `value` _string_ | Value is the plaintext password (not recommended for production) |  | Optional: \{\} <br /> |
+| `secretRef` _[LocalObjectReference](#localobjectreference)_ | SecretRef references a secret containing the password |  | Optional: \{\} <br /> |
+| `secretKey` _string_ | SecretKey is the key in the secret containing the password | password | Optional: \{\} <br /> |
 
 
 #### PerformanceProfile
@@ -1979,12 +1979,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `latencySensitivity` _string_ | LatencySensitivity configures latency sensitivity | normal | Enum: [low normal high] <br /> |
-| `cpuHotAddEnabled` _boolean_ | CPUHotAddEnabled allows adding CPUs while VM is running | false |  |
-| `memoryHotAddEnabled` _boolean_ | MemoryHotAddEnabled allows adding memory while VM is running | false |  |
-| `virtualizationBasedSecurity` _boolean_ | VirtualizationBasedSecurity enables VBS features | false |  |
-| `nestedVirtualization` _boolean_ | NestedVirtualization enables nested virtualization | false |  |
-| `hyperThreadingPolicy` _string_ | HyperThreadingPolicy controls hyperthreading usage | auto | Enum: [auto prefer avoid require] <br /> |
+| `latencySensitivity` _string_ | LatencySensitivity configures latency sensitivity | normal | Enum: [low normal high] <br />Optional: \{\} <br /> |
+| `cpuHotAddEnabled` _boolean_ | CPUHotAddEnabled allows adding CPUs while VM is running | false | Optional: \{\} <br /> |
+| `memoryHotAddEnabled` _boolean_ | MemoryHotAddEnabled allows adding memory while VM is running | false | Optional: \{\} <br /> |
+| `virtualizationBasedSecurity` _boolean_ | VirtualizationBasedSecurity enables VBS features | false | Optional: \{\} <br /> |
+| `nestedVirtualization` _boolean_ | NestedVirtualization enables nested virtualization | false | Optional: \{\} <br /> |
+| `hyperThreadingPolicy` _string_ | HyperThreadingPolicy controls hyperthreading usage | auto | Enum: [auto prefer avoid require] <br />Optional: \{\} <br /> |
 
 
 #### PersistentVolumeClaimRetentionPolicyType
@@ -2020,7 +2020,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
 | `spec` _[PersistentVolumeClaimSpec](#persistentvolumeclaimspec)_ | Spec is the desired characteristics of the volume |  |  |
 
 
@@ -2037,12 +2037,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `cluster` _string_ | Cluster specifies the target cluster |  |  |
-| `host` _string_ | Host specifies the target host |  |  |
-| `datastore` _string_ | Datastore specifies the target datastore. Mutually exclusive with StoragePod; Datastore takes precedence if both are set. |  |  |
-| `storagePod` _string_ | StoragePod specifies a vSphere Datastore Cluster (StoragePod) for automatic datastore selection. The provider selects the datastore with the most free space. Ignored when Datastore is also set. |  |  |
-| `folder` _string_ | Folder specifies the target folder |  |  |
-| `resourcePool` _string_ | ResourcePool specifies the target resource pool |  |  |
+| `cluster` _string_ | Cluster specifies the target cluster |  | Optional: \{\} <br /> |
+| `host` _string_ | Host specifies the target host |  | Optional: \{\} <br /> |
+| `datastore` _string_ | Datastore specifies the target datastore.<br />Mutually exclusive with StoragePod; Datastore takes precedence if both are set. |  | Optional: \{\} <br /> |
+| `storagePod` _string_ | StoragePod specifies a vSphere Datastore Cluster (StoragePod) to use for automatic<br />datastore selection. The provider will pick the datastore within the cluster that<br />has the most free space. Ignored when Datastore is also set. |  | Optional: \{\} <br /> |
+| `folder` _string_ | Folder specifies the target folder |  | Optional: \{\} <br /> |
+| `resourcePool` _string_ | ResourcePool specifies the target resource pool |  | Optional: \{\} <br /> |
 
 
 #### PlacementConstraints
@@ -2058,19 +2058,19 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `clusters` _string array_ | Clusters specifies allowed clusters for VM placement |  | MaxItems: 50 <br /> |
-| `datastores` _string array_ | Datastores specifies allowed datastores for VM placement |  | MaxItems: 100 <br /> |
-| `hosts` _string array_ | Hosts specifies allowed hosts for VM placement |  | MaxItems: 200 <br /> |
-| `folders` _string array_ | Folders specifies allowed folders for VM placement |  | MaxItems: 50 <br /> |
-| `resourcePools` _string array_ | ResourcePools specifies allowed resource pools for VM placement |  | MaxItems: 100 <br /> |
-| `networks` _string array_ | Networks specifies allowed networks for VM placement |  | MaxItems: 50 <br /> |
-| `zones` _string array_ | Zones specifies allowed availability zones |  | MaxItems: 20 <br /> |
-| `regions` _string array_ | Regions specifies allowed regions |  | MaxItems: 20 <br /> |
-| `nodeSelector` _object (keys:string, values:string)_ | NodeSelector specifies node selection criteria for libvirt provider |  | MaxProperties: 20 <br /> |
-| `tolerations` _[VMToleration](#vmtoleration) array_ | Tolerations specifies tolerations for node placement |  | MaxItems: 20 <br /> |
-| `excludedClusters` _string array_ | ExcludedClusters specifies clusters to exclude from placement |  | MaxItems: 50 <br /> |
-| `excludedHosts` _string array_ | ExcludedHosts specifies hosts to exclude from placement |  | MaxItems: 200 <br /> |
-| `excludedDatastores` _string array_ | ExcludedDatastores specifies datastores to exclude from placement |  | MaxItems: 100 <br /> |
+| `clusters` _string array_ | Clusters specifies allowed clusters for VM placement |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `datastores` _string array_ | Datastores specifies allowed datastores for VM placement |  | MaxItems: 100 <br />Optional: \{\} <br /> |
+| `hosts` _string array_ | Hosts specifies allowed hosts for VM placement |  | MaxItems: 200 <br />Optional: \{\} <br /> |
+| `folders` _string array_ | Folders specifies allowed folders for VM placement |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `resourcePools` _string array_ | ResourcePools specifies allowed resource pools for VM placement |  | MaxItems: 100 <br />Optional: \{\} <br /> |
+| `networks` _string array_ | Networks specifies allowed networks for VM placement |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `zones` _string array_ | Zones specifies allowed availability zones |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `regions` _string array_ | Regions specifies allowed regions |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `nodeSelector` _object (keys:string, values:string)_ | NodeSelector specifies node selection criteria for libvirt provider |  | MaxProperties: 20 <br />Optional: \{\} <br /> |
+| `tolerations` _[VMToleration](#vmtoleration) array_ | Tolerations specifies tolerations for node placement |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `excludedClusters` _string array_ | ExcludedClusters specifies clusters to exclude from placement |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `excludedHosts` _string array_ | ExcludedHosts specifies hosts to exclude from placement |  | MaxItems: 200 <br />Optional: \{\} <br /> |
+| `excludedDatastores` _string array_ | ExcludedDatastores specifies datastores to exclude from placement |  | MaxItems: 100 <br />Optional: \{\} <br /> |
 
 
 #### PlacementStatistics
@@ -2086,13 +2086,13 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `totalPlacements` _integer_ | TotalPlacements is the total number of VM placements using this policy |  |  |
-| `successfulPlacements` _integer_ | SuccessfulPlacements is the number of successful placements |  |  |
-| `failedPlacements` _integer_ | FailedPlacements is the number of failed placements |  |  |
-| `averagePlacementTime` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | AveragePlacementTime is the average time for VM placement |  |  |
-| `constraintViolations` _integer_ | ConstraintViolations is the number of constraint violations |  |  |
-| `lastPlacementTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastPlacementTime is when the last VM was placed using this policy |  |  |
-| `placementDistribution` _object (keys:string, values:integer)_ | PlacementDistribution shows how VMs are distributed across hosts/clusters |  |  |
+| `totalPlacements` _integer_ | TotalPlacements is the total number of VM placements using this policy |  | Optional: \{\} <br /> |
+| `successfulPlacements` _integer_ | SuccessfulPlacements is the number of successful placements |  | Optional: \{\} <br /> |
+| `failedPlacements` _integer_ | FailedPlacements is the number of failed placements |  | Optional: \{\} <br /> |
+| `averagePlacementTime` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | AveragePlacementTime is the average time for VM placement |  | Optional: \{\} <br /> |
+| `constraintViolations` _integer_ | ConstraintViolations is the number of constraint violations |  | Optional: \{\} <br /> |
+| `lastPlacementTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastPlacementTime is when the last VM was placed using this policy |  | Optional: \{\} <br /> |
+| `placementDistribution` _object (keys:string, values:integer)_ | PlacementDistribution shows how VMs are distributed across hosts/clusters |  | Optional: \{\} <br /> |
 
 
 #### PolicyConflict
@@ -2110,9 +2110,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `policyName` _string_ | PolicyName is the name of the conflicting policy |  |  |
 | `conflictType` _string_ | ConflictType describes the type of conflict |  | Enum: [hard soft resource security affinity] <br /> |
-| `description` _string_ | Description provides details about the conflict |  |  |
-| `severity` _string_ | Severity indicates the severity of the conflict |  | Enum: [low medium high critical] <br /> |
-| `resolutionSuggestion` _string_ | ResolutionSuggestion provides suggestions for resolving the conflict |  |  |
+| `description` _string_ | Description provides details about the conflict |  | Optional: \{\} <br /> |
+| `severity` _string_ | Severity indicates the severity of the conflict |  | Enum: [low medium high critical] <br />Optional: \{\} <br /> |
+| `resolutionSuggestion` _string_ | ResolutionSuggestion provides suggestions for resolving the conflict |  | Optional: \{\} <br /> |
 
 
 #### PolicyValidationResult
@@ -2129,12 +2129,12 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `valid` _boolean_ | Valid indicates if the policy is valid for the provider |  |  |
-| `message` _string_ | Message provides details about the validation result |  |  |
-| `warnings` _string array_ | Warnings lists any validation warnings |  | MaxItems: 20 <br /> |
-| `errors` _string array_ | Errors lists any validation errors |  | MaxItems: 20 <br /> |
-| `supportedFeatures` _string array_ | SupportedFeatures lists features supported by the provider |  | MaxItems: 50 <br /> |
-| `unsupportedFeatures` _string array_ | UnsupportedFeatures lists features not supported by the provider |  | MaxItems: 50 <br /> |
-| `lastValidated` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastValidated is when this validation was last performed |  |  |
+| `message` _string_ | Message provides details about the validation result |  | Optional: \{\} <br /> |
+| `warnings` _string array_ | Warnings lists any validation warnings |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `errors` _string array_ | Errors lists any validation errors |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `supportedFeatures` _string array_ | SupportedFeatures lists features supported by the provider |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `unsupportedFeatures` _string array_ | UnsupportedFeatures lists features not supported by the provider |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `lastValidated` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastValidated is when this validation was last performed |  | Optional: \{\} <br /> |
 
 
 #### PortRange
@@ -2151,7 +2151,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `start` _integer_ | Start is the starting port |  | Maximum: 65535 <br />Minimum: 1 <br /> |
-| `end` _integer_ | End is the ending port (optional, defaults to start) |  | Maximum: 65535 <br />Minimum: 1 <br /> |
+| `end` _integer_ | End is the ending port (optional, defaults to start) |  | Maximum: 65535 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### PortgroupSecurityConfig
@@ -2167,9 +2167,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `allowPromiscuous` _boolean_ | AllowPromiscuous allows promiscuous mode | false |  |
-| `allowMACChanges` _boolean_ | AllowMACChanges allows MAC address changes | true |  |
-| `allowForgedTransmits` _boolean_ | AllowForgedTransmits allows forged transmits | true |  |
+| `allowPromiscuous` _boolean_ | AllowPromiscuous allows promiscuous mode | false | Optional: \{\} <br /> |
+| `allowMACChanges` _boolean_ | AllowMACChanges allows MAC address changes | true | Optional: \{\} <br /> |
+| `allowForgedTransmits` _boolean_ | AllowForgedTransmits allows forged transmits | true | Optional: \{\} <br /> |
 
 
 #### PowerState
@@ -2225,11 +2225,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `lastDiscoveryTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastDiscoveryTime is when VMs were last discovered |  |  |
-| `discoveredVMs` _integer_ | DiscoveredVMs is the count of VMs found in provider |  |  |
-| `adoptedVMs` _integer_ | AdoptedVMs is the count of VMs successfully adopted |  |  |
-| `failedAdoptions` _integer_ | FailedAdoptions is the count of failed adoption attempts |  |  |
-| `message` _string_ | Message provides details about adoption status |  |  |
+| `lastDiscoveryTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastDiscoveryTime is when VMs were last discovered |  | Optional: \{\} <br /> |
+| `discoveredVMs` _integer_ | DiscoveredVMs is the count of VMs found in provider |  | Optional: \{\} <br /> |
+| `adoptedVMs` _integer_ | AdoptedVMs is the count of VMs successfully adopted |  | Optional: \{\} <br /> |
+| `failedAdoptions` _integer_ | FailedAdoptions is the count of failed adoption attempts |  | Optional: \{\} <br /> |
+| `message` _string_ | Message provides details about adoption status |  | Optional: \{\} <br /> |
 
 
 #### ProviderCapability
@@ -2272,12 +2272,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `datastore` _string_ | Datastore specifies the default datastore. Mutually exclusive with StoragePod; Datastore takes precedence if both are set. |  | MaxLength: 255 <br /> |
-| `storagePod` _string_ | StoragePod specifies a vSphere Datastore Cluster (StoragePod) for automatic datastore selection when no explicit Datastore is specified. |  | MaxLength: 255 <br /> |
-| `cluster` _string_ | Cluster specifies the default cluster |  | MaxLength: 255 <br /> |
-| `folder` _string_ | Folder specifies the default folder |  | MaxLength: 255 <br /> |
-| `resourcePool` _string_ | ResourcePool specifies the default resource pool |  | MaxLength: 255 <br /> |
-| `network` _string_ | Network specifies the default network |  | MaxLength: 255 <br /> |
+| `datastore` _string_ | Datastore specifies the default datastore.<br />Mutually exclusive with StoragePod; Datastore takes precedence if both are set. |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `storagePod` _string_ | StoragePod specifies a vSphere Datastore Cluster (StoragePod) used as the default<br />for automatic datastore selection when no explicit Datastore is specified. |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `cluster` _string_ | Cluster specifies the default cluster |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `folder` _string_ | Folder specifies the default folder |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `resourcePool` _string_ | ResourcePool specifies the default resource pool |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `network` _string_ | Network specifies the default network |  | MaxLength: 255 <br />Optional: \{\} <br /> |
 
 
 #### ProviderHealthCheck
@@ -2293,11 +2293,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled indicates whether health checking is enabled | true |  |
-| `interval` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Interval defines how often to check provider health | 30s |  |
-| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout defines the timeout for health checks | 10s |  |
-| `failureThreshold` _integer_ | FailureThreshold is the number of consecutive failures before marking unhealthy | 3 | Maximum: 10 <br />Minimum: 1 <br /> |
-| `successThreshold` _integer_ | SuccessThreshold is the number of consecutive successes before marking healthy | 1 | Maximum: 10 <br />Minimum: 1 <br /> |
+| `enabled` _boolean_ | Enabled indicates whether health checking is enabled | true | Optional: \{\} <br /> |
+| `interval` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Interval defines how often to check provider health | 30s | Optional: \{\} <br /> |
+| `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout defines the timeout for health checks | 10s | Optional: \{\} <br /> |
+| `failureThreshold` _integer_ | FailureThreshold is the number of consecutive failures before marking unhealthy | 3 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `successThreshold` _integer_ | SuccessThreshold is the number of consecutive successes before marking healthy | 1 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### ProviderImageStatus
@@ -2314,11 +2314,11 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `available` _boolean_ | Available indicates if the image is available on this provider |  |  |
-| `id` _string_ | ID is the provider-specific image identifier |  |  |
-| `path` _string_ | Path is the provider-specific image path |  |  |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the image size on this provider |  |  |
-| `lastUpdated` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastUpdated is when the status was last updated |  |  |
-| `message` _string_ | Message provides provider-specific status information |  |  |
+| `id` _string_ | ID is the provider-specific image identifier |  | Optional: \{\} <br /> |
+| `path` _string_ | Path is the provider-specific image path |  | Optional: \{\} <br /> |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the image size on this provider |  | Optional: \{\} <br /> |
+| `lastUpdated` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastUpdated is when the status was last updated |  | Optional: \{\} <br /> |
+| `message` _string_ | Message provides provider-specific status information |  | Optional: \{\} <br /> |
 
 
 #### ProviderList
@@ -2353,10 +2353,10 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `available` _boolean_ | Available indicates if the network is available on this provider |  |  |
-| `id` _string_ | ID is the provider-specific network identifier |  |  |
-| `state` _string_ | State is the provider-specific network state |  |  |
-| `lastUpdated` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastUpdated is when the status was last updated |  |  |
-| `message` _string_ | Message provides provider-specific status information |  |  |
+| `id` _string_ | ID is the provider-specific network identifier |  | Optional: \{\} <br /> |
+| `state` _string_ | State is the provider-specific network state |  | Optional: \{\} <br /> |
+| `lastUpdated` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastUpdated is when the status was last updated |  | Optional: \{\} <br /> |
+| `message` _string_ | Message provides provider-specific status information |  | Optional: \{\} <br /> |
 
 
 #### ProviderResourceUsage
@@ -2372,10 +2372,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `cpu` _[ResourceUsageStats](#resourceusagestats)_ | CPU usage statistics |  |  |
-| `memory` _[ResourceUsageStats](#resourceusagestats)_ | Memory usage statistics |  |  |
-| `storage` _[ResourceUsageStats](#resourceusagestats)_ | Storage usage statistics |  |  |
-| `network` _[NetworkUsageStats](#networkusagestats)_ | Network usage statistics |  |  |
+| `cpu` _[ResourceUsageStats](#resourceusagestats)_ | CPU usage statistics |  | Optional: \{\} <br /> |
+| `memory` _[ResourceUsageStats](#resourceusagestats)_ | Memory usage statistics |  | Optional: \{\} <br /> |
+| `storage` _[ResourceUsageStats](#resourceusagestats)_ | Storage usage statistics |  | Optional: \{\} <br /> |
+| `network` _[NetworkUsageStats](#networkusagestats)_ | Network usage statistics |  | Optional: \{\} <br /> |
 
 
 #### ProviderRuntimeMode
@@ -2430,22 +2430,22 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mode` _[ProviderRuntimeMode](#providerruntimemode)_ | Mode specifies the runtime mode (always Remote) | Remote | Enum: [Remote] <br /> |
-| `image` _string_ | Image is the container image for remote providers (required). Supports `image:tag`, `image@digest`, or `image:tag@digest` formats. |  | Pattern: `^[a-zA-Z0-9._/-]+(:[a-zA-Z0-9._-]+)?(@[a-zA-Z0-9]+:[a-fA-F0-9]{64})?$` <br /> |
-| `imagePullPolicy` _[PullPolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#pullpolicy-v1-core)_ | ImagePullPolicy defines the image pull policy | IfNotPresent | Enum: [Always Never IfNotPresent] <br /> |
-| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#localobjectreference-v1-core) array_ | ImagePullSecrets are references to secrets for pulling images |  | MaxItems: 10 <br /> |
-| `replicas` _integer_ | Replicas is the number of provider instances (default 1) | 1 | Maximum: 10 <br />Minimum: 1 <br /> |
-| `service` _[ProviderServiceSpec](#providerservicespec)_ | Service defines the service configuration |  |  |
-| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcerequirements-v1-core)_ | Resources defines resource requirements for provider pods |  |  |
-| `nodeSelector` _object (keys:string, values:string)_ | NodeSelector is a selector which must be true for the pod to fit on a node |  |  |
-| `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#toleration-v1-core) array_ | Tolerations allow pods to schedule onto nodes with matching taints |  | MaxItems: 20 <br /> |
-| `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#affinity-v1-core)_ | Affinity defines scheduling constraints |  |  |
-| `securityContext` _[SecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#securitycontext-v1-core)_ | SecurityContext defines security context for provider pods |  |  |
-| `logLevel` _string_ | LogLevel sets the log level for provider pods. Defaults to the controller's log level if not specified. | info | Enum: [debug info warn error] <br /> |
-| `logFormat` _string_ | LogFormat sets the log format for provider pods | text | Enum: [text json] <br /> |
-| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | Env defines additional environment variables for provider pods |  | MaxItems: 50 <br /> |
-| `livenessProbe` _[Probe](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#probe-v1-core)_ | LivenessProbe defines the liveness probe for provider pods |  |  |
-| `readinessProbe` _[Probe](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#probe-v1-core)_ | ReadinessProbe defines the readiness probe for provider pods |  |  |
+| `mode` _[ProviderRuntimeMode](#providerruntimemode)_ | Mode specifies the runtime mode (always Remote) | Remote | Enum: [Remote] <br />Optional: \{\} <br /> |
+| `image` _string_ | Image is the container image for remote providers (required)<br />Supports formats: image:tag, image@digest, or image:tag@digest |  | Pattern: `^[a-zA-Z0-9._/-]+(:[a-zA-Z0-9._-]+)?(@[a-zA-Z0-9]+:[a-fA-F0-9]\{64\})?$` <br /> |
+| `imagePullPolicy` _[PullPolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#pullpolicy-v1-core)_ | ImagePullPolicy defines the image pull policy | IfNotPresent | Enum: [Always Never IfNotPresent] <br />Optional: \{\} <br /> |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#localobjectreference-v1-core) array_ | ImagePullSecrets are references to secrets for pulling images |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `replicas` _integer_ | Replicas is the number of provider instances (default 1) | 1 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `service` _[ProviderServiceSpec](#providerservicespec)_ | Service defines the service configuration |  | Optional: \{\} <br /> |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcerequirements-v1-core)_ | Resources defines resource requirements for provider pods |  | Optional: \{\} <br /> |
+| `nodeSelector` _object (keys:string, values:string)_ | NodeSelector is a selector which must be true for the pod to fit on a node |  | Optional: \{\} <br /> |
+| `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#toleration-v1-core) array_ | Tolerations allow pods to schedule onto nodes with matching taints |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#affinity-v1-core)_ | Affinity defines scheduling constraints |  | Optional: \{\} <br /> |
+| `securityContext` _[SecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#securitycontext-v1-core)_ | SecurityContext defines security context for provider pods |  | Optional: \{\} <br /> |
+| `logLevel` _string_ | LogLevel sets the log level for provider pods<br />Defaults to the controller's log level if not specified | info | Enum: [debug info warn error] <br />Optional: \{\} <br /> |
+| `logFormat` _string_ | LogFormat sets the log format for provider pods | text | Enum: [text json] <br />Optional: \{\} <br /> |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#envvar-v1-core) array_ | Env defines additional environment variables for provider pods |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `livenessProbe` _[Probe](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#probe-v1-core)_ | LivenessProbe defines the liveness probe for provider pods |  | Optional: \{\} <br /> |
+| `readinessProbe` _[Probe](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#probe-v1-core)_ | ReadinessProbe defines the readiness probe for provider pods |  | Optional: \{\} <br /> |
 
 
 #### ProviderRuntimeStatus
@@ -2461,13 +2461,13 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mode` _[ProviderRuntimeMode](#providerruntimemode)_ | Mode indicates the current runtime mode |  | Enum: [Remote] <br /> |
-| `endpoint` _string_ | Endpoint is the gRPC endpoint (host:port) for remote providers |  |  |
-| `serviceRef` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#localobjectreference-v1-core)_ | ServiceRef references the Kubernetes service for remote providers |  |  |
-| `phase` _[ProviderRuntimePhase](#providerruntimephase)_ | Phase indicates the runtime phase |  | Enum: [Pending Starting Running Stopping Failed] <br /> |
-| `message` _string_ | Message provides additional details about the runtime status |  |  |
-| `readyReplicas` _integer_ | ReadyReplicas is the number of ready provider replicas |  |  |
-| `availableReplicas` _integer_ | AvailableReplicas is the number of available provider replicas |  |  |
+| `mode` _[ProviderRuntimeMode](#providerruntimemode)_ | Mode indicates the current runtime mode |  | Enum: [Remote] <br />Optional: \{\} <br /> |
+| `endpoint` _string_ | Endpoint is the gRPC endpoint (host:port) for remote providers |  | Optional: \{\} <br /> |
+| `serviceRef` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#localobjectreference-v1-core)_ | ServiceRef references the Kubernetes service for remote providers |  | Optional: \{\} <br /> |
+| `phase` _[ProviderRuntimePhase](#providerruntimephase)_ | Phase indicates the runtime phase |  | Enum: [Pending Starting Running Stopping Failed] <br />Optional: \{\} <br /> |
+| `message` _string_ | Message provides additional details about the runtime status |  | Optional: \{\} <br /> |
+| `readyReplicas` _integer_ | ReadyReplicas is the number of ready provider replicas |  | Optional: \{\} <br /> |
+| `availableReplicas` _integer_ | AvailableReplicas is the number of available provider replicas |  | Optional: \{\} <br /> |
 
 
 #### ProviderServiceSpec
@@ -2483,8 +2483,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `port` _integer_ | Port is the gRPC service port | 9443 | Maximum: 65535 <br />Minimum: 1024 <br /> |
-| `tls` _[ProviderTLSSpec](#providertlsspec)_ | TLS defines TLS configuration for the service |  |  |
+| `port` _integer_ | Port is the gRPC service port | 9443 | Maximum: 65535 <br />Minimum: 1024 <br />Optional: \{\} <br /> |
+| `tls` _[ProviderTLSSpec](#providertlsspec)_ | TLS defines TLS configuration for the service |  | Optional: \{\} <br /> |
 
 
 #### ProviderSnapshotStatus
@@ -2501,11 +2501,11 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `available` _boolean_ | Available indicates if the snapshot is available on this provider |  |  |
-| `id` _string_ | ID is the provider-specific snapshot identifier |  |  |
-| `path` _string_ | Path is the provider-specific snapshot path |  |  |
-| `state` _string_ | State is the provider-specific snapshot state |  |  |
-| `lastUpdated` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastUpdated is when the status was last updated |  |  |
-| `message` _string_ | Message provides provider-specific status information |  |  |
+| `id` _string_ | ID is the provider-specific snapshot identifier |  | Optional: \{\} <br /> |
+| `path` _string_ | Path is the provider-specific snapshot path |  | Optional: \{\} <br /> |
+| `state` _string_ | State is the provider-specific snapshot state |  | Optional: \{\} <br /> |
+| `lastUpdated` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastUpdated is when the status was last updated |  | Optional: \{\} <br /> |
+| `message` _string_ | Message provides provider-specific status information |  | Optional: \{\} <br /> |
 
 
 #### ProviderSpec
@@ -2524,12 +2524,12 @@ _Appears in:_
 | `type` _[ProviderType](#providertype)_ | Type specifies the provider type |  | Enum: [vsphere libvirt firecracker qemu proxmox] <br /> |
 | `endpoint` _string_ | Endpoint is the provider endpoint URI<br />Supports multiple protocols: HTTP(S), TCP, gRPC for general providers<br />and LibVirt-specific schemes: qemu://, qemu+ssh://, qemu+tcp://, qemu+tls:// |  | Pattern: `^((https?://[a-zA-Z0-9.-]+(:[0-9]+)?(/.*)?\|(tcp\|grpc)://[a-zA-Z0-9.-]+:[0-9]+(/.*)?)\|qemu(\+ssh\|\+tcp\|\+tls)?://([a-zA-Z0-9@.-]+(:[0-9]+)?)?(/.*))$` <br /> |
 | `credentialSecretRef` _[ObjectRef](#objectref)_ | CredentialSecretRef references the Secret containing credentials |  |  |
-| `insecureSkipVerify` _boolean_ | InsecureSkipVerify disables TLS verification (deprecated, use runtime.service.tls.insecureSkipVerify) | false |  |
-| `defaults` _[ProviderDefaults](#providerdefaults)_ | Defaults provides default placement settings |  |  |
-| `rateLimit` _[RateLimit](#ratelimit)_ | RateLimit configures API rate limiting |  |  |
+| `insecureSkipVerify` _boolean_ | InsecureSkipVerify disables TLS verification (deprecated, use runtime.service.tls.insecureSkipVerify) | false | Optional: \{\} <br /> |
+| `defaults` _[ProviderDefaults](#providerdefaults)_ | Defaults provides default placement settings |  | Optional: \{\} <br /> |
+| `rateLimit` _[RateLimit](#ratelimit)_ | RateLimit configures API rate limiting |  | Optional: \{\} <br /> |
 | `runtime` _[ProviderRuntimeSpec](#providerruntimespec)_ | Runtime defines how the provider is executed (required) |  |  |
-| `healthCheck` _[ProviderHealthCheck](#providerhealthcheck)_ | HealthCheck defines health checking configuration |  |  |
-| `connectionPooling` _[ConnectionPooling](#connectionpooling)_ | ConnectionPooling defines connection pooling settings |  |  |
+| `healthCheck` _[ProviderHealthCheck](#providerhealthcheck)_ | HealthCheck defines health checking configuration |  | Optional: \{\} <br /> |
+| `connectionPooling` _[ConnectionPooling](#connectionpooling)_ | ConnectionPooling defines connection pooling settings |  | Optional: \{\} <br /> |
 
 
 #### ProviderStatus
@@ -2545,16 +2545,17 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `healthy` _boolean_ | Healthy indicates if the provider is healthy |  |  |
-| `lastHealthCheck` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastHealthCheck records the last health check time |  |  |
-| `runtime` _[ProviderRuntimeStatus](#providerruntimestatus)_ | Runtime provides runtime status information |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  |  |
-| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  |  |
-| `capabilities` _[ProviderCapability](#providercapability) array_ | Capabilities lists the provider's supported capabilities |  | Enum: [VirtualMachines Snapshots Cloning LiveMigration ConsoleAccess DiskManagement NetworkManagement GPUPassthrough HighAvailability Backup Templates] <br /> |
-| `version` _string_ | Version reports the provider version |  |  |
-| `connectedVMs` _integer_ | ConnectedVMs is the number of VMs currently managed by this provider |  |  |
-| `resourceUsage` _[ProviderResourceUsage](#providerresourceusage)_ | ResourceUsage provides resource usage statistics |  |  |
-| `adoption` _[ProviderAdoptionStatus](#provideradoptionstatus)_ | Adoption tracks VM adoption status |  |  |
+| `healthy` _boolean_ | Healthy indicates if the provider is healthy |  | Optional: \{\} <br /> |
+| `lastHealthCheck` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastHealthCheck records the last health check time |  | Optional: \{\} <br /> |
+| `runtime` _[ProviderRuntimeStatus](#providerruntimestatus)_ | Runtime provides runtime status information |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  | Optional: \{\} <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
+| `capabilities` _[ProviderCapability](#providercapability) array_ | Capabilities lists the provider's supported capabilities |  | Enum: [VirtualMachines Snapshots Cloning LiveMigration ConsoleAccess DiskManagement NetworkManagement GPUPassthrough HighAvailability Backup Templates] <br />Optional: \{\} <br /> |
+| `reportedCapabilities` _[ReportedCapabilities](#reportedcapabilities)_ | ReportedCapabilities is the provider's self-reported capability set,<br />fetched from the provider GetCapabilities RPC (issue #176). It reflects<br />what the running provider advertises and is consumed by the manager to<br />surface features and (when capability enforcement is enabled) to gate<br />capability-dependent operations. |  | Optional: \{\} <br /> |
+| `version` _string_ | Version reports the provider version |  | Optional: \{\} <br /> |
+| `connectedVMs` _integer_ | ConnectedVMs is the number of VMs currently managed by this provider |  | Optional: \{\} <br /> |
+| `resourceUsage` _[ProviderResourceUsage](#providerresourceusage)_ | ResourceUsage provides resource usage statistics |  | Optional: \{\} <br /> |
+| `adoption` _[ProviderAdoptionStatus](#provideradoptionstatus)_ | Adoption tracks VM adoption status |  | Optional: \{\} <br /> |
 
 
 #### ProviderTLSSpec
@@ -2571,8 +2572,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled determines if TLS is enabled for provider communication | true |  |
-| `secretRef` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#localobjectreference-v1-core)_ | SecretRef references a secret containing tls.crt, tls.key, and ca.crt |  |  |
-| `insecureSkipVerify` _boolean_ | InsecureSkipVerify disables TLS certificate verification | false |  |
+| `secretRef` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#localobjectreference-v1-core)_ | SecretRef references a secret containing tls.crt, tls.key, and ca.crt |  | Optional: \{\} <br /> |
+| `insecureSkipVerify` _boolean_ | InsecureSkipVerify disables TLS certificate verification | false | Optional: \{\} <br /> |
 
 
 #### ProviderType
@@ -2609,12 +2610,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `templateID` _integer_ | TemplateID specifies an existing Proxmox template VMID |  | Maximum: 9.99999999e+08 <br />Minimum: 100 <br /> |
-| `templateName` _string_ | TemplateName specifies an existing Proxmox template name |  | MaxLength: 255 <br /> |
-| `storage` _string_ | Storage specifies the Proxmox storage for cloning<br />Examples: "local-lvm", "vms", "nfs-storage" |  | MaxLength: 255 <br /> |
-| `node` _string_ | Node specifies the Proxmox node where the template exists |  | MaxLength: 255 <br /> |
-| `format` _string_ | Format specifies the disk format | qcow2 | Enum: [raw qcow2 vmdk] <br /> |
-| `fullClone` _boolean_ | FullClone determines if this should be a full clone (default) or linked clone | true |  |
+| `templateID` _integer_ | TemplateID specifies an existing Proxmox template VMID |  | Maximum: 9.99999999e+08 <br />Minimum: 100 <br />Optional: \{\} <br /> |
+| `templateName` _string_ | TemplateName specifies an existing Proxmox template name |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `storage` _string_ | Storage specifies the Proxmox storage for cloning<br />Examples: "local-lvm", "vms", "nfs-storage" |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `node` _string_ | Node specifies the Proxmox node where the template exists |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `format` _string_ | Format specifies the disk format | qcow2 | Enum: [raw qcow2 vmdk] <br />Optional: \{\} <br /> |
+| `fullClone` _boolean_ | FullClone determines if this should be a full clone (default) or linked clone | true | Optional: \{\} <br /> |
 
 
 #### ProxmoxNetworkConfig
@@ -2630,12 +2631,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `bridge` _string_ | Bridge specifies the Linux bridge<br />Examples: "vmbr0", "vmbr1", "vmbr2" |  | MaxLength: 15 <br />Pattern: `^vmbr[0-9]+$` <br /> |
-| `model` _string_ | Model specifies the network card model | virtio | Enum: [virtio e1000 rtl8139 vmxnet3] <br /> |
-| `vlanTag` _integer_ | VLANTag specifies the VLAN tag |  | Maximum: 4094 <br />Minimum: 1 <br /> |
-| `firewall` _boolean_ | Firewall enables the Proxmox firewall for this interface | false |  |
-| `rateLimit` _integer_ | RateLimit specifies the bandwidth limit in MB/s |  | Minimum: 1 <br /> |
-| `mtu` _integer_ | MTU specifies the Maximum Transmission Unit |  | Maximum: 65520 <br />Minimum: 68 <br /> |
+| `bridge` _string_ | Bridge specifies the Linux bridge<br />Examples: "vmbr0", "vmbr1", "vmbr2" |  | MaxLength: 15 <br />Pattern: `^vmbr[0-9]+$` <br />Optional: \{\} <br /> |
+| `model` _string_ | Model specifies the network card model | virtio | Enum: [virtio e1000 rtl8139 vmxnet3] <br />Optional: \{\} <br /> |
+| `vlanTag` _integer_ | VLANTag specifies the VLAN tag |  | Maximum: 4094 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `firewall` _boolean_ | Firewall enables the Proxmox firewall for this interface | false | Optional: \{\} <br /> |
+| `rateLimit` _integer_ | RateLimit specifies the bandwidth limit in MB/s |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `mtu` _integer_ | MTU specifies the Maximum Transmission Unit |  | Maximum: 65520 <br />Minimum: 68 <br />Optional: \{\} <br /> |
 
 
 #### RateLimit
@@ -2651,8 +2652,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `qps` _integer_ | QPS specifies queries per second | 10 | Maximum: 1000 <br />Minimum: 1 <br /> |
-| `burst` _integer_ | Burst specifies the burst capacity | 20 | Maximum: 2000 <br />Minimum: 1 <br /> |
+| `qps` _integer_ | QPS specifies queries per second | 10 | Maximum: 1000 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `burst` _integer_ | Burst specifies the burst capacity | 20 | Maximum: 2000 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### RegistryImageSource
@@ -2669,8 +2670,39 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `image` _string_ | Image is the container image reference |  | Pattern: `^[a-zA-Z0-9._/-]+:[a-zA-Z0-9._-]+$` <br /> |
-| `pullSecretRef` _[LocalObjectReference](#localobjectreference)_ | PullSecretRef references a secret for pulling the image |  |  |
-| `format` _[ImageFormat](#imageformat)_ | Format specifies the expected image format | qcow2 | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br /> |
+| `pullSecretRef` _[LocalObjectReference](#localobjectreference)_ | PullSecretRef references a secret for pulling the image |  | Optional: \{\} <br /> |
+| `format` _[ImageFormat](#imageformat)_ | Format specifies the expected image format | qcow2 | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br />Optional: \{\} <br /> |
+
+
+#### ReportedCapabilities
+
+
+
+ReportedCapabilities mirrors the provider.v1 GetCapabilitiesResponse — the
+capability set a provider advertises at runtime via the GetCapabilities RPC
+(issue #176). All fields are optional and default to the zero value when a
+provider does not advertise them.
+
+
+
+_Appears in:_
+- [ProviderStatus](#providerstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `supportsReconfigureOnline` _boolean_ | SupportsReconfigureOnline reports online CPU/memory reconfigure support. |  | Optional: \{\} <br /> |
+| `supportsDiskExpansionOnline` _boolean_ | SupportsDiskExpansionOnline reports online disk expansion support. |  | Optional: \{\} <br /> |
+| `supportsSnapshots` _boolean_ | SupportsSnapshots reports VM snapshot support. |  | Optional: \{\} <br /> |
+| `supportsMemorySnapshots` _boolean_ | SupportsMemorySnapshots reports memory-inclusive snapshot support. |  | Optional: \{\} <br /> |
+| `supportsLinkedClones` _boolean_ | SupportsLinkedClones reports linked (copy-on-write) clone support. |  | Optional: \{\} <br /> |
+| `supportsImageImport` _boolean_ | SupportsImageImport reports image import/preparation support. |  | Optional: \{\} <br /> |
+| `supportedDiskTypes` _string array_ | SupportedDiskTypes lists supported disk formats. |  | Optional: \{\} <br /> |
+| `supportedNetworkTypes` _string array_ | SupportedNetworkTypes lists supported NIC models. |  | Optional: \{\} <br /> |
+| `supportsDiskExport` _boolean_ | SupportsDiskExport reports disk export (migration source) support. |  | Optional: \{\} <br /> |
+| `supportsDiskImport` _boolean_ | SupportsDiskImport reports disk import (migration target) support. |  | Optional: \{\} <br /> |
+| `supportedExportFormats` _string array_ | SupportedExportFormats lists supported export formats. |  | Optional: \{\} <br /> |
+| `supportedImportFormats` _string array_ | SupportedImportFormats lists supported import formats. |  | Optional: \{\} <br /> |
+| `supportsExportCompression` _boolean_ | SupportsExportCompression reports export compression support. |  | Optional: \{\} <br /> |
 
 
 #### ResourceConstraints
@@ -2686,14 +2718,14 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `minCPUPerHost` _integer_ | MinCPUPerHost specifies minimum CPU available per host |  | Minimum: 1 <br /> |
-| `minMemoryPerHost` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | MinMemoryPerHost specifies minimum memory available per host |  |  |
-| `minDiskSpacePerHost` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | MinDiskSpacePerHost specifies minimum disk space available per host |  |  |
-| `maxCPUUtilization` _integer_ | MaxCPUUtilization specifies maximum allowed CPU utilization |  | Maximum: 100 <br />Minimum: 0 <br /> |
-| `maxMemoryUtilization` _integer_ | MaxMemoryUtilization specifies maximum allowed memory utilization |  | Maximum: 100 <br />Minimum: 0 <br /> |
-| `maxDiskUtilization` _integer_ | MaxDiskUtilization specifies maximum allowed disk utilization |  | Maximum: 100 <br />Minimum: 0 <br /> |
-| `requiredFeatures` _string array_ | RequiredFeatures lists required hardware features |  | MaxItems: 20 <br /> |
-| `preferredFeatures` _string array_ | PreferredFeatures lists preferred hardware features |  | MaxItems: 20 <br /> |
+| `minCPUPerHost` _integer_ | MinCPUPerHost specifies minimum CPU available per host |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `minMemoryPerHost` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | MinMemoryPerHost specifies minimum memory available per host |  | Optional: \{\} <br /> |
+| `minDiskSpacePerHost` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | MinDiskSpacePerHost specifies minimum disk space available per host |  | Optional: \{\} <br /> |
+| `maxCPUUtilization` _integer_ | MaxCPUUtilization specifies maximum allowed CPU utilization |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `maxMemoryUtilization` _integer_ | MaxMemoryUtilization specifies maximum allowed memory utilization |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `maxDiskUtilization` _integer_ | MaxDiskUtilization specifies maximum allowed disk utilization |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `requiredFeatures` _string array_ | RequiredFeatures lists required hardware features |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `preferredFeatures` _string array_ | PreferredFeatures lists preferred hardware features |  | MaxItems: 20 <br />Optional: \{\} <br /> |
 
 
 #### ResourceUsageStats
@@ -2709,10 +2741,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `total` _integer_ | Total available capacity |  |  |
-| `used` _integer_ | Used capacity |  |  |
-| `available` _integer_ | Available capacity |  |  |
-| `usagePercent` _integer_ | Usage percentage (0-100) |  |  |
+| `total` _integer_ | Total available capacity |  | Optional: \{\} <br /> |
+| `used` _integer_ | Used capacity |  | Optional: \{\} <br /> |
+| `available` _integer_ | Available capacity |  | Optional: \{\} <br /> |
+| `usagePercent` _integer_ | Usage percentage (0-100) |  | Optional: \{\} <br /> |
 
 
 #### RollingUpdateVMSetStrategy
@@ -2728,10 +2760,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `maxUnavailable` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#intorstring-intstr-util)_ | MaxUnavailable is the maximum number of VMs that can be unavailable during update | 25% |  |
-| `maxSurge` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#intorstring-intstr-util)_ | MaxSurge is the maximum number of VMs that can be created above desired replica count | 25% |  |
-| `partition` _integer_ | Partition indicates the ordinal at which the VMSet should be partitioned for updates |  | Minimum: 0 <br /> |
-| `podManagementPolicy` _[VMSetPodManagementPolicyType](#vmsetpodmanagementpolicytype)_ | PodManagementPolicy controls how VMs are created during initial scale up,<br />when replacing VMs on nodes, or when scaling down | OrderedReady | Enum: [OrderedReady Parallel] <br /> |
+| `maxUnavailable` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#intorstring-intstr-util)_ | MaxUnavailable is the maximum number of VMs that can be unavailable during update | 25% | Optional: \{\} <br /> |
+| `maxSurge` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#intorstring-intstr-util)_ | MaxSurge is the maximum number of VMs that can be created above desired replica count | 25% | Optional: \{\} <br /> |
+| `partition` _integer_ | Partition indicates the ordinal at which the VMSet should be partitioned for updates |  | Minimum: 0 <br />Optional: \{\} <br /> |
+| `podManagementPolicy` _[VMSetPodManagementPolicyType](#vmsetpodmanagementpolicytype)_ | PodManagementPolicy controls how VMs are created during initial scale up,<br />when replacing VMs on nodes, or when scaling down | OrderedReady | Enum: [OrderedReady Parallel] <br />Optional: \{\} <br /> |
 
 
 #### SCSIControllerSpec
@@ -2747,9 +2779,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `controller` _integer_ | Controller specifies the SCSI controller bus number (0-3). If not specified, uses the first available controller. |  | Maximum: 3 <br />Minimum: 0 <br /> |
-| `sharedBus` _string_ | SharedBus specifies the SCSI bus sharing mode | noSharing | Enum: [noSharing virtualSharing physicalSharing] <br /> |
-| `controllerType` _string_ | ControllerType specifies the SCSI controller type | pvscsi | Enum: [lsilogic buslogic lsilogic-sas pvscsi] <br /> |
+| `controller` _integer_ | Controller specifies the SCSI controller bus number (0-3)<br />If not specified, uses the first available controller |  | Maximum: 3 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `sharedBus` _string_ | SharedBus specifies the SCSI bus sharing mode | noSharing | Enum: [noSharing virtualSharing physicalSharing] <br />Optional: \{\} <br /> |
+| `controllerType` _string_ | ControllerType specifies the SCSI controller type | pvscsi | Enum: [lsilogic buslogic lsilogic-sas pvscsi] <br />Optional: \{\} <br /> |
 
 
 #### SecurityConstraints
@@ -2765,14 +2797,14 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `requireSecureBoot` _boolean_ | RequireSecureBoot requires hosts that support secure boot |  |  |
-| `requireTPM` _boolean_ | RequireTPM requires hosts that support TPM |  |  |
-| `requireEncryptedStorage` _boolean_ | RequireEncryptedStorage requires hosts that support encrypted storage |  |  |
-| `requireNUMATopology` _boolean_ | RequireNUMATopology requires hosts that support NUMA topology |  |  |
-| `allowedSecurityGroups` _string array_ | AllowedSecurityGroups lists allowed security groups |  | MaxItems: 20 <br /> |
-| `deniedSecurityGroups` _string array_ | DeniedSecurityGroups lists denied security groups |  | MaxItems: 20 <br /> |
-| `isolationLevel` _string_ | IsolationLevel specifies the required isolation level |  | Enum: [none basic strict maximum] <br /> |
-| `trustLevel` _string_ | TrustLevel specifies the required trust level |  | Enum: [untrusted basic trusted highly-trusted] <br /> |
+| `requireSecureBoot` _boolean_ | RequireSecureBoot requires hosts that support secure boot |  | Optional: \{\} <br /> |
+| `requireTPM` _boolean_ | RequireTPM requires hosts that support TPM |  | Optional: \{\} <br /> |
+| `requireEncryptedStorage` _boolean_ | RequireEncryptedStorage requires hosts that support encrypted storage |  | Optional: \{\} <br /> |
+| `requireNUMATopology` _boolean_ | RequireNUMATopology requires hosts that support NUMA topology |  | Optional: \{\} <br /> |
+| `allowedSecurityGroups` _string array_ | AllowedSecurityGroups lists allowed security groups |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `deniedSecurityGroups` _string array_ | DeniedSecurityGroups lists denied security groups |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `isolationLevel` _string_ | IsolationLevel specifies the required isolation level |  | Enum: [none basic strict maximum] <br />Optional: \{\} <br /> |
+| `trustLevel` _string_ | TrustLevel specifies the required trust level |  | Enum: [untrusted basic trusted highly-trusted] <br />Optional: \{\} <br /> |
 
 
 #### SecurityProfile
@@ -2788,11 +2820,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `secureBoot` _boolean_ | SecureBoot enables secure boot functionality | false |  |
-| `tpmEnabled` _boolean_ | TPMEnabled enables TPM (Trusted Platform Module) | false |  |
-| `tpmVersion` _string_ | TPMVersion specifies the TPM version |  | Enum: [1.2 2] <br /> |
-| `vtdEnabled` _boolean_ | VTDEnabled enables Intel VT-d or AMD-Vi | false |  |
-| `encryptionPolicy` _[EncryptionPolicy](#encryptionpolicy)_ | EncryptionPolicy defines VM encryption settings |  |  |
+| `secureBoot` _boolean_ | SecureBoot enables secure boot functionality | false | Optional: \{\} <br /> |
+| `tpmEnabled` _boolean_ | TPMEnabled enables TPM (Trusted Platform Module) | false | Optional: \{\} <br /> |
+| `tpmVersion` _string_ | TPMVersion specifies the TPM version |  | Enum: [1.2 2] <br />Optional: \{\} <br /> |
+| `vtdEnabled` _boolean_ | VTDEnabled enables Intel VT-d or AMD-Vi | false | Optional: \{\} <br /> |
+| `encryptionPolicy` _[EncryptionPolicy](#encryptionpolicy)_ | EncryptionPolicy defines VM encryption settings |  | Optional: \{\} <br /> |
 
 
 #### SnapshotAction
@@ -2809,8 +2841,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the name hint for the snapshot |  |  |
-| `includeMemory` _boolean_ | IncludeMemory indicates whether to include memory state |  |  |
-| `description` _string_ | Description provides context for the snapshot |  |  |
+| `includeMemory` _boolean_ | IncludeMemory indicates whether to include memory state |  | Optional: \{\} <br /> |
+| `description` _string_ | Description provides context for the snapshot |  | Optional: \{\} <br /> |
 
 
 #### SnapshotConfig
@@ -2826,14 +2858,14 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name provides a name hint for the snapshot (provider may modify) |  | MaxLength: 255 <br />Pattern: `^[a-zA-Z0-9]([a-zA-Z0-9\-_]*[a-zA-Z0-9])?$` <br /> |
-| `description` _string_ | Description provides additional context for the snapshot |  | MaxLength: 1024 <br /> |
-| `includeMemory` _boolean_ | IncludeMemory indicates whether to include memory state in the snapshot | false |  |
-| `quiesce` _boolean_ | Quiesce indicates whether to quiesce the file system before snapshotting | true |  |
-| `type` _[SnapshotType](#snapshottype)_ | Type specifies the snapshot type | Standard | Enum: [Standard Crash Application] <br /> |
-| `compression` _boolean_ | Compression enables snapshot compression | false |  |
-| `encryption` _[SnapshotEncryption](#snapshotencryption)_ | Encryption enables snapshot encryption |  |  |
-| `consistencyLevel` _string_ | ConsistencyLevel defines the consistency level required | FilesystemConsistent | Enum: [CrashConsistent FilesystemConsistent ApplicationConsistent] <br /> |
+| `name` _string_ | Name provides a name hint for the snapshot (provider may modify) |  | MaxLength: 255 <br />Pattern: `^[a-zA-Z0-9]([a-zA-Z0-9\-_]*[a-zA-Z0-9])?$` <br />Optional: \{\} <br /> |
+| `description` _string_ | Description provides additional context for the snapshot |  | MaxLength: 1024 <br />Optional: \{\} <br /> |
+| `includeMemory` _boolean_ | IncludeMemory indicates whether to include memory state in the snapshot | false | Optional: \{\} <br /> |
+| `quiesce` _boolean_ | Quiesce indicates whether to quiesce the file system before snapshotting | true | Optional: \{\} <br /> |
+| `type` _[SnapshotType](#snapshottype)_ | Type specifies the snapshot type | Standard | Enum: [Standard Crash Application] <br />Optional: \{\} <br /> |
+| `compression` _boolean_ | Compression enables snapshot compression | false | Optional: \{\} <br /> |
+| `encryption` _[SnapshotEncryption](#snapshotencryption)_ | Encryption enables snapshot encryption |  | Optional: \{\} <br /> |
+| `consistencyLevel` _string_ | ConsistencyLevel defines the consistency level required | FilesystemConsistent | Enum: [CrashConsistent FilesystemConsistent ApplicationConsistent] <br />Optional: \{\} <br /> |
 
 
 #### SnapshotEncryption
@@ -2850,8 +2882,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if encryption should be used | false |  |
-| `keyProvider` _string_ | KeyProvider specifies the encryption key provider |  | Enum: [standard hardware external] <br /> |
-| `keyRef` _[LocalObjectReference](#localobjectreference)_ | KeyRef references encryption keys |  |  |
+| `keyProvider` _string_ | KeyProvider specifies the encryption key provider |  | Enum: [standard hardware external] <br />Optional: \{\} <br /> |
+| `keyRef` _[LocalObjectReference](#localobjectreference)_ | KeyRef references encryption keys |  | Optional: \{\} <br /> |
 
 
 #### SnapshotMetadata
@@ -2867,11 +2899,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing the snapshot |  | MaxProperties: 50 <br /> |
-| `pinned` _boolean_ | Pinned indicates whether the snapshot is pinned (protected from automatic deletion) | false |  |
-| `application` _string_ | Application specifies the application that created the snapshot |  | MaxLength: 255 <br /> |
-| `purpose` _string_ | Purpose describes the purpose of the snapshot |  | Enum: [backup testing migration restore-point update other] <br /> |
-| `environment` _string_ | Environment specifies the environment |  | Enum: [dev staging prod test] <br /> |
+| `tags` _object (keys:string, values:string)_ | Tags are key-value pairs for categorizing the snapshot |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
+| `pinned` _boolean_ | Pinned indicates whether the snapshot is pinned (protected from automatic deletion) | false | Optional: \{\} <br /> |
+| `application` _string_ | Application specifies the application that created the snapshot |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `purpose` _string_ | Purpose describes the purpose of the snapshot |  | Enum: [backup testing migration restore-point update other] <br />Optional: \{\} <br /> |
+| `environment` _string_ | Environment specifies the environment |  | Enum: [dev staging prod test qa uat] <br />Optional: \{\} <br /> |
 
 
 #### SnapshotPhase
@@ -2909,11 +2941,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `totalBytes` _integer_ | TotalBytes is the total number of bytes to snapshot |  |  |
-| `completedBytes` _integer_ | CompletedBytes is the number of bytes completed |  |  |
-| `percentage` _integer_ | Percentage is the completion percentage (0-100) |  | Maximum: 100 <br />Minimum: 0 <br /> |
-| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | StartTime is when the snapshot creation started |  |  |
-| `eta` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | ETA is the estimated time to completion |  |  |
+| `totalBytes` _integer_ | TotalBytes is the total number of bytes to snapshot |  | Optional: \{\} <br /> |
+| `completedBytes` _integer_ | CompletedBytes is the number of bytes completed |  | Optional: \{\} <br /> |
+| `percentage` _integer_ | Percentage is the completion percentage (0-100) |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | StartTime is when the snapshot creation started |  | Optional: \{\} <br /> |
+| `eta` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | ETA is the estimated time to completion |  | Optional: \{\} <br /> |
 
 
 #### SnapshotRef
@@ -2930,8 +2962,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the snapshot name |  |  |
-| `namespace` _string_ | Namespace is the snapshot namespace |  |  |
-| `uid` _string_ | UID is the snapshot UID |  |  |
+| `namespace` _string_ | Namespace is the snapshot namespace |  | Optional: \{\} <br /> |
+| `uid` _string_ | UID is the snapshot UID |  | Optional: \{\} <br /> |
 
 
 #### SnapshotRetentionPolicy
@@ -2947,11 +2979,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `maxAge` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | MaxAge is the maximum age before snapshot should be deleted |  |  |
-| `maxCount` _integer_ | MaxCount is the maximum number of snapshots to retain |  | Maximum: 100 <br />Minimum: 1 <br /> |
-| `deleteOnVMDelete` _boolean_ | DeleteOnVMDelete indicates whether to delete snapshot when VM is deleted | true |  |
-| `preservePinned` _boolean_ | PreservePinned indicates whether to preserve pinned snapshots | true |  |
-| `gracePeriod` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | GracePeriod is the grace period before deletion | 24h |  |
+| `maxAge` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | MaxAge is the maximum age before snapshot should be deleted |  | Optional: \{\} <br /> |
+| `maxCount` _integer_ | MaxCount is the maximum number of snapshots to retain |  | Maximum: 100 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `deleteOnVMDelete` _boolean_ | DeleteOnVMDelete indicates whether to delete snapshot when VM is deleted | true | Optional: \{\} <br /> |
+| `preservePinned` _boolean_ | PreservePinned indicates whether to preserve pinned snapshots | true | Optional: \{\} <br /> |
+| `gracePeriod` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | GracePeriod is the grace period before deletion | 24h | Optional: \{\} <br /> |
 
 
 #### SnapshotSchedule
@@ -2968,12 +3000,12 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if scheduled snapshots are enabled | false |  |
-| `cronSpec` _string_ | CronSpec defines the schedule in cron format |  | Pattern: `^(@(annually\|yearly\|monthly\|weekly\|daily\|hourly\|reboot))\|(@every (\d+(ns\|us\|µs\|ms\|s\|m\|h))+)\|((((\d+,)+\d+\|(\d+(\/\|-)\d+)\|\d+\|\*) ?)\{5,7\})$` <br /> |
-| `timezone` _string_ | Timezone specifies the timezone for the schedule | UTC |  |
-| `suspend` _boolean_ | Suspend indicates whether to suspend scheduled snapshots | false |  |
-| `concurrencyPolicy` _string_ | ConcurrencyPolicy specifies how to handle concurrent snapshot jobs | Forbid | Enum: [Allow Forbid Replace] <br /> |
-| `successfulJobsHistoryLimit` _integer_ | SuccessfulJobsHistoryLimit limits retained successful jobs | 3 | Maximum: 100 <br />Minimum: 0 <br /> |
-| `failedJobsHistoryLimit` _integer_ | FailedJobsHistoryLimit limits retained failed jobs | 1 | Maximum: 100 <br />Minimum: 0 <br /> |
+| `cronSpec` _string_ | CronSpec defines the schedule in cron format |  | Pattern: `^(@(annually\|yearly\|monthly\|weekly\|daily\|hourly\|reboot))\|(@every (\d+(ns\|us\|µs\|ms\|s\|m\|h))+)\|((((\d+,)+\d+\|(\d+(\/\|-)\d+)\|\d+\|\*) ?)\{5,7\})$` <br />Optional: \{\} <br /> |
+| `timezone` _string_ | Timezone specifies the timezone for the schedule | UTC | Optional: \{\} <br /> |
+| `suspend` _boolean_ | Suspend indicates whether to suspend scheduled snapshots | false | Optional: \{\} <br /> |
+| `concurrencyPolicy` _string_ | ConcurrencyPolicy specifies how to handle concurrent snapshot jobs | Forbid | Enum: [Allow Forbid Replace] <br />Optional: \{\} <br /> |
+| `successfulJobsHistoryLimit` _integer_ | SuccessfulJobsHistoryLimit limits retained successful jobs | 3 | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `failedJobsHistoryLimit` _integer_ | FailedJobsHistoryLimit limits retained failed jobs | 1 | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 
 
 #### SnapshotType
@@ -3009,8 +3041,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `address` _string_ | Address is the static IP address (CIDR notation) |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)/([0-9]\|[1-2][0-9]\|3[0-2])$` <br /> |
-| `gateway` _string_ | Gateway is the default gateway |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br /> |
-| `routes` _[StaticRoute](#staticroute) array_ | Routes contains static routes |  | MaxItems: 20 <br /> |
+| `gateway` _string_ | Gateway is the default gateway |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br />Optional: \{\} <br /> |
+| `routes` _[StaticRoute](#staticroute) array_ | Routes contains static routes |  | MaxItems: 20 <br />Optional: \{\} <br /> |
 
 
 #### StaticRoute
@@ -3028,7 +3060,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `destination` _string_ | Destination is the destination network (CIDR notation) |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)/([0-9]\|[1-2][0-9]\|3[0-2])$` <br /> |
 | `gateway` _string_ | Gateway is the route gateway |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br /> |
-| `metric` _integer_ | Metric is the route metric |  | Maximum: 65535 <br />Minimum: 0 <br /> |
+| `metric` _integer_ | Metric is the route metric |  | Maximum: 65535 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 
 
 #### StoragePrepareOptions
@@ -3044,10 +3076,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `vsphere` _[VSphereStorageOptions](#vspherestorageoptions)_ | VSphere storage options |  |  |
-| `libvirt` _[LibvirtStorageOptions](#libvirtstorageoptions)_ | Libvirt storage options |  |  |
-| `preferredFormat` _[ImageFormat](#imageformat)_ | PreferredFormat specifies the preferred target format |  | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br /> |
-| `compression` _boolean_ | Compression enables compression during import | false |  |
+| `vsphere` _[VSphereStorageOptions](#vspherestorageoptions)_ | VSphere storage options |  | Optional: \{\} <br /> |
+| `libvirt` _[LibvirtStorageOptions](#libvirtstorageoptions)_ | Libvirt storage options |  | Optional: \{\} <br /> |
+| `preferredFormat` _[ImageFormat](#imageformat)_ | PreferredFormat specifies the preferred target format |  | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br />Optional: \{\} <br /> |
+| `compression` _boolean_ | Compression enables compression during import | false | Optional: \{\} <br /> |
 
 
 #### SysprepCustomization
@@ -3064,12 +3096,12 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if sysprep should be run | false |  |
-| `productKey` _string_ | ProductKey specifies the Windows product key |  |  |
-| `organization` _string_ | Organization specifies the organization name |  | MaxLength: 255 <br /> |
-| `owner` _string_ | Owner specifies the owner name |  | MaxLength: 255 <br /> |
-| `adminPassword` _[PasswordSpec](#passwordspec)_ | AdminPassword specifies the administrator password |  |  |
-| `joinDomain` _[DomainJoinSpec](#domainjoinspec)_ | JoinDomain specifies domain join configuration |  |  |
-| `customCommands` _string array_ | CustomCommands specifies custom commands to run during sysprep |  | MaxItems: 20 <br /> |
+| `productKey` _string_ | ProductKey specifies the Windows product key |  | Optional: \{\} <br /> |
+| `organization` _string_ | Organization specifies the organization name |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `owner` _string_ | Owner specifies the owner name |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `adminPassword` _[PasswordSpec](#passwordspec)_ | AdminPassword specifies the administrator password |  | Optional: \{\} <br /> |
+| `joinDomain` _[DomainJoinSpec](#domainjoinspec)_ | JoinDomain specifies domain join configuration |  | Optional: \{\} <br /> |
+| `customCommands` _string array_ | CustomCommands specifies custom commands to run during sysprep |  | MaxItems: 20 <br />Optional: \{\} <br /> |
 
 
 #### TrafficShapingConfig
@@ -3085,10 +3117,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled indicates if traffic shaping is enabled | false |  |
-| `averageBandwidth` _integer_ | AverageBandwidth is the average bandwidth in bits per second |  | Minimum: 1000 <br /> |
-| `peakBandwidth` _integer_ | PeakBandwidth is the peak bandwidth in bits per second |  | Minimum: 1000 <br /> |
-| `burstSize` _integer_ | BurstSize is the burst size in bytes |  | Minimum: 1024 <br /> |
+| `enabled` _boolean_ | Enabled indicates if traffic shaping is enabled | false | Optional: \{\} <br /> |
+| `averageBandwidth` _integer_ | AverageBandwidth is the average bandwidth in bits per second |  | Minimum: 1000 <br />Optional: \{\} <br /> |
+| `peakBandwidth` _integer_ | PeakBandwidth is the peak bandwidth in bits per second |  | Minimum: 1000 <br />Optional: \{\} <br /> |
+| `burstSize` _integer_ | BurstSize is the burst size in bytes |  | Minimum: 1024 <br />Optional: \{\} <br /> |
 
 
 
@@ -3109,8 +3141,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `cloudInit` _[CloudInit](#cloudinit)_ | CloudInit contains cloud-init configuration |  |  |
-| `ignition` _[Ignition](#ignition)_ | Ignition contains Ignition configuration for CoreOS/RHEL |  |  |
+| `cloudInit` _[CloudInit](#cloudinit)_ | CloudInit contains cloud-init configuration |  | Optional: \{\} <br /> |
+| `ignition` _[Ignition](#ignition)_ | Ignition contains Ignition configuration for CoreOS/RHEL |  | Optional: \{\} <br /> |
 
 
 #### VLANConfig
@@ -3126,11 +3158,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _string_ | Type specifies the VLAN type | none | Enum: [none vlan pvlan trunk] <br /> |
-| `vlanID` _integer_ | VlanID specifies the VLAN ID for VLAN type |  | Maximum: 4094 <br />Minimum: 1 <br /> |
-| `trunkVlanIDs` _integer array_ | TrunkVlanIDs specifies VLAN IDs for trunk type |  | MaxItems: 100 <br /> |
-| `primaryVlanID` _integer_ | PrimaryVlanID specifies the primary VLAN ID for PVLAN |  | Maximum: 4094 <br />Minimum: 1 <br /> |
-| `secondaryVlanID` _integer_ | SecondaryVlanID specifies the secondary VLAN ID for PVLAN |  | Maximum: 4094 <br />Minimum: 1 <br /> |
+| `type` _string_ | Type specifies the VLAN type | none | Enum: [none vlan pvlan trunk] <br />Optional: \{\} <br /> |
+| `vlanID` _integer_ | VlanID specifies the VLAN ID for VLAN type |  | Maximum: 4094 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `trunkVlanIDs` _integer array_ | TrunkVlanIDs specifies VLAN IDs for trunk type |  | MaxItems: 100 <br />Optional: \{\} <br /> |
+| `primaryVlanID` _integer_ | PrimaryVlanID specifies the primary VLAN ID for PVLAN |  | Maximum: 4094 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `secondaryVlanID` _integer_ | SecondaryVlanID specifies the secondary VLAN ID for PVLAN |  | Maximum: 4094 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### VMAffinity
@@ -3146,8 +3178,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `requiredDuringScheduling` _[VMAffinityTerm](#vmaffinityterm) array_ | RequiredDuringScheduling specifies hard affinity rules |  | MaxItems: 20 <br /> |
-| `preferredDuringScheduling` _[WeightedVMAffinityTerm](#weightedvmaffinityterm) array_ | PreferredDuringScheduling specifies soft affinity rules |  | MaxItems: 20 <br /> |
+| `requiredDuringScheduling` _[VMAffinityTerm](#vmaffinityterm) array_ | RequiredDuringScheduling specifies hard affinity rules |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `preferredDuringScheduling` _[WeightedVMAffinityTerm](#weightedvmaffinityterm) array_ | PreferredDuringScheduling specifies soft affinity rules |  | MaxItems: 20 <br />Optional: \{\} <br /> |
 
 
 #### VMAffinityTerm
@@ -3165,11 +3197,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `labelSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#labelselector-v1-meta)_ | LabelSelector selects VMs for affinity rules |  |  |
-| `namespaces` _string array_ | Namespaces specifies which namespaces to consider |  | MaxItems: 20 <br /> |
-| `namespaceSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#labelselector-v1-meta)_ | NamespaceSelector selects namespaces using label selectors |  |  |
+| `labelSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#labelselector-v1-meta)_ | LabelSelector selects VMs for affinity rules |  | Optional: \{\} <br /> |
+| `namespaces` _string array_ | Namespaces specifies which namespaces to consider |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `namespaceSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#labelselector-v1-meta)_ | NamespaceSelector selects namespaces using label selectors |  | Optional: \{\} <br /> |
 | `topologyKey` _string_ | TopologyKey specifies the topology domain for the rule |  | MaxLength: 253 <br /> |
-| `matchExpressions` _[VMSelectorRequirement](#vmselectorrequirement) array_ | MatchExpressions is a list of VM selector requirements |  | MaxItems: 20 <br /> |
+| `matchExpressions` _[VMSelectorRequirement](#vmselectorrequirement) array_ | MatchExpressions is a list of VM selector requirements |  | MaxItems: 20 <br />Optional: \{\} <br /> |
 
 
 #### VMAntiAffinity
@@ -3185,8 +3217,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `requiredDuringScheduling` _[VMAffinityTerm](#vmaffinityterm) array_ | RequiredDuringScheduling specifies hard anti-affinity rules |  | MaxItems: 20 <br /> |
-| `preferredDuringScheduling` _[WeightedVMAffinityTerm](#weightedvmaffinityterm) array_ | PreferredDuringScheduling specifies soft anti-affinity rules |  | MaxItems: 20 <br /> |
+| `requiredDuringScheduling` _[VMAffinityTerm](#vmaffinityterm) array_ | RequiredDuringScheduling specifies hard anti-affinity rules |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `preferredDuringScheduling` _[WeightedVMAffinityTerm](#weightedvmaffinityterm) array_ | PreferredDuringScheduling specifies soft anti-affinity rules |  | MaxItems: 20 <br />Optional: \{\} <br /> |
 
 
 #### VMClass
@@ -3242,13 +3274,13 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `cpu` _integer_ | CPU specifies the number of virtual CPUs |  | Maximum: 128 <br />Minimum: 1 <br /> |
 | `memory` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Memory specifies memory allocation using Kubernetes resource quantities |  |  |
-| `firmware` _[FirmwareType](#firmwaretype)_ | Firmware specifies the firmware type | BIOS | Enum: [BIOS UEFI EFI] <br /> |
-| `diskDefaults` _[DiskDefaults](#diskdefaults)_ | DiskDefaults provides default disk settings |  |  |
-| `guestToolsPolicy` _[GuestToolsPolicy](#guesttoolspolicy)_ | GuestToolsPolicy specifies guest tools installation policy | install | Enum: [install skip upgrade uninstall] <br /> |
-| `extraConfig` _object (keys:string, values:string)_ | ExtraConfig contains provider-specific extra configuration |  | MaxProperties: 50 <br /> |
-| `resourceLimits` _[VMResourceLimits](#vmresourcelimits)_ | ResourceLimits defines resource limits and reservations |  |  |
-| `performanceProfile` _[PerformanceProfile](#performanceprofile)_ | PerformanceProfile defines performance-related settings |  |  |
-| `securityProfile` _[SecurityProfile](#securityprofile)_ | SecurityProfile defines security-related settings |  |  |
+| `firmware` _[FirmwareType](#firmwaretype)_ | Firmware specifies the firmware type | BIOS | Enum: [BIOS UEFI EFI] <br />Optional: \{\} <br /> |
+| `diskDefaults` _[DiskDefaults](#diskdefaults)_ | DiskDefaults provides default disk settings |  | Optional: \{\} <br /> |
+| `guestToolsPolicy` _[GuestToolsPolicy](#guesttoolspolicy)_ | GuestToolsPolicy specifies guest tools installation policy | install | Enum: [install skip upgrade uninstall] <br />Optional: \{\} <br /> |
+| `extraConfig` _object (keys:string, values:string)_ | ExtraConfig contains provider-specific extra configuration |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
+| `resourceLimits` _[VMResourceLimits](#vmresourcelimits)_ | ResourceLimits defines resource limits and reservations |  | Optional: \{\} <br /> |
+| `performanceProfile` _[PerformanceProfile](#performanceprofile)_ | PerformanceProfile defines performance-related settings |  | Optional: \{\} <br /> |
+| `securityProfile` _[SecurityProfile](#securityprofile)_ | SecurityProfile defines security-related settings |  | Optional: \{\} <br /> |
 
 
 #### VMClassStatus
@@ -3264,11 +3296,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  |  |
-| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  |  |
-| `usedByVMs` _integer_ | UsedByVMs is the number of VMs currently using this class |  |  |
-| `supportedProviders` _string array_ | SupportedProviders lists the providers that support this class |  |  |
-| `validationResults` _object (keys:string, values:[ValidationResult](#validationresult))_ | ValidationResults contains validation results for different providers |  |  |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  | Optional: \{\} <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
+| `usedByVMs` _integer_ | UsedByVMs is the number of VMs currently using this class |  | Optional: \{\} <br /> |
+| `supportedProviders` _string array_ | SupportedProviders lists the providers that support this class |  | Optional: \{\} <br /> |
+| `validationResults` _object (keys:string, values:[ValidationResult](#validationresult))_ | ValidationResults contains validation results for different providers |  | Optional: \{\} <br /> |
 
 
 #### VMClone
@@ -3324,9 +3356,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `source` _[CloneSource](#clonesource)_ | Source defines the source for cloning |  |  |
 | `target` _[VMCloneTarget](#vmclonetarget)_ | Target defines the target VM configuration |  |  |
-| `options` _[CloneOptions](#cloneoptions)_ | Options defines cloning options |  |  |
-| `customization` _[VMCustomization](#vmcustomization)_ | Customization defines VM customization options |  |  |
-| `metadata` _[CloneMetadata](#clonemetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `options` _[CloneOptions](#cloneoptions)_ | Options defines cloning options |  | Optional: \{\} <br /> |
+| `customization` _[VMCustomization](#vmcustomization)_ | Customization defines VM customization options |  | Optional: \{\} <br /> |
+| `metadata` _[CloneMetadata](#clonemetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
 
 
 #### VMCloneStatus
@@ -3342,19 +3374,20 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `targetRef` _[LocalObjectReference](#localobjectreference)_ | TargetRef references the created target VM |  |  |
-| `phase` _[ClonePhase](#clonephase)_ | Phase represents the current phase of the clone operation |  | Enum: [Pending Preparing Cloning Customizing Powering-On Ready Failed] <br /> |
-| `message` _string_ | Message provides additional details about the current state |  |  |
-| `taskRef` _string_ | TaskRef tracks any ongoing async operations |  |  |
-| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | StartTime is when the clone operation started |  |  |
-| `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CompletionTime is when the clone operation completed |  |  |
-| `actualCloneType` _[CloneType](#clonetype)_ | ActualCloneType indicates the actual clone type that was used |  | Enum: [FullClone LinkedClone InstantClone] <br /> |
-| `progress` _[CloneProgress](#cloneprogress)_ | Progress shows the clone operation progress |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  |  |
-| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  |  |
-| `retryCount` _integer_ | RetryCount is the number of times the clone has been retried |  |  |
-| `lastRetryTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastRetryTime is when the clone was last retried |  |  |
-| `customizationStatus` _[CustomizationStatus](#customizationstatus)_ | CustomizationStatus contains customization operation status |  |  |
+| `targetRef` _[LocalObjectReference](#localobjectreference)_ | TargetRef references the created target VM |  | Optional: \{\} <br /> |
+| `targetVMID` _string_ | TargetVMID is the provider-specific identifier of the cloned VM as<br />returned by the provider Clone operation. The controller persists it so<br />the produced VirtualMachine CR's Status.ID can be seeded after an<br />asynchronous clone task completes. |  | Optional: \{\} <br /> |
+| `phase` _[ClonePhase](#clonephase)_ | Phase represents the current phase of the clone operation |  | Enum: [Pending Preparing Cloning Customizing Powering-On Ready Failed] <br />Optional: \{\} <br /> |
+| `message` _string_ | Message provides additional details about the current state |  | Optional: \{\} <br /> |
+| `taskRef` _string_ | TaskRef tracks any ongoing async operations |  | Optional: \{\} <br /> |
+| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | StartTime is when the clone operation started |  | Optional: \{\} <br /> |
+| `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CompletionTime is when the clone operation completed |  | Optional: \{\} <br /> |
+| `actualCloneType` _[CloneType](#clonetype)_ | ActualCloneType indicates the actual clone type that was used |  | Enum: [FullClone LinkedClone InstantClone] <br />Optional: \{\} <br /> |
+| `progress` _[CloneProgress](#cloneprogress)_ | Progress shows the clone operation progress |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  | Optional: \{\} <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
+| `retryCount` _integer_ | RetryCount is the number of times the clone has been retried |  | Optional: \{\} <br /> |
+| `lastRetryTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastRetryTime is when the clone was last retried |  | Optional: \{\} <br /> |
+| `customizationStatus` _[CustomizationStatus](#customizationstatus)_ | CustomizationStatus contains customization operation status |  | Optional: \{\} <br /> |
 
 
 #### VMCloneTarget
@@ -3371,14 +3404,14 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the name of the target VM |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
-| `namespace` _string_ | Namespace is the namespace for the target VM (defaults to source namespace) |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
-| `providerRef` _[ObjectRef](#objectref)_ | ProviderRef references the target provider (defaults to source provider) |  |  |
-| `classRef` _[LocalObjectReference](#localobjectreference)_ | ClassRef references the VM class for resource allocation |  |  |
-| `placementRef` _[LocalObjectReference](#localobjectreference)_ | PlacementRef references placement policy for the target VM |  |  |
-| `networks` _[VMNetworkRef](#vmnetworkref) array_ | Networks defines network configuration overrides |  | MaxItems: 10 <br /> |
-| `disks` _[DiskSpec](#diskspec) array_ | Disks defines disk configuration overrides |  | MaxItems: 20 <br /> |
-| `labels` _object (keys:string, values:string)_ | Labels defines labels to apply to the target VM |  | MaxProperties: 50 <br /> |
-| `annotations` _object (keys:string, values:string)_ | Annotations defines annotations to apply to the target VM |  | MaxProperties: 50 <br /> |
+| `namespace` _string_ | Namespace is the namespace for the target VM (defaults to source namespace) |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `providerRef` _[ObjectRef](#objectref)_ | ProviderRef references the target provider (defaults to source provider) |  | Optional: \{\} <br /> |
+| `classRef` _[LocalObjectReference](#localobjectreference)_ | ClassRef references the VM class for resource allocation |  | Optional: \{\} <br /> |
+| `placementRef` _[LocalObjectReference](#localobjectreference)_ | PlacementRef references placement policy for the target VM |  | Optional: \{\} <br /> |
+| `networks` _[VMNetworkRef](#vmnetworkref) array_ | Networks defines network configuration overrides |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `disks` _[DiskSpec](#diskspec) array_ | Disks defines disk configuration overrides |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `labels` _object (keys:string, values:string)_ | Labels defines labels to apply to the target VM |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
+| `annotations` _object (keys:string, values:string)_ | Annotations defines annotations to apply to the target VM |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
 
 
 #### VMCustomization
@@ -3394,15 +3427,15 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `hostname` _string_ | Hostname sets the target VM hostname |  | MaxLength: 255 <br />Pattern: `^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?$` <br /> |
-| `domain` _string_ | Domain sets the domain name |  | MaxLength: 255 <br /> |
-| `timeZone` _string_ | TimeZone sets the timezone |  | MaxLength: 100 <br /> |
-| `networks` _[NetworkCustomization](#networkcustomization) array_ | Networks defines network customization |  | MaxItems: 10 <br /> |
-| `userData` _[UserData](#userdata)_ | UserData provides cloud-init or similar customization data |  |  |
-| `sysprep` _[SysprepCustomization](#sysprepcustomization)_ | Sysprep provides Windows sysprep customization |  |  |
-| `tags` _string array_ | Tags defines additional tags for the cloned VM |  | MaxItems: 50 <br /> |
-| `guestCommands` _[GuestCommand](#guestcommand) array_ | GuestCommands defines commands to run in the guest OS |  | MaxItems: 20 <br /> |
-| `certificates` _[CertificateSpec](#certificatespec) array_ | Certificates defines certificates to install |  | MaxItems: 10 <br /> |
+| `hostname` _string_ | Hostname sets the target VM hostname |  | MaxLength: 255 <br />Pattern: `^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?$` <br />Optional: \{\} <br /> |
+| `domain` _string_ | Domain sets the domain name |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `timeZone` _string_ | TimeZone sets the timezone |  | MaxLength: 100 <br />Optional: \{\} <br /> |
+| `networks` _[NetworkCustomization](#networkcustomization) array_ | Networks defines network customization |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `userData` _[UserData](#userdata)_ | UserData provides cloud-init or similar customization data |  | Optional: \{\} <br /> |
+| `sysprep` _[SysprepCustomization](#sysprepcustomization)_ | Sysprep provides Windows sysprep customization |  | Optional: \{\} <br /> |
+| `tags` _string array_ | Tags defines additional tags for the cloned VM |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `guestCommands` _[GuestCommand](#guestcommand) array_ | GuestCommands defines commands to run in the guest OS |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `certificates` _[CertificateSpec](#certificatespec) array_ | Certificates defines certificates to install |  | MaxItems: 10 <br />Optional: \{\} <br /> |
 
 
 #### VMImage
@@ -3457,9 +3490,9 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `source` _[ImageSource](#imagesource)_ | Source defines the image source configuration |  |  |
-| `prepare` _[ImagePrepare](#imageprepare)_ | Prepare contains optional image preparation steps |  |  |
-| `metadata` _[ImageMetadata](#imagemetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `distribution` _[OSDistribution](#osdistribution)_ | Distribution contains OS distribution information |  |  |
+| `prepare` _[ImagePrepare](#imageprepare)_ | Prepare contains optional image preparation steps |  | Optional: \{\} <br /> |
+| `metadata` _[ImageMetadata](#imagemetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
+| `distribution` _[OSDistribution](#osdistribution)_ | Distribution contains OS distribution information |  | Optional: \{\} <br /> |
 
 
 #### VMImageStatus
@@ -3475,19 +3508,19 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `ready` _boolean_ | Ready indicates if the image is ready for use |  |  |
-| `phase` _[ImagePhase](#imagephase)_ | Phase represents the current phase of image preparation |  | Enum: [Pending Downloading Importing Converting Optimizing Ready Failed] <br /> |
-| `message` _string_ | Message provides additional details about the current state |  |  |
-| `availableOn` _string array_ | AvailableOn lists the providers where the image is available |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  |  |
-| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  |  |
-| `lastPrepareTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastPrepareTime records when the image was last prepared |  |  |
-| `prepareTaskRef` _string_ | PrepareTaskRef tracks any ongoing image preparation operations |  |  |
-| `importProgress` _[ImageImportProgress](#imageimportprogress)_ | ImportProgress shows the progress of image import operations |  |  |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the size of the prepared image |  |  |
-| `checksum` _string_ | Checksum is the actual checksum of the prepared image |  |  |
-| `format` _[ImageFormat](#imageformat)_ | Format is the actual format of the prepared image |  | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br /> |
-| `providerStatus` _object (keys:string, values:[ProviderImageStatus](#providerimagestatus))_ | ProviderStatus contains provider-specific status information |  |  |
+| `ready` _boolean_ | Ready indicates if the image is ready for use |  | Optional: \{\} <br /> |
+| `phase` _[ImagePhase](#imagephase)_ | Phase represents the current phase of image preparation |  | Enum: [Pending Downloading Importing Converting Optimizing Ready Failed] <br />Optional: \{\} <br /> |
+| `message` _string_ | Message provides additional details about the current state |  | Optional: \{\} <br /> |
+| `availableOn` _string array_ | AvailableOn lists the providers where the image is available |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  | Optional: \{\} <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
+| `lastPrepareTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastPrepareTime records when the image was last prepared |  | Optional: \{\} <br /> |
+| `prepareTaskRef` _string_ | PrepareTaskRef tracks any ongoing image preparation operations |  | Optional: \{\} <br /> |
+| `importProgress` _[ImageImportProgress](#imageimportprogress)_ | ImportProgress shows the progress of image import operations |  | Optional: \{\} <br /> |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the size of the prepared image |  | Optional: \{\} <br /> |
+| `checksum` _string_ | Checksum is the actual checksum of the prepared image |  | Optional: \{\} <br /> |
+| `format` _[ImageFormat](#imageformat)_ | Format is the actual format of the prepared image |  | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br />Optional: \{\} <br /> |
+| `providerStatus` _object (keys:string, values:[ProviderImageStatus](#providerimagestatus))_ | ProviderStatus contains provider-specific status information |  | Optional: \{\} <br /> |
 
 
 #### VMMigration
@@ -3543,9 +3576,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `source` _[MigrationSource](#migrationsource)_ | Source defines the source VM to migrate from |  |  |
 | `target` _[MigrationTarget](#migrationtarget)_ | Target defines the target provider and configuration |  |  |
-| `options` _[MigrationOptions](#migrationoptions)_ | Options defines migration options |  |  |
-| `storage` _[MigrationStorage](#migrationstorage)_ | Storage defines storage backend configuration for transfer |  |  |
-| `metadata` _[MigrationMetadata](#migrationmetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `options` _[MigrationOptions](#migrationoptions)_ | Options defines migration options |  | Optional: \{\} <br /> |
+| `storage` _[MigrationStorage](#migrationstorage)_ | Storage defines storage backend configuration for transfer |  | Optional: \{\} <br /> |
+| `metadata` _[MigrationMetadata](#migrationmetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
 
 
 #### VMMigrationStatus
@@ -3561,26 +3594,26 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `phase` _[MigrationPhase](#migrationphase)_ | Phase represents the current phase of the migration |  | Enum: [Pending Validating Snapshotting Exporting Transferring Converting Importing Creating Validating-Target Ready Failed] <br /> |
-| `message` _string_ | Message provides additional details about the current state |  |  |
-| `targetVMRef` _[LocalObjectReference](#localobjectreference)_ | TargetVMRef references the created target VM |  |  |
-| `snapshotRef` _string_ | SnapshotRef references the source snapshot used for migration |  |  |
-| `snapshotID` _string_ | SnapshotID is the provider-specific snapshot identifier |  |  |
-| `exportID` _string_ | ExportID is the export operation identifier |  |  |
-| `importID` _string_ | ImportID is the import operation identifier |  |  |
-| `taskRef` _string_ | TaskRef is the current task reference for async operations |  |  |
-| `targetVMID` _string_ | TargetVMID is the provider-specific target VM identifier |  |  |
-| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | StartTime is when the migration started |  |  |
-| `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CompletionTime is when the migration completed |  |  |
-| `progress` _[MigrationProgress](#migrationprogress)_ | Progress shows the migration operation progress |  |  |
-| `diskInfo` _[MigrationDiskInfo](#migrationdiskinfo)_ | DiskInfo contains information about the migrated disk |  |  |
-| `storageInfo` _[MigrationStorageInfo](#migrationstorageinfo)_ | StorageInfo contains information about intermediate storage |  |  |
-| `storagePVCName` _string_ | StoragePVCName is the name of the PVC used for migration storage |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  |  |
-| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  |  |
-| `retryCount` _integer_ | RetryCount is the number of times the migration has been retried |  |  |
-| `lastRetryTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastRetryTime is when the migration was last retried |  |  |
-| `validationResults` _[ValidationResults](#validationresults)_ | ValidationResults contains results of validation checks |  |  |
+| `phase` _[MigrationPhase](#migrationphase)_ | Phase represents the current phase of the migration |  | Enum: [Pending Validating Snapshotting Exporting Transferring Converting Importing Creating Validating-Target Ready Failed] <br />Optional: \{\} <br /> |
+| `message` _string_ | Message provides additional details about the current state |  | Optional: \{\} <br /> |
+| `targetVMRef` _[LocalObjectReference](#localobjectreference)_ | TargetVMRef references the created target VM |  | Optional: \{\} <br /> |
+| `snapshotRef` _string_ | SnapshotRef references the source snapshot used for migration |  | Optional: \{\} <br /> |
+| `snapshotID` _string_ | SnapshotID is the provider-specific snapshot identifier |  | Optional: \{\} <br /> |
+| `exportID` _string_ | ExportID is the export operation identifier |  | Optional: \{\} <br /> |
+| `importID` _string_ | ImportID is the import operation identifier |  | Optional: \{\} <br /> |
+| `taskRef` _string_ | TaskRef is the current task reference for async operations |  | Optional: \{\} <br /> |
+| `targetVMID` _string_ | TargetVMID is the provider-specific target VM identifier |  | Optional: \{\} <br /> |
+| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | StartTime is when the migration started |  | Optional: \{\} <br /> |
+| `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CompletionTime is when the migration completed |  | Optional: \{\} <br /> |
+| `progress` _[MigrationProgress](#migrationprogress)_ | Progress shows the migration operation progress |  | Optional: \{\} <br /> |
+| `diskInfo` _[MigrationDiskInfo](#migrationdiskinfo)_ | DiskInfo contains information about the migrated disk |  | Optional: \{\} <br /> |
+| `storageInfo` _[MigrationStorageInfo](#migrationstorageinfo)_ | StorageInfo contains information about intermediate storage |  | Optional: \{\} <br /> |
+| `storagePVCName` _string_ | StoragePVCName is the name of the PVC used for migration storage |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  | Optional: \{\} <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
+| `retryCount` _integer_ | RetryCount is the number of times the migration has been retried |  | Optional: \{\} <br /> |
+| `lastRetryTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastRetryTime is when the migration was last retried |  | Optional: \{\} <br /> |
+| `validationResults` _[ValidationResults](#validationresults)_ | ValidationResults contains results of validation checks |  | Optional: \{\} <br /> |
 
 
 #### VMNetworkAttachment
@@ -3635,10 +3668,10 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `network` _[NetworkConfig](#networkconfig)_ | Network defines the underlying network configuration |  |  |
-| `ipAllocation` _[IPAllocationConfig](#ipallocationconfig)_ | IPAllocation defines IP address allocation settings |  |  |
-| `security` _[NetworkSecurityConfig](#networksecurityconfig)_ | Security defines network security settings |  |  |
-| `qos` _[NetworkQoSConfig](#networkqosconfig)_ | QoS defines Quality of Service settings |  |  |
-| `metadata` _[NetworkMetadata](#networkmetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `ipAllocation` _[IPAllocationConfig](#ipallocationconfig)_ | IPAllocation defines IP address allocation settings |  | Optional: \{\} <br /> |
+| `security` _[NetworkSecurityConfig](#networksecurityconfig)_ | Security defines network security settings |  | Optional: \{\} <br /> |
+| `qos` _[NetworkQoSConfig](#networkqosconfig)_ | QoS defines Quality of Service settings |  | Optional: \{\} <br /> |
+| `metadata` _[NetworkMetadata](#networkmetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
 
 
 #### VMNetworkAttachmentStatus
@@ -3654,15 +3687,15 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `ready` _boolean_ | Ready indicates if the network is ready for use |  |  |
-| `phase` _[NetworkAttachmentPhase](#networkattachmentphase)_ | Phase represents the current phase |  | Enum: [Pending Configuring Ready Failed] <br /> |
-| `message` _string_ | Message provides additional details about the current state |  |  |
-| `availableOn` _string array_ | AvailableOn lists the providers where the network is available |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  |  |
-| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  |  |
-| `connectedVMs` _integer_ | ConnectedVMs is the number of VMs using this network |  |  |
-| `ipAllocations` _[IPAllocation](#ipallocation) array_ | IPAllocations contains current IP allocations |  |  |
-| `providerStatus` _object (keys:string, values:[ProviderNetworkStatus](#providernetworkstatus))_ | ProviderStatus contains provider-specific status information |  |  |
+| `ready` _boolean_ | Ready indicates if the network is ready for use |  | Optional: \{\} <br /> |
+| `phase` _[NetworkAttachmentPhase](#networkattachmentphase)_ | Phase represents the current phase |  | Enum: [Pending Configuring Ready Failed] <br />Optional: \{\} <br /> |
+| `message` _string_ | Message provides additional details about the current state |  | Optional: \{\} <br /> |
+| `availableOn` _string array_ | AvailableOn lists the providers where the network is available |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  | Optional: \{\} <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
+| `connectedVMs` _integer_ | ConnectedVMs is the number of VMs using this network |  | Optional: \{\} <br /> |
+| `ipAllocations` _[IPAllocation](#ipallocation) array_ | IPAllocations contains current IP allocations |  | Optional: \{\} <br /> |
+| `providerStatus` _object (keys:string, values:[ProviderNetworkStatus](#providernetworkstatus))_ | ProviderStatus contains provider-specific status information |  | Optional: \{\} <br /> |
 
 
 #### VMNetworkRef
@@ -3681,9 +3714,12 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the name of this network attachment |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
-| `networkRef` _[ObjectRef](#objectref)_ | NetworkRef references the VMNetworkAttachment |  |  |
-| `ipAddress` _string_ | IPAddress specifies a static IP address (optional) |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br /> |
-| `macAddress` _string_ | MACAddress specifies a static MAC address (optional) |  | Pattern: `^([0-9A-Fa-f]\{2\}[:-])\{5\}([0-9A-Fa-f]\{2\})$` <br /> |
+| `networkRef` _[ObjectRef](#objectref)_ | NetworkRef references the VMNetworkAttachment (optional)<br />When not specified, the template's pre-configured network adapter is used. |  | Optional: \{\} <br /> |
+| `ipAddress` _string_ | IPAddress specifies a static IP address (optional) |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br />Optional: \{\} <br /> |
+| `prefix` _integer_ | Prefix specifies the network prefix length (e.g., 24 for /24) |  | Maximum: 32 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `gateway` _string_ | Gateway specifies the default gateway IP address |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br />Optional: \{\} <br /> |
+| `dns` _string_ | DNS specifies DNS server IP addresses (comma-separated) |  | Optional: \{\} <br /> |
+| `macAddress` _string_ | MACAddress specifies a static MAC address (optional) |  | Pattern: `^([0-9A-Fa-f]\{2\}[:-])\{5\}([0-9A-Fa-f]\{2\})$` <br />Optional: \{\} <br /> |
 
 
 #### VMPlacementPolicy
@@ -3737,14 +3773,14 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `hard` _[PlacementConstraints](#placementconstraints)_ | Hard constraints that must be satisfied for VM placement |  |  |
-| `soft` _[PlacementConstraints](#placementconstraints)_ | Soft constraints that should be satisfied if possible |  |  |
-| `antiAffinity` _[AntiAffinityRules](#antiaffinityrules)_ | AntiAffinity defines anti-affinity rules for VMs |  |  |
-| `affinity` _[AffinityRules](#affinityrules)_ | Affinity defines affinity rules for VMs |  |  |
-| `resourceConstraints` _[ResourceConstraints](#resourceconstraints)_ | ResourceConstraints defines resource-based placement constraints |  |  |
-| `securityConstraints` _[SecurityConstraints](#securityconstraints)_ | SecurityConstraints defines security-based placement constraints |  |  |
-| `priority` _integer_ | Priority defines the priority of this placement policy |  | Maximum: 1000 <br />Minimum: 0 <br /> |
-| `weight` _integer_ | Weight defines the weight of this placement policy |  | Maximum: 100 <br />Minimum: 1 <br /> |
+| `hard` _[PlacementConstraints](#placementconstraints)_ | Hard constraints that must be satisfied for VM placement |  | Optional: \{\} <br /> |
+| `soft` _[PlacementConstraints](#placementconstraints)_ | Soft constraints that should be satisfied if possible |  | Optional: \{\} <br /> |
+| `antiAffinity` _[AntiAffinityRules](#antiaffinityrules)_ | AntiAffinity defines anti-affinity rules for VMs |  | Optional: \{\} <br /> |
+| `affinity` _[AffinityRules](#affinityrules)_ | Affinity defines affinity rules for VMs |  | Optional: \{\} <br /> |
+| `resourceConstraints` _[ResourceConstraints](#resourceconstraints)_ | ResourceConstraints defines resource-based placement constraints |  | Optional: \{\} <br /> |
+| `securityConstraints` _[SecurityConstraints](#securityconstraints)_ | SecurityConstraints defines security-based placement constraints |  | Optional: \{\} <br /> |
+| `priority` _integer_ | Priority defines the priority of this placement policy |  | Maximum: 1000 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `weight` _integer_ | Weight defines the weight of this placement policy |  | Maximum: 100 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### VMPlacementPolicyStatus
@@ -3760,12 +3796,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
-| `usedByVMs` _[LocalObjectReference](#localobjectreference) array_ | UsedByVMs lists VMs currently using this policy |  | MaxItems: 1000 <br /> |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  |  |
-| `validationResults` _object (keys:string, values:[PolicyValidationResult](#policyvalidationresult))_ | ValidationResults contains validation results for different providers |  |  |
-| `placementStats` _[PlacementStatistics](#placementstatistics)_ | PlacementStats provides statistics about VM placements using this policy |  |  |
-| `conflictingPolicies` _[PolicyConflict](#policyconflict) array_ | ConflictingPolicies lists policies that conflict with this policy |  | MaxItems: 50 <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  | Optional: \{\} <br /> |
+| `usedByVMs` _[LocalObjectReference](#localobjectreference) array_ | UsedByVMs lists VMs currently using this policy |  | MaxItems: 1000 <br />Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  | Optional: \{\} <br /> |
+| `validationResults` _object (keys:string, values:[PolicyValidationResult](#policyvalidationresult))_ | ValidationResults contains validation results for different providers |  | Optional: \{\} <br /> |
+| `placementStats` _[PlacementStatistics](#placementstatistics)_ | PlacementStats provides statistics about VM placements using this policy |  | Optional: \{\} <br /> |
+| `conflictingPolicies` _[PolicyConflict](#policyconflict) array_ | ConflictingPolicies lists policies that conflict with this policy |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 
 
 #### VMResourceLimits
@@ -3781,11 +3817,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `cpuLimit` _integer_ | CPULimit is the maximum CPU usage limit (in MHz or percentage) |  | Maximum: 100000 <br />Minimum: 100 <br /> |
-| `cpuReservation` _integer_ | CPUReservation is the guaranteed CPU allocation (in MHz) |  | Maximum: 100000 <br />Minimum: 0 <br /> |
-| `memoryLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | MemoryLimit is the maximum memory usage limit |  |  |
-| `memoryReservation` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | MemoryReservation is the guaranteed memory allocation |  |  |
-| `cpuShares` _integer_ | CPUShares defines the relative CPU priority (higher = more priority) |  | Maximum: 1e+06 <br />Minimum: 1 <br /> |
+| `cpuLimit` _integer_ | CPULimit is the maximum CPU usage limit (in MHz or percentage) |  | Maximum: 100000 <br />Minimum: 100 <br />Optional: \{\} <br /> |
+| `cpuReservation` _integer_ | CPUReservation is the guaranteed CPU allocation (in MHz) |  | Maximum: 100000 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `memoryLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | MemoryLimit is the maximum memory usage limit |  | Optional: \{\} <br /> |
+| `memoryReservation` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | MemoryReservation is the guaranteed memory allocation |  | Optional: \{\} <br /> |
+| `cpuShares` _integer_ | CPUShares defines the relative CPU priority (higher = more priority) |  | Maximum: 1e+06 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### VMSelectorOperator
@@ -3823,7 +3859,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `key` _string_ | Key is the label key that the selector applies to |  | MaxLength: 253 <br /> |
 | `operator` _[VMSelectorOperator](#vmselectoroperator)_ | Operator represents a key's relationship to a set of values |  | Enum: [In NotIn Exists DoesNotExist] <br /> |
-| `values` _string array_ | Values is an array of string values |  | MaxItems: 50 <br /> |
+| `values` _string array_ | Values is an array of string values |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 
 
 #### VMSet
@@ -3860,10 +3896,10 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the name of the failed VM |  |  |
-| `reason` _string_ | Reason provides the reason for failure |  |  |
-| `message` _string_ | Message provides additional details about the failure |  |  |
-| `lastAttempt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastAttempt is when the last update attempt was made |  |  |
-| `retryCount` _integer_ | RetryCount is the number of retry attempts |  |  |
+| `reason` _string_ | Reason provides the reason for failure |  | Optional: \{\} <br /> |
+| `message` _string_ | Message provides additional details about the failure |  | Optional: \{\} <br /> |
+| `lastAttempt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastAttempt is when the last update attempt was made |  | Optional: \{\} <br /> |
+| `retryCount` _integer_ | RetryCount is the number of retry attempts |  | Optional: \{\} <br /> |
 
 
 #### VMSetList
@@ -3897,7 +3933,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `start` _integer_ | Start is the number representing the first replica's index | 0 | Maximum: 999999 <br />Minimum: 0 <br /> |
+| `start` _integer_ | Start is the number representing the first replica's index | 0 | Maximum: 999999 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 
 
 #### VMSetPersistentVolumeClaimRetentionPolicy
@@ -3913,8 +3949,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `whenDeleted` _[PersistentVolumeClaimRetentionPolicyType](#persistentvolumeclaimretentionpolicytype)_ | WhenDeleted specifies what happens to PVCs created from VMSet VolumeClaimTemplates when the VMSet is deleted | Retain | Enum: [Retain Delete] <br /> |
-| `whenScaled` _[PersistentVolumeClaimRetentionPolicyType](#persistentvolumeclaimretentionpolicytype)_ | WhenScaled specifies what happens to PVCs created from VMSet VolumeClaimTemplates when the VMSet is scaled down | Retain | Enum: [Retain Delete] <br /> |
+| `whenDeleted` _[PersistentVolumeClaimRetentionPolicyType](#persistentvolumeclaimretentionpolicytype)_ | WhenDeleted specifies what happens to PVCs created from VMSet VolumeClaimTemplates when the VMSet is deleted | Retain | Enum: [Retain Delete] <br />Optional: \{\} <br /> |
+| `whenScaled` _[PersistentVolumeClaimRetentionPolicyType](#persistentvolumeclaimretentionpolicytype)_ | WhenScaled specifies what happens to PVCs created from VMSet VolumeClaimTemplates when the VMSet is scaled down | Retain | Enum: [Retain Delete] <br />Optional: \{\} <br /> |
 
 
 #### VMSetPodManagementPolicyType
@@ -3948,16 +3984,16 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `replicas` _integer_ | Replicas is the desired number of VMs in the set | 1 | Maximum: 1000 <br />Minimum: 0 <br /> |
+| `replicas` _integer_ | Replicas is the desired number of VMs in the set | 1 | Maximum: 1000 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 | `selector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#labelselector-v1-meta)_ | Selector is a label query over VMs that should match the replica count |  |  |
 | `template` _[VMSetTemplate](#vmsettemplate)_ | Template is the object that describes the VM that will be created |  |  |
-| `updateStrategy` _[VMSetUpdateStrategy](#vmsetupdatestrategy)_ | UpdateStrategy defines how to replace existing VMs with new ones |  |  |
-| `minReadySeconds` _integer_ | MinReadySeconds is the minimum number of seconds for which a newly created VM<br />should be ready without any of its containers crashing |  | Maximum: 3600 <br />Minimum: 0 <br /> |
-| `revisionHistoryLimit` _integer_ | RevisionHistoryLimit is the number of old VMSets to retain | 10 | Maximum: 100 <br />Minimum: 0 <br /> |
-| `persistentVolumeClaimRetentionPolicy` _[VMSetPersistentVolumeClaimRetentionPolicy](#vmsetpersistentvolumeclaimretentionpolicy)_ | PersistentVolumeClaimRetentionPolicy defines the retention policy for PVCs |  |  |
-| `ordinals` _[VMSetOrdinals](#vmsetordinals)_ | Ordinals configures the sequential ordering of VM indices |  |  |
-| `serviceName` _string_ | ServiceName is the name of the service that governs this VMSet |  | MaxLength: 253 <br /> |
-| `volumeClaimTemplates` _[PersistentVolumeClaimTemplate](#persistentvolumeclaimtemplate) array_ | VolumeClaimTemplates defines a list of claims that VMs are allowed to reference |  | MaxItems: 20 <br /> |
+| `updateStrategy` _[VMSetUpdateStrategy](#vmsetupdatestrategy)_ | UpdateStrategy defines how to replace existing VMs with new ones |  | Optional: \{\} <br /> |
+| `minReadySeconds` _integer_ | MinReadySeconds is the minimum number of seconds for which a newly created VM<br />should be ready without any of its containers crashing |  | Maximum: 3600 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `revisionHistoryLimit` _integer_ | RevisionHistoryLimit is the number of old VMSets to retain | 10 | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `persistentVolumeClaimRetentionPolicy` _[VMSetPersistentVolumeClaimRetentionPolicy](#vmsetpersistentvolumeclaimretentionpolicy)_ | PersistentVolumeClaimRetentionPolicy defines the retention policy for PVCs |  | Optional: \{\} <br /> |
+| `ordinals` _[VMSetOrdinals](#vmsetordinals)_ | Ordinals configures the sequential ordering of VM indices |  | Optional: \{\} <br /> |
+| `serviceName` _string_ | ServiceName is the name of the service that governs this VMSet |  | MaxLength: 253 <br />Optional: \{\} <br /> |
+| `volumeClaimTemplates` _[PersistentVolumeClaimTemplate](#persistentvolumeclaimtemplate) array_ | VolumeClaimTemplates defines a list of claims that VMs are allowed to reference |  | MaxItems: 20 <br />Optional: \{\} <br /> |
 
 
 #### VMSetStatus
@@ -3973,18 +4009,18 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  |  |
-| `replicas` _integer_ | Replicas is the number of VMs created by the VMSet controller |  |  |
-| `readyReplicas` _integer_ | ReadyReplicas is the number of VMs that are ready |  |  |
-| `availableReplicas` _integer_ | AvailableReplicas is the number of VMs that are available |  |  |
-| `updatedReplicas` _integer_ | UpdatedReplicas is the number of VMs that have been updated |  |  |
-| `currentRevision` _string_ | CurrentRevision is the revision of the current VMSet |  |  |
-| `updateRevision` _string_ | UpdateRevision is the revision of the updated VMSet |  |  |
-| `collisionCount` _integer_ | CollisionCount is the count of hash collisions for the VMSet |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  |  |
-| `currentReplicas` _integer_ | CurrentReplicas is the number of VMs currently running |  |  |
-| `updateStatus` _[VMSetUpdateStatus](#vmsetupdatestatus)_ | UpdateStatus provides detailed update operation status |  |  |
-| `vmStatus` _[VMSetVMStatus](#vmsetvmstatus) array_ | VMStatus provides per-VM status information |  | MaxItems: 1000 <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration is the most recent generation observed by the controller |  | Optional: \{\} <br /> |
+| `replicas` _integer_ | Replicas is the number of VMs created by the VMSet controller |  | Optional: \{\} <br /> |
+| `readyReplicas` _integer_ | ReadyReplicas is the number of VMs that are ready |  | Optional: \{\} <br /> |
+| `availableReplicas` _integer_ | AvailableReplicas is the number of VMs that are available |  | Optional: \{\} <br /> |
+| `updatedReplicas` _integer_ | UpdatedReplicas is the number of VMs that have been updated |  | Optional: \{\} <br /> |
+| `currentRevision` _string_ | CurrentRevision is the revision of the current VMSet |  | Optional: \{\} <br /> |
+| `updateRevision` _string_ | UpdateRevision is the revision of the updated VMSet |  | Optional: \{\} <br /> |
+| `collisionCount` _integer_ | CollisionCount is the count of hash collisions for the VMSet |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  | Optional: \{\} <br /> |
+| `currentReplicas` _integer_ | CurrentReplicas is the number of VMs currently running |  | Optional: \{\} <br /> |
+| `updateStatus` _[VMSetUpdateStatus](#vmsetupdatestatus)_ | UpdateStatus provides detailed update operation status |  | Optional: \{\} <br /> |
+| `vmStatus` _[VMSetVMStatus](#vmsetvmstatus) array_ | VMStatus provides per-VM status information |  | MaxItems: 1000 <br />Optional: \{\} <br /> |
 
 
 #### VMSetTemplate
@@ -4000,7 +4036,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
 | `spec` _[VirtualMachineSpec](#virtualmachinespec)_ | Spec is the VM specification |  |  |
 
 
@@ -4038,13 +4074,13 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `phase` _[VMSetUpdatePhase](#vmsetupdatephase)_ | Phase represents the current phase of the update |  | Enum: [Pending InProgress Paused Completed Failed] <br /> |
-| `message` _string_ | Message provides additional details about the update |  |  |
-| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | StartTime is when the update started |  |  |
-| `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CompletionTime is when the update completed |  |  |
-| `updatedVMs` _string array_ | UpdatedVMs lists VMs that have been updated |  | MaxItems: 1000 <br /> |
-| `pendingVMs` _string array_ | PendingVMs lists VMs that are pending update |  | MaxItems: 1000 <br /> |
-| `failedVMs` _[VMSetFailedVM](#vmsetfailedvm) array_ | FailedVMs lists VMs that failed to update |  | MaxItems: 1000 <br /> |
+| `phase` _[VMSetUpdatePhase](#vmsetupdatephase)_ | Phase represents the current phase of the update |  | Enum: [Pending InProgress Paused Completed Failed] <br />Optional: \{\} <br /> |
+| `message` _string_ | Message provides additional details about the update |  | Optional: \{\} <br /> |
+| `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | StartTime is when the update started |  | Optional: \{\} <br /> |
+| `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CompletionTime is when the update completed |  | Optional: \{\} <br /> |
+| `updatedVMs` _string array_ | UpdatedVMs lists VMs that have been updated |  | MaxItems: 1000 <br />Optional: \{\} <br /> |
+| `pendingVMs` _string array_ | PendingVMs lists VMs that are pending update |  | MaxItems: 1000 <br />Optional: \{\} <br /> |
+| `failedVMs` _[VMSetFailedVM](#vmsetfailedvm) array_ | FailedVMs lists VMs that failed to update |  | MaxItems: 1000 <br />Optional: \{\} <br /> |
 
 
 #### VMSetUpdateStrategy
@@ -4060,8 +4096,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _[VMSetUpdateStrategyType](#vmsetupdatestrategytype)_ | Type can be "RollingUpdate" or "OnDelete" | RollingUpdate | Enum: [RollingUpdate OnDelete Recreate] <br /> |
-| `rollingUpdate` _[RollingUpdateVMSetStrategy](#rollingupdatevmsetstrategy)_ | RollingUpdate is used when Type is RollingUpdate |  |  |
+| `type` _[VMSetUpdateStrategyType](#vmsetupdatestrategytype)_ | Type can be "RollingUpdate" or "OnDelete" | RollingUpdate | Enum: [RollingUpdate OnDelete Recreate] <br />Optional: \{\} <br /> |
+| `rollingUpdate` _[RollingUpdateVMSetStrategy](#rollingupdatevmsetstrategy)_ | RollingUpdate is used when Type is RollingUpdate |  | Optional: \{\} <br /> |
 
 
 #### VMSetUpdateStrategyType
@@ -4097,12 +4133,12 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the VM name |  |  |
-| `phase` _[VirtualMachinePhase](#virtualmachinephase)_ | Phase is the VM phase |  | Enum: [Pending Provisioning Running Stopped Reconfiguring Deleting Failed] <br /> |
-| `ready` _boolean_ | Ready indicates if the VM is ready |  |  |
-| `revision` _string_ | Revision is the VM revision |  |  |
-| `creationTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CreationTime is when the VM was created |  |  |
-| `lastUpdateTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastUpdateTime is when the VM was last updated |  |  |
-| `message` _string_ | Message provides additional VM status information |  |  |
+| `phase` _[VirtualMachinePhase](#virtualmachinephase)_ | Phase is the VM phase |  | Enum: [Pending Provisioning Running Stopped Reconfiguring Deleting Failed] <br />Optional: \{\} <br /> |
+| `ready` _boolean_ | Ready indicates if the VM is ready |  | Optional: \{\} <br /> |
+| `revision` _string_ | Revision is the VM revision |  | Optional: \{\} <br /> |
+| `creationTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CreationTime is when the VM was created |  | Optional: \{\} <br /> |
+| `lastUpdateTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastUpdateTime is when the VM was last updated |  | Optional: \{\} <br /> |
+| `message` _string_ | Message provides additional VM status information |  | Optional: \{\} <br /> |
 
 
 #### VMSnapshot
@@ -4141,9 +4177,9 @@ _Appears in:_
 | `id` _string_ | ID is the provider-specific snapshot identifier |  |  |
 | `name` _string_ | Name is the snapshot name |  |  |
 | `creationTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CreationTime is when the snapshot was created |  |  |
-| `description` _string_ | Description provides additional context |  |  |
-| `sizeBytes` _integer_ | SizeBytes is the size of the snapshot |  |  |
-| `hasMemory` _boolean_ | HasMemory indicates if memory state is included |  |  |
+| `description` _string_ | Description provides additional context |  | Optional: \{\} <br /> |
+| `sizeBytes` _integer_ | SizeBytes is the size of the snapshot |  | Optional: \{\} <br /> |
+| `hasMemory` _boolean_ | HasMemory indicates if memory state is included |  | Optional: \{\} <br /> |
 
 
 #### VMSnapshotList
@@ -4177,7 +4213,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `revertToRef` _[LocalObjectReference](#localobjectreference)_ | RevertToRef specifies a snapshot to revert to |  |  |
+| `revertToRef` _[LocalObjectReference](#localobjectreference)_ | RevertToRef specifies a snapshot to revert to |  | Optional: \{\} <br /> |
 
 
 #### VMSnapshotSpec
@@ -4194,10 +4230,10 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `vmRef` _[LocalObjectReference](#localobjectreference)_ | VMRef references the virtual machine to snapshot |  |  |
-| `snapshotConfig` _[SnapshotConfig](#snapshotconfig)_ | SnapshotConfig defines snapshot configuration options |  |  |
-| `retentionPolicy` _[SnapshotRetentionPolicy](#snapshotretentionpolicy)_ | RetentionPolicy defines how long to keep this snapshot |  |  |
-| `schedule` _[SnapshotSchedule](#snapshotschedule)_ | Schedule defines automated snapshot scheduling |  |  |
-| `metadata` _[SnapshotMetadata](#snapshotmetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `snapshotConfig` _[SnapshotConfig](#snapshotconfig)_ | SnapshotConfig defines snapshot configuration options |  | Optional: \{\} <br /> |
+| `retentionPolicy` _[SnapshotRetentionPolicy](#snapshotretentionpolicy)_ | RetentionPolicy defines how long to keep this snapshot |  | Optional: \{\} <br /> |
+| `schedule` _[SnapshotSchedule](#snapshotschedule)_ | Schedule defines automated snapshot scheduling |  | Optional: \{\} <br /> |
+| `metadata` _[SnapshotMetadata](#snapshotmetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
 
 
 #### VMSnapshotStatus
@@ -4213,21 +4249,21 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `snapshotID` _string_ | SnapshotID is the provider-specific identifier for the snapshot |  |  |
-| `phase` _[SnapshotPhase](#snapshotphase)_ | Phase represents the current phase of the snapshot |  | Enum: [Pending Creating Ready Deleting Failed Expired] <br /> |
-| `message` _string_ | Message provides additional details about the current state |  |  |
-| `creationTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CreationTime is when the snapshot was created |  |  |
-| `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CompletionTime is when the snapshot creation completed |  |  |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the size of the snapshot |  |  |
-| `virtualSize` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | VirtualSize is the virtual size of the snapshot |  |  |
-| `taskRef` _string_ | TaskRef tracks any ongoing async operations |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  |  |
-| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  |  |
-| `progress` _[SnapshotProgress](#snapshotprogress)_ | Progress shows the snapshot creation progress |  |  |
-| `providerStatus` _object (keys:string, values:[ProviderSnapshotStatus](#providersnapshotstatus))_ | ProviderStatus contains provider-specific status information |  |  |
-| `children` _[SnapshotRef](#snapshotref) array_ | Children lists child snapshots (for snapshot trees) |  |  |
-| `parent` _[SnapshotRef](#snapshotref)_ | Parent references the parent snapshot (for snapshot trees) |  |  |
-| `expiryTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | ExpiryTime is when the snapshot will expire (based on retention policy) |  |  |
+| `snapshotID` _string_ | SnapshotID is the provider-specific identifier for the snapshot |  | Optional: \{\} <br /> |
+| `phase` _[SnapshotPhase](#snapshotphase)_ | Phase represents the current phase of the snapshot |  | Enum: [Pending Creating Ready Deleting Failed Expired] <br />Optional: \{\} <br /> |
+| `message` _string_ | Message provides additional details about the current state |  | Optional: \{\} <br /> |
+| `creationTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CreationTime is when the snapshot was created |  | Optional: \{\} <br /> |
+| `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CompletionTime is when the snapshot creation completed |  | Optional: \{\} <br /> |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the size of the snapshot |  | Optional: \{\} <br /> |
+| `virtualSize` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | VirtualSize is the virtual size of the snapshot |  | Optional: \{\} <br /> |
+| `taskRef` _string_ | TaskRef tracks any ongoing async operations |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  | Optional: \{\} <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
+| `progress` _[SnapshotProgress](#snapshotprogress)_ | Progress shows the snapshot creation progress |  | Optional: \{\} <br /> |
+| `providerStatus` _object (keys:string, values:[ProviderSnapshotStatus](#providersnapshotstatus))_ | ProviderStatus contains provider-specific status information |  | Optional: \{\} <br /> |
+| `children` _[SnapshotRef](#snapshotref) array_ | Children lists child snapshots (for snapshot trees) |  | Optional: \{\} <br /> |
+| `parent` _[SnapshotRef](#snapshotref)_ | Parent references the parent snapshot (for snapshot trees) |  | Optional: \{\} <br /> |
+| `expiryTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | ExpiryTime is when the snapshot will expire (based on retention policy) |  | Optional: \{\} <br /> |
 
 
 #### VMTaintEffect
@@ -4262,11 +4298,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `key` _string_ | Key is the taint key that the toleration applies to |  | MaxLength: 253 <br /> |
-| `operator` _[VMTolerationOperator](#vmtolerationoperator)_ | Operator represents the relationship between the key and value | Equal | Enum: [Exists Equal] <br /> |
-| `value` _string_ | Value is the taint value the toleration matches to |  | MaxLength: 253 <br /> |
-| `effect` _[VMTaintEffect](#vmtainteffect)_ | Effect indicates the taint effect to match |  | Enum: [NoSchedule PreferNoSchedule NoExecute] <br /> |
-| `tolerationSeconds` _integer_ | TolerationSeconds represents the period of time the toleration tolerates the taint |  | Minimum: 0 <br /> |
+| `key` _string_ | Key is the taint key that the toleration applies to |  | MaxLength: 253 <br />Optional: \{\} <br /> |
+| `operator` _[VMTolerationOperator](#vmtolerationoperator)_ | Operator represents the relationship between the key and value | Equal | Enum: [Exists Equal] <br />Optional: \{\} <br /> |
+| `value` _string_ | Value is the taint value the toleration matches to |  | MaxLength: 253 <br />Optional: \{\} <br /> |
+| `effect` _[VMTaintEffect](#vmtainteffect)_ | Effect indicates the taint effect to match |  | Enum: [NoSchedule PreferNoSchedule NoExecute] <br />Optional: \{\} <br /> |
+| `tolerationSeconds` _integer_ | TolerationSeconds represents the period of time the toleration tolerates the taint |  | Minimum: 0 <br />Optional: \{\} <br /> |
 
 
 #### VMTolerationOperator
@@ -4291,7 +4327,12 @@ _Appears in:_
 
 
 
-VSphereImageSource defines vSphere-specific image configuration
+VSphereImageSource defines vSphere-specific image configuration.
+
+This struct supports multiple ways to reference a VM template:
+  - TemplateName: A simple template name or full inventory path
+  - ContentLibrary: Reference to a vSphere Content Library item
+  - OVAURL: URL to download and import an OVA file
 
 
 
@@ -4300,12 +4341,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `templateName` _string_ | TemplateName references an existing vSphere template |  | MaxLength: 255 <br /> |
-| `contentLibrary` _[ContentLibraryRef](#contentlibraryref)_ | ContentLibrary references a vSphere content library item |  |  |
-| `ovaURL` _string_ | OVAURL provides a URL to an OVA file to import |  | Pattern: `^https?://.*\.(ova\|ovf)$` <br /> |
-| `checksum` _string_ | Checksum provides expected checksum for verification |  |  |
-| `checksumType` _[ChecksumType](#checksumtype)_ | ChecksumType specifies the checksum algorithm | sha256 | Enum: [md5 sha1 sha256 sha512] <br /> |
-| `providerRef` _[LocalObjectReference](#localobjectreference)_ | ProviderRef references the vSphere provider for importing |  |  |
+| `templateName` _string_ | TemplateName references an existing vSphere template by name.<br />This can be a simple name (searched globally) or a full inventory path. |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `contentLibrary` _[ContentLibraryRef](#contentlibraryref)_ | ContentLibrary references a vSphere content library item |  | Optional: \{\} <br /> |
+| `ovaURL` _string_ | OVAURL provides a URL to an OVA file to import |  | Pattern: `^https?://.*\.(ova\|ovf)$` <br />Optional: \{\} <br /> |
+| `checksum` _string_ | Checksum provides expected checksum for verification |  | Optional: \{\} <br /> |
+| `checksumType` _[ChecksumType](#checksumtype)_ | ChecksumType specifies the checksum algorithm | sha256 | Enum: [md5 sha1 sha256 sha512] <br />Optional: \{\} <br /> |
+| `providerRef` _[LocalObjectReference](#localobjectreference)_ | ProviderRef references the vSphere provider for importing |  | Optional: \{\} <br /> |
 
 
 #### VSphereNetworkConfig
@@ -4321,11 +4362,13 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `portgroup` _string_ | Portgroup specifies the vSphere portgroup name |  | MaxLength: 255 <br /> |
-| `distributedSwitch` _[DistributedSwitchConfig](#distributedswitchconfig)_ | DistributedSwitch specifies the distributed virtual switch |  |  |
-| `vlan` _[VLANConfig](#vlanconfig)_ | VLAN specifies the VLAN configuration |  |  |
-| `security` _[PortgroupSecurityConfig](#portgroupsecurityconfig)_ | Security defines portgroup security settings |  |  |
-| `trafficShaping` _[TrafficShapingConfig](#trafficshapingconfig)_ | TrafficShaping defines traffic shaping settings |  |  |
+| `portgroup` _string_ | Portgroup specifies the vSphere portgroup name |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `distributedSwitch` _[DistributedSwitchConfig](#distributedswitchconfig)_ | DistributedSwitch specifies the distributed virtual switch |  | Optional: \{\} <br /> |
+| `vlan` _[VLANConfig](#vlanconfig)_ | VLAN specifies the VLAN configuration |  | Optional: \{\} <br /> |
+| `security` _[PortgroupSecurityConfig](#portgroupsecurityconfig)_ | Security defines portgroup security settings |  | Optional: \{\} <br /> |
+| `trafficShaping` _[TrafficShapingConfig](#trafficshapingconfig)_ | TrafficShaping defines traffic shaping settings |  | Optional: \{\} <br /> |
+| `pciSlotNumber` _integer_ | PCISlotNumber specifies the PCI slot number for the network adapter.<br />This controls the predictable network interface naming in Linux (e.g., ens192).<br />Common values: 192 for ens192, 224 for ens224, 256 for ens256.<br />If not specified, vSphere assigns a slot automatically. |  | Maximum: 1024 <br />Minimum: 32 <br />Optional: \{\} <br /> |
+| `adapterType` _string_ | AdapterType specifies the network adapter type | vmxnet3 | Enum: [vmxnet3 e1000 e1000e] <br />Optional: \{\} <br /> |
 
 
 #### VSphereStorageOptions
@@ -4341,10 +4384,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `datastore` _string_ | Datastore specifies the target datastore for import |  | MaxLength: 255 <br /> |
-| `folder` _string_ | Folder specifies the target folder for import |  | MaxLength: 255 <br /> |
-| `thinProvisioned` _boolean_ | ThinProvisioned indicates whether to use thin provisioning |  |  |
-| `diskType` _string_ | DiskType specifies the disk provisioning type |  | Enum: [thin thick eagerzeroedthick] <br /> |
+| `datastore` _string_ | Datastore specifies the target datastore for import |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `folder` _string_ | Folder specifies the target folder for import |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `thinProvisioned` _boolean_ | ThinProvisioned indicates whether to use thin provisioning |  | Optional: \{\} <br /> |
+| `diskType` _string_ | DiskType specifies the disk provisioning type |  | Enum: [thin thick eagerzeroedthick] <br />Optional: \{\} <br /> |
 
 
 #### ValidationChecks
@@ -4360,10 +4403,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `checkDiskSize` _boolean_ | CheckDiskSize verifies disk size matches | true |  |
-| `checkChecksum` _boolean_ | CheckChecksum verifies checksums match | true |  |
-| `checkBoot` _boolean_ | CheckBoot verifies VM boots successfully | false |  |
-| `checkConnectivity` _boolean_ | CheckConnectivity tests network connectivity | false |  |
+| `checkDiskSize` _boolean_ | CheckDiskSize verifies disk size matches | true | Optional: \{\} <br /> |
+| `checkChecksum` _boolean_ | CheckChecksum verifies checksums match | true | Optional: \{\} <br /> |
+| `checkBoot` _boolean_ | CheckBoot verifies VM boots successfully | false | Optional: \{\} <br /> |
+| `checkConnectivity` _boolean_ | CheckConnectivity tests network connectivity | false | Optional: \{\} <br /> |
 
 
 #### ValidationResult
@@ -4380,9 +4423,9 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `valid` _boolean_ | Valid indicates if the class is valid for the provider |  |  |
-| `message` _string_ | Message provides details about the validation result |  |  |
-| `warnings` _string array_ | Warnings lists any validation warnings |  |  |
-| `lastValidated` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastValidated is when this validation was last performed |  |  |
+| `message` _string_ | Message provides details about the validation result |  | Optional: \{\} <br /> |
+| `warnings` _string array_ | Warnings lists any validation warnings |  | Optional: \{\} <br /> |
+| `lastValidated` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastValidated is when this validation was last performed |  | Optional: \{\} <br /> |
 
 
 #### ValidationResults
@@ -4398,11 +4441,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `diskSizeMatch` _boolean_ | DiskSizeMatch indicates if disk sizes match |  |  |
-| `checksumMatch` _boolean_ | ChecksumMatch indicates if checksums match |  |  |
-| `bootSuccess` _boolean_ | BootSuccess indicates if the target VM booted successfully |  |  |
-| `connectivitySuccess` _boolean_ | ConnectivitySuccess indicates if network connectivity works |  |  |
-| `validationErrors` _string array_ | ValidationErrors lists any validation errors |  |  |
+| `diskSizeMatch` _boolean_ | DiskSizeMatch indicates if disk sizes match |  | Optional: \{\} <br /> |
+| `checksumMatch` _boolean_ | ChecksumMatch indicates if checksums match |  | Optional: \{\} <br /> |
+| `bootSuccess` _boolean_ | BootSuccess indicates if the target VM booted successfully |  | Optional: \{\} <br /> |
+| `connectivitySuccess` _boolean_ | ConnectivitySuccess indicates if network connectivity works |  | Optional: \{\} <br /> |
+| `validationErrors` _string array_ | ValidationErrors lists any validation errors |  | Optional: \{\} <br /> |
 
 
 #### VirtualMachine
@@ -4438,9 +4481,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `preStop` _[LifecycleHandler](#lifecyclehandler)_ | PreStop defines actions to take before stopping the VM |  |  |
-| `postStart` _[LifecycleHandler](#lifecyclehandler)_ | PostStart defines actions to take after starting the VM |  |  |
-| `gracefulShutdownTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | GracefulShutdownTimeout defines how long to wait for graceful shutdown | 60s |  |
+| `preStop` _[LifecycleHandler](#lifecyclehandler)_ | PreStop defines actions to take before stopping the VM |  | Optional: \{\} <br /> |
+| `postStart` _[LifecycleHandler](#lifecyclehandler)_ | PostStart defines actions to take after starting the VM |  | Optional: \{\} <br /> |
+| `gracefulShutdownTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | GracefulShutdownTimeout defines how long to wait for graceful shutdown | 60s | Optional: \{\} <br /> |
 
 
 #### VirtualMachineList
@@ -4499,9 +4542,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `cpu` _integer_ | CPU specifies the number of virtual CPUs |  | Maximum: 128 <br />Minimum: 1 <br /> |
-| `memoryMiB` _integer_ | MemoryMiB specifies the amount of memory in MiB |  | Maximum: 1.048576e+06 <br />Minimum: 128 <br /> |
-| `gpu` _[GPUConfig](#gpuconfig)_ | GPU specifies GPU configuration |  |  |
+| `cpu` _integer_ | CPU specifies the number of virtual CPUs |  | Maximum: 128 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `memoryMiB` _integer_ | MemoryMiB specifies the amount of memory in MiB |  | Maximum: 1.048576e+06 <br />Minimum: 128 <br />Optional: \{\} <br /> |
+| `gpu` _[GPUConfig](#gpuconfig)_ | GPU specifies GPU configuration |  | Optional: \{\} <br /> |
 
 
 #### VirtualMachineSpec
@@ -4520,19 +4563,19 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `providerRef` _[ObjectRef](#objectref)_ | ProviderRef references the Provider that manages this VM |  |  |
 | `classRef` _[ObjectRef](#objectref)_ | ClassRef references the VMClass that defines resource allocation |  |  |
-| `imageRef` _[ObjectRef](#objectref)_ | ImageRef references the VMImage to use as base template.<br />Either ImageRef or ImportedDisk must be specified, but not both. |  |  |
-| `importedDisk` _[ImportedDiskRef](#importeddiskref)_ | ImportedDisk references a pre-imported disk (e.g., from migration).<br />Either ImageRef or ImportedDisk must be specified, but not both. |  |  |
-| `networks` _[VMNetworkRef](#vmnetworkref) array_ | Networks specifies network attachments for the VM |  | MaxItems: 10 <br /> |
-| `disks` _[DiskSpec](#diskspec) array_ | Disks specifies additional disks beyond the root disk |  | MaxItems: 20 <br /> |
-| `userData` _[UserData](#userdata)_ | UserData contains cloud-init configuration |  |  |
-| `metaData` _[MetaData](#metadata)_ | MetaData contains cloud-init metadata configuration |  |  |
-| `placement` _[Placement](#placement)_ | Placement provides hints for VM placement |  |  |
-| `powerState` _[PowerState](#powerstate)_ | PowerState specifies the desired power state |  | Enum: [On Off OffGraceful] <br /> |
-| `tags` _string array_ | Tags are applied to the VM for organization |  | MaxItems: 50 <br /> |
-| `resources` _[VirtualMachineResources](#virtualmachineresources)_ | Resources allows overriding resource allocation from the VMClass |  |  |
-| `placementRef` _[LocalObjectReference](#localobjectreference)_ | PlacementRef references a VMPlacementPolicy for advanced placement rules |  |  |
-| `snapshot` _[VMSnapshotOperation](#vmsnapshotoperation)_ | Snapshot defines snapshot-related operations |  |  |
-| `lifecycle` _[VirtualMachineLifecycle](#virtualmachinelifecycle)_ | Lifecycle defines VM lifecycle configuration |  |  |
+| `imageRef` _[ObjectRef](#objectref)_ | ImageRef references the VMImage to use as base template.<br />Either ImageRef or ImportedDisk must be specified, but not both. |  | Optional: \{\} <br /> |
+| `importedDisk` _[ImportedDiskRef](#importeddiskref)_ | ImportedDisk references a pre-imported disk (e.g., from migration).<br />Either ImageRef or ImportedDisk must be specified, but not both. |  | Optional: \{\} <br /> |
+| `networks` _[VMNetworkRef](#vmnetworkref) array_ | Networks specifies network attachments for the VM |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `disks` _[DiskSpec](#diskspec) array_ | Disks specifies additional disks beyond the root disk |  | MaxItems: 20 <br />Optional: \{\} <br /> |
+| `userData` _[UserData](#userdata)_ | UserData contains cloud-init configuration |  | Optional: \{\} <br /> |
+| `metaData` _[MetaData](#metadata)_ | MetaData contains cloud-init metadata configuration |  | Optional: \{\} <br /> |
+| `placement` _[Placement](#placement)_ | Placement provides hints for VM placement |  | Optional: \{\} <br /> |
+| `powerState` _[PowerState](#powerstate)_ | PowerState specifies the desired power state |  | Enum: [On Off OffGraceful] <br />Optional: \{\} <br /> |
+| `tags` _string array_ | Tags are applied to the VM for organization |  | MaxItems: 50 <br />Optional: \{\} <br /> |
+| `resources` _[VirtualMachineResources](#virtualmachineresources)_ | Resources allows overriding resource allocation from the VMClass |  | Optional: \{\} <br /> |
+| `placementRef` _[LocalObjectReference](#localobjectreference)_ | PlacementRef references a VMPlacementPolicy for advanced placement rules |  | Optional: \{\} <br /> |
+| `snapshot` _[VMSnapshotOperation](#vmsnapshotoperation)_ | Snapshot defines snapshot-related operations |  | Optional: \{\} <br /> |
+| `lifecycle` _[VirtualMachineLifecycle](#virtualmachinelifecycle)_ | Lifecycle defines VM lifecycle configuration |  | Optional: \{\} <br /> |
 
 
 #### VirtualMachineStatus
@@ -4548,20 +4591,20 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `id` _string_ | ID is the provider-specific identifier for this VM |  |  |
-| `powerState` _[PowerState](#powerstate)_ | PowerState reflects the current power state |  | Enum: [On Off OffGraceful] <br /> |
-| `ips` _string array_ | IPs contains the IP addresses assigned to the VM |  |  |
-| `consoleURL` _string_ | ConsoleURL provides access to the VM console |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  |  |
-| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  |  |
-| `lastTaskRef` _string_ | LastTaskRef references the last async operation |  |  |
-| `provider` _object (keys:string, values:string)_ | Provider contains provider-specific details |  |  |
-| `reconfigureTaskRef` _string_ | ReconfigureTaskRef tracks reconfiguration operations |  |  |
-| `lastReconfigureTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastReconfigureTime records when the last reconfiguration occurred |  |  |
-| `currentResources` _[VirtualMachineResources](#virtualmachineresources)_ | CurrentResources shows the current resource allocation |  |  |
-| `snapshots` _[VMSnapshotInfo](#vmsnapshotinfo) array_ | Snapshots lists available snapshots for this VM |  |  |
-| `phase` _[VirtualMachinePhase](#virtualmachinephase)_ | Phase represents the current phase of the VM |  | Enum: [Pending Provisioning Running Stopped Reconfiguring Deleting Failed] <br /> |
-| `message` _string_ | Message provides additional details about the current state |  |  |
+| `id` _string_ | ID is the provider-specific identifier for this VM |  | Optional: \{\} <br /> |
+| `powerState` _[PowerState](#powerstate)_ | PowerState reflects the current power state |  | Enum: [On Off OffGraceful] <br />Optional: \{\} <br /> |
+| `ips` _string array_ | IPs contains the IP addresses assigned to the VM |  | Optional: \{\} <br /> |
+| `consoleURL` _string_ | ConsoleURL provides access to the VM console |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  | Optional: \{\} <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
+| `lastTaskRef` _string_ | LastTaskRef references the last async operation |  | Optional: \{\} <br /> |
+| `provider` _object (keys:string, values:string)_ | Provider contains provider-specific details |  | Optional: \{\} <br /> |
+| `reconfigureTaskRef` _string_ | ReconfigureTaskRef tracks reconfiguration operations |  | Optional: \{\} <br /> |
+| `lastReconfigureTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastReconfigureTime records when the last reconfiguration occurred |  | Optional: \{\} <br /> |
+| `currentResources` _[VirtualMachineResources](#virtualmachineresources)_ | CurrentResources shows the current resource allocation |  | Optional: \{\} <br /> |
+| `snapshots` _[VMSnapshotInfo](#vmsnapshotinfo) array_ | Snapshots lists available snapshots for this VM |  | Optional: \{\} <br /> |
+| `phase` _[VirtualMachinePhase](#virtualmachinephase)_ | Phase represents the current phase of the VM |  | Enum: [Pending Provisioning Running Stopped Reconfiguring Deleting Failed] <br />Optional: \{\} <br /> |
+| `message` _string_ | Message provides additional details about the current state |  | Optional: \{\} <br /> |
 
 
 #### WeightedVMAffinityTerm
@@ -4596,8 +4639,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if zone affinity is enabled |  |  |
-| `preferredZones` _string array_ | PreferredZones lists preferred zones |  | MaxItems: 10 <br /> |
-| `scope` _string_ | Scope defines the scope of the affinity rule |  | Enum: [strict preferred] <br /> |
+| `preferredZones` _string array_ | PreferredZones lists preferred zones |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `scope` _string_ | Scope defines the scope of the affinity rule |  | Enum: [strict preferred] <br />Optional: \{\} <br /> |
 
 
 #### ZoneAntiAffinityRule
@@ -4614,7 +4657,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled indicates if zone anti-affinity is enabled |  |  |
-| `maxVMsPerZone` _integer_ | MaxVMsPerZone limits the number of VMs per zone |  | Maximum: 10000 <br />Minimum: 1 <br /> |
-| `scope` _string_ | Scope defines the scope of the anti-affinity rule |  | Enum: [strict preferred] <br /> |
+| `maxVMsPerZone` _integer_ | MaxVMsPerZone limits the number of VMs per zone |  | Maximum: 10000 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `scope` _string_ | Scope defines the scope of the anti-affinity rule |  | Enum: [strict preferred] <br />Optional: \{\} <br /> |
 
 

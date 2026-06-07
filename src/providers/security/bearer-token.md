@@ -5,8 +5,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # Bearer Token Authentication
 
-!!! note "In v0.3.7 the gRPC channel is secured by mTLS, not bearer tokens. This page is primarily about hypervisor API tokens."
-    As of v0.3.7 the manager↔provider gRPC channel is authenticated by **mutual TLS with a client-cert SAN allow-list** (see [mTLS](mtls.md)), not by a bearer token. A bearer token is unnecessary when the manager is the only legitimate caller, so the in-tree manager does **not** attach an `Authorization: Bearer <token>` metadata header on outbound RPCs.
+!!! note "In v0.3.8 the gRPC channel is secured by mTLS, not bearer tokens. This page is primarily about hypervisor API tokens."
+    As of v0.3.8 (unchanged since v0.3.7) the manager↔provider gRPC channel is authenticated by **mutual TLS with a client-cert SAN allow-list** (see [mTLS](mtls.md)), not by a bearer token. A bearer token is unnecessary when the manager is the only legitimate caller, so the in-tree manager does **not** attach an `Authorization: Bearer <token>` metadata header on outbound RPCs.
 
     The provider SDK still exposes `middleware.AuthConfig.BearerTokenAuth` and an operator-supplied `ValidateToken` callback (`sdk/provider/middleware/middleware.go`) for **external** provider authors who want it in addition to (or instead of) mTLS. If you enable Bearer-token auth on a provider that the in-tree manager dials, the manager will get back `codes.Unauthenticated` and reconciles will fail — so treat gRPC-channel bearer auth as an external-provider feature, not an in-tree production path.
 
@@ -17,7 +17,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Scope 1: Hypervisor API tokens
 
-This is the **production-relevant** form of bearer-token-style authentication in v0.3.7. It applies to the Proxmox provider today and is the model for any future REST-API-based provider.
+This is the **production-relevant** form of bearer-token-style authentication in v0.3.8. It applies to the Proxmox provider today and is the model for any future REST-API-based provider.
 
 ### Proxmox API tokens
 
@@ -90,12 +90,12 @@ spec:
   credentialSecretRef:
     name: proxmox-prod-credentials
   runtime:
-    image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.7
+    image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8
 ```
 
 #### Token rotation
 
-Token rotation is a multi-step operation in v0.3.7:
+Token rotation is a multi-step operation in v0.3.8:
 
 1. Create a new token in PVE.
 2. Update the K8s Secret (or your ExternalSecret) with the new `token_id` / `token_secret`.
@@ -108,7 +108,7 @@ In-process token reload is on the roadmap for v0.4.0+.
 
 The vSphere provider does **not** use bearer-token-style auth. It authenticates via vCenter SSO (username/password). See the [vSphere provider page](../vsphere.md) for the service-account configuration pattern.
 
-A future SAML/OIDC-based vCenter authentication mode could be modelled as a bearer token, but is not implemented in v0.3.7.
+A future SAML/OIDC-based vCenter authentication mode could be modelled as a bearer token, but is not implemented in v0.3.8.
 
 ### Libvirt
 
@@ -181,9 +181,9 @@ The in-tree manager's gRPC client does not currently attach a bearer token to ou
 There is no `authorization`-header-injecting interceptor. If you enable `BearerTokenAuth: true` on the server side, every RPC from the in-tree manager will fail with `codes.Unauthenticated`.
 
 !!! note "The in-tree channel is authenticated by mTLS, not bearer tokens"
-    In v0.3.7 the manager authenticates to providers with a **client certificate** verified against a configured CA and a SAN allow-list (see [mTLS](mtls.md)). That is the in-tree authentication path; there is no plan to also send a bearer token from the in-tree manager. SDK bearer-token auth remains an optional control for external provider authors who want an additional or alternative gate on top of (or instead of) mTLS.
+    In v0.3.8 the manager authenticates to providers with a **client certificate** verified against a configured CA and a SAN allow-list (see [mTLS](mtls.md)). That is the in-tree authentication path; there is no plan to also send a bearer token from the in-tree manager. SDK bearer-token auth remains an optional control for external provider authors who want an additional or alternative gate on top of (or instead of) mTLS.
 
-### Why this is not "JWT with scopes" in v0.3.7
+### Why this is not "JWT with scopes" in v0.3.8
 
 The SDK's `ValidateToken` is intentionally a flat `func(ctx, token) error` — it does not encode scopes, claims, expiration, audience, or any other JWT-like structure. Two reasons:
 
@@ -191,11 +191,11 @@ The SDK's `ValidateToken` is intentionally a flat `func(ctx, token) error` — i
     - The provider knowing about scopes (which couples the SDK to a policy model), or
     - A separate authorisation interceptor that lives downstream of `ValidateToken` and inspects `info.FullMethod`.
 
-    Neither is implemented in v0.3.7.
+    Neither is implemented in v0.3.8.
 
-2. **In a one-manager-one-provider trust model, scoping doesn't add much.** The manager is the only legitimate caller, so the question "what is this caller allowed to do?" is just "is this the manager?" — answered in v0.3.7 by mTLS client-cert identity and the SAN allow-list. The interesting authorisation surface is the K8s RBAC on the `Provider` CR — who is allowed to create/modify it — not the gRPC channel.
+2. **In a one-manager-one-provider trust model, scoping doesn't add much.** The manager is the only legitimate caller, so the question "what is this caller allowed to do?" is just "is this the manager?" — answered in v0.3.8 by mTLS client-cert identity and the SAN allow-list. The interesting authorisation surface is the K8s RBAC on the `Provider` CR — who is allowed to create/modify it — not the gRPC channel.
 
-When and if multi-tenant providers become a thing, the design would extend `ValidateToken` to return a typed context value (claims), and a follow-on interceptor would gate methods on claim values. That is roadmap, not v0.3.7.
+When and if multi-tenant providers become a thing, the design would extend `ValidateToken` to return a typed context value (claims), and a follow-on interceptor would gate methods on claim values. That is roadmap, not v0.3.8.
 
 ## Auditing
 

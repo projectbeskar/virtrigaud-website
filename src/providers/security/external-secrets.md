@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # External Secrets for Provider Credentials
 
-This page shows how to wire [External Secrets Operator](https://external-secrets.io) (ESO) into a VirtRigaud **v0.3.6** deployment so provider credentials are sourced from your central secret store (Vault / AWS Secrets Manager / Azure Key Vault / GCP Secret Manager / etc.) rather than committed to Git or hand-applied with `kubectl create secret`.
+This page shows how to wire [External Secrets Operator](https://external-secrets.io) (ESO) into a VirtRigaud **v0.3.8** deployment so provider credentials are sourced from your central secret store (Vault / AWS Secrets Manager / Azure Key Vault / GCP Secret Manager / etc.) rather than committed to Git or hand-applied with `kubectl create secret`.
 
 The key constraint is: **VirtRigaud providers read credentials as named files**, not as env vars. So the `ExternalSecret` you produce must materialise a `Secret` whose **keys match exactly** what each provider's `New()` function reads.
 
@@ -401,9 +401,12 @@ Store as `projects/my-gcp-project/secrets/virtrigaud-vsphere-prod-username` etc.
 
 ## What ESO does NOT solve in v0.3.6
 
+!!! note "Heading retained for stable links; limitations still apply through v0.3.8"
+    This heading and its anchor (`#what-eso-does-not-solve-in-v036`) are retained so existing cross-links keep resolving. The limitations below are **still current in v0.3.8** unless noted otherwise; item 3 (mTLS material distribution) was resolved in v0.3.7.
+
 ESO solves **provisioning** of the K8s Secret. It does **not** solve:
 
-1. **Rotation propagation to the running provider pod.** When ESO refreshes the K8s Secret, the kubelet eventually updates the projected files inside the pod (typically within `syncFrequency`, default 1 minute), but the provider only reads the files at startup. **Rotating a credential requires a provider pod restart** in v0.3.6. There is no in-process credential reload.
+1. **Rotation propagation to the running provider pod.** When ESO refreshes the K8s Secret, the kubelet eventually updates the projected files inside the pod (typically within `syncFrequency`, default 1 minute), but the provider only reads the files at startup. **Rotating a credential requires a provider pod restart** (still the case in v0.3.8). There is no in-process credential reload.
 
     Workaround: pair the `ExternalSecret` with a deployment-restart hook (e.g. `stakater/Reloader`) keyed on the Secret name. Stakater Reloader's annotation:
 
@@ -417,7 +420,10 @@ ESO solves **provisioning** of the K8s Secret. It does **not** solve:
 
 2. **Provider-side encryption-at-rest of the file.** The provider pod's tmpfs holds the credential plaintext while the pod is running. K8s does not encrypt projected Secret volumes; the cluster-level `EncryptionConfiguration` only protects etcd. A node-level attacker with root on the kubelet host can read the file.
 
-3. **mTLS material distribution to the provider pod.** ESO can deliver `tls.crt` / `tls.key` files into a Secret, but the v0.3.6 controller does not mount them into the provider pod conditionally on a CRD field (`internal/controller/provider_controller.go:702-713` has `if false` around the TLS volume mount). See [mTLS](mtls.md).
+3. **mTLS material distribution to the provider pod — resolved in v0.3.7 (unchanged in v0.3.8).** This was a v0.3.6 gap: the controller did not mount TLS material into the provider pod. Since v0.3.7 the controller mounts the TLS Secret referenced by `spec.runtime.service.tls.secretRef` at `/etc/virtrigaud/tls` and wires mTLS by default. ESO can deliver the `tls.crt` / `tls.key` / `ca.crt` keys into that Secret exactly as it does for credential Secrets. See [mTLS](mtls.md).
+
+    !!! note "Keep TLS and credential Secrets separate"
+        The TLS Secret and the credential Secret are distinct objects with different keys and mount paths (`/etc/virtrigaud/tls` vs `/etc/virtrigaud/credentials`). If you source both from ESO, produce two `ExternalSecret` resources, not one.
 
 ## Validating the materialised Secret
 

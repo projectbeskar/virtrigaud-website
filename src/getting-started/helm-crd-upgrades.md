@@ -9,6 +9,16 @@ SPDX-License-Identifier: Apache-2.0
 
 VirtRigaud Helm chart now supports **automatic CRD upgrades** during `helm upgrade`. This eliminates the need for manual CRD management and provides a seamless upgrade experience.
 
+## What changes on upgrade to v0.3.8
+
+The CRD-upgrade hook automatically applies the following additive changes when you run `helm upgrade ... --version 0.3.8`:
+
+- **`vmclones.infra.virtrigaud.io`** — new CRD (VMClone MVP). Adds `status.targetVMID` field.
+- **`vmsets.infra.virtrigaud.io`** — new CRD (VMSet stub). The controller emits `Ready=False / Reason=ControllerNotImplemented`; no existing resources are affected.
+- New RBAC rules for the VMClone and VMSet reconcilers land alongside the CRDs.
+
+CRD upgrades are additive (no fields removed). Existing `VirtualMachine`, `Provider`, `VMSnapshot`, and `VMMigration` resources are unaffected.
+
 ## The Problem
 
 By default, Helm has a limitation:
@@ -108,7 +118,7 @@ crdUpgrade:
   
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl  # VirtRigaud kubectl image
-    tag: "v0.3.6"  # Auto-updated to match release version
+    tag: "v0.3.8"  # Auto-updated to match release version
   
   backoffLimit: 3
   ttlSecondsAfterFinished: 300
@@ -173,7 +183,7 @@ metadata:
 spec:
   source:
     chart: virtrigaud
-    targetRevision: 0.3.6
+    targetRevision: 0.3.8
     helm:
       values: |
         crdUpgrade:
@@ -197,7 +207,7 @@ spec:
   chart:
     spec:
       chart: virtrigaud
-      version: 0.3.6
+      version: 0.3.8
   values:
     crdUpgrade:
       enabled: true  # Automatic upgrades work!
@@ -239,7 +249,7 @@ kubectl describe job -n virtrigaud-system -l app.kubernetes.io/component=crd-upg
     helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
     helm repo update
     helm install virtrigaud virtrigaud/virtrigaud \
-      --version 0.3.6 \
+      --version 0.3.8 \
       --namespace virtrigaud-system \
       --create-namespace
     ```
@@ -280,7 +290,7 @@ kubectl describe clusterrole <role-name>
 crdUpgrade:
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl
-    tag: "v0.3.6"  # Use matching VirtRigaud version
+    tag: "v0.3.8"  # Use matching VirtRigaud version
     pullPolicy: IfNotPresent
 ```
 

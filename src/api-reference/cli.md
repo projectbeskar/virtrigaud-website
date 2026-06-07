@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # CLI Reference
 
-VirtRigaud provides several command-line tools for managing virtual machines, testing providers, and developing new providers. This reference covers v0.3.6.
+VirtRigaud provides several command-line tools for managing virtual machines, testing providers, and developing new providers. This reference covers v0.3.8.
 
 ## Overview
 
@@ -22,13 +22,13 @@ VirtRigaud provides several command-line tools for managing virtual machines, te
 ### From GitHub Releases
 
 ```bash
-# Download v0.3.6
-curl -L "https://github.com/projectbeskar/virtrigaud/releases/download/v0.3.6/vrtg-linux-amd64" -o vrtg
+# Download v0.3.8
+curl -L "https://github.com/projectbeskar/virtrigaud/releases/download/v0.3.8/vrtg-linux-amd64" -o vrtg
 chmod +x vrtg
 sudo mv vrtg /usr/local/bin/
 
 # Install all CLI tools
-curl -L "https://github.com/projectbeskar/virtrigaud/releases/download/v0.3.6/virtrigaud-cli-linux-amd64.tar.gz" | tar xz
+curl -L "https://github.com/projectbeskar/virtrigaud/releases/download/v0.3.8/virtrigaud-cli-linux-amd64.tar.gz" | tar xz
 sudo mv vrtg vcts vrtg-provider virtrigaud-loadgen /usr/local/bin/
 ```
 
@@ -48,10 +48,10 @@ sudo make install-cli
 ### Using Go
 
 ```bash
-go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.3.6
-go install github.com/projectbeskar/virtrigaud/cmd/vcts@v0.3.6
-go install github.com/projectbeskar/virtrigaud/cmd/vrtg-provider@v0.3.6
-go install github.com/projectbeskar/virtrigaud/cmd/virtrigaud-loadgen@v0.3.6
+go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.3.8
+go install github.com/projectbeskar/virtrigaud/cmd/vcts@v0.3.8
+go install github.com/projectbeskar/virtrigaud/cmd/vrtg-provider@v0.3.8
+go install github.com/projectbeskar/virtrigaud/cmd/virtrigaud-loadgen@v0.3.8
 ```
 
 ## vrtg
@@ -600,8 +600,25 @@ timestamp,scenario,operation,latency_ms,status,provider
 
 A tombstoned migration helper from the v1alpha1 API era. Source: [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/alpha-to-beta-dryrun/main.go).
 
-!!! warning "No-op in v0.3.6"
+!!! warning "No-op in v0.3.x"
     The v1alpha1 API was removed before v0.3.0. Running this binary exits with an error explaining that v1alpha1 resources should have already been migrated. There are no flags and no useful operations.
+
+---
+
+## virtrigaud-manager flags
+
+The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typically invoked directly. The following flags are relevant when customising the manager Deployment (e.g. in `values.yaml` under `manager.extraArgs`).
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--metrics-addr` | `:8080` | Address the metrics endpoint binds to. |
+| `--health-probe-addr` | `:8081` | Address the health/readiness probes bind to. |
+| `--leader-elect` | `false` | Enable leader election for HA deployments. |
+| `--enforce-provider-capabilities` | `false` | When `true`, the manager rejects operations that the provider has not declared in its capabilities response. When `false` (default), unsupported operations are attempted and fail at the provider level. Set to `true` for fail-fast behaviour in environments where capability mismatches should surface as reconcile errors rather than provider-side gRPC errors. Added in v0.3.8. |
+| `--grpc-dial-timeout` | `10s` | Timeout for establishing the gRPC connection to a provider. |
+| `--circuit-breaker-failure-threshold` | `10` | Number of infra-class RPC failures before a circuit breaker trips to Open. |
+| `--circuit-breaker-reset-timeout` | `60s` | Time after which an Open breaker transitions to HalfOpen. |
+| `--circuit-breaker-half-open-max-calls` | `3` | Number of probe calls allowed in the HalfOpen state. |
 
 ---
 
@@ -643,6 +660,6 @@ A tombstoned migration helper from the v1alpha1 API era. Source: [`cmd/alpha-to-
 
 ## Version Information
 
-This reference covers VirtRigaud CLI tools v0.3.6.
+This reference covers VirtRigaud CLI tools v0.3.8.
 
 For older versions, see the [releases page](https://github.com/projectbeskar/virtrigaud/releases).

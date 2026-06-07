@@ -14,8 +14,9 @@ provides guidelines and information for contributors.
 
 - **Go 1.26+** — required since
   [#125](https://github.com/projectbeskar/virtrigaud/pull/125) (v0.3.6 bumped
-  the toolchain floor from 1.24.0 → 1.26.0). The repo's `go.mod` is the source
-  of truth; CI uses `go-version-file: go.mod` so locally you should match.
+  the toolchain floor from 1.24.0 → 1.26.0; v0.3.8 builds on **1.26.4**). The
+  repo's `go.mod` is the source of truth; CI uses `go-version-file: go.mod`
+  so locally you should match.
 - Docker
 - Kubernetes cluster (kind, k3s, or remote)
 - kubectl
@@ -199,7 +200,7 @@ following jobs:
 | **API Conversion Tests**  | Exercises round-trip conversion between API versions.                          |
 | **CI Summary**            | Aggregates the above; the PR is mergeable only if everything green.            |
 
-CI uses `go-version-file: go.mod` for the Go version (currently 1.26.x).
+CI uses `go-version-file: go.mod` for the Go version (1.26.4 in v0.3.8).
 
 ### Lint: CI vs local
 
@@ -395,11 +396,11 @@ provider built from the same source tree.
 
 2. **Cut an RC, smoke, then promote**:
    ```bash
-   git tag v0.3.7-rc1
-   git push origin v0.3.7-rc1
+   git tag v0.3.8-rc1
+   git push origin v0.3.8-rc1
    # ...deploy to lab, run smoke recipe, then:
-   git tag v0.3.7
-   git push origin v0.3.7
+   git tag v0.3.8
+   git push origin v0.3.8
    ```
 
 3. **CI handles**:

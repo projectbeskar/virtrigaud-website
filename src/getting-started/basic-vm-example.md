@@ -5,11 +5,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # Creating Your First Virtual Machine
 
-This guide walks through creating a complete, working virtual machine from start to finish using VirtRigaud v0.3.6.
+This guide walks through creating a complete, working virtual machine from start to finish using VirtRigaud v0.3.8.
 
 ## Prerequisites
 
-- VirtRigaud v0.3.6 installed in your Kubernetes cluster
+- VirtRigaud v0.3.8 installed in your Kubernetes cluster
 - A configured Provider (vSphere, Libvirt, or Proxmox)
 - `kubectl` access to your cluster
 
@@ -51,7 +51,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         namespace: default
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
         service:
           port: 9090
     ```
@@ -79,7 +79,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         namespace: default
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.6"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.8"
         service:
           port: 9090
     ```
@@ -109,7 +109,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         namespace: default
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.6"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8"
         service:
           port: 9090
     ```
@@ -122,6 +122,12 @@ kubectl get providers
 # NAME               TYPE      READY   AGE
 # vsphere-provider   vsphere   true    10s
 ```
+
+!!! note "TLS block required"
+    Production Provider CRs must include a `spec.runtime.service.tls` block
+    (required since v0.3.7). The abbreviated examples above omit it for
+    readability; see the [15-Minute Quickstart](index.md#step-3-configure-a-provider)
+    for a complete Provider CR with TLS configured.
 
 ## Step 2: Define a VM Class
 
@@ -298,7 +304,7 @@ spec:
     namespace: default
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
     service:
       port: 9090
 ---
@@ -347,7 +353,7 @@ kubectl apply -f complete-vm.yaml
 
 ## Next Steps
 
-- [Advanced VM Operations](../examples/) — Snapshots, cloning, scaling
+- [Advanced VM Operations](../examples/) — Snapshots, cloning (VMClone MVP in v0.3.8)
 - [Provider Capabilities](../providers/providers-capabilities.md) — per-provider feature matrix
 - [Observability Guide](../operations/observability.md) — dashboards and alerting
 

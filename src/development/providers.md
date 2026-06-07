@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Writing a Provider
 
-This page is aligned to **VirtRigaud v0.3.6** and describes how to build a
+This page is aligned to **VirtRigaud v0.3.8** and describes how to build a
 provider against the public SDK in
 [`sdk/provider/`](https://github.com/projectbeskar/virtrigaud/tree/main/sdk/provider).
 External providers are first-class — they implement the same gRPC contract
@@ -28,15 +28,15 @@ skill](https://github.com/projectbeskar/virtrigaud/tree/main/.claude/skills/add-
 walks the scaffold step-by-step; the SDK path below is the public, external
 authoring path.
 
-!!! warning "CLI tooling that does not exist in v0.3.6"
+!!! warning "CLI tooling that does not exist in v0.3.8"
     Earlier docs referenced `vrtg-provider init|verify|publish` commands.
-    **No such CLI is shipped in v0.3.6.** No tooling generates provider
+    **No such CLI is shipped in v0.3.8.** No tooling generates provider
     scaffolds, validates capability declarations, or publishes provider
     images on your behalf. The SDK is consumed as a Go library; the build
     and publish workflow is whatever your project standardizes on (Docker
     + `go build` + your own registry push).
 
-## Contract surface (v0.3.6)
+## Contract surface (v0.3.8)
 
 The gRPC contract lives in
 [`proto/provider/v1/provider.proto`](https://github.com/projectbeskar/virtrigaud/blob/main/proto/provider/v1/provider.proto)
@@ -210,8 +210,18 @@ responses for the new RPCs until you fill them in. Always embed it.
 ## Capabilities — the contract for "what works"
 
 The manager queries `GetCapabilities` after a successful `Validate` and
-caches the result per Provider CR. Capabilities the manager reads from
-`GetCapabilitiesResponse` (`proto/provider/v1/provider.proto`):
+caches the result per Provider CR. As of v0.3.8
+([#176](https://github.com/projectbeskar/virtrigaud/pull/176)) the manager
+also surfaces what a provider reported under
+`Provider.status.reportedCapabilities`, and an opt-in
+`--enforce-provider-capabilities` manager flag (default **off**) makes the
+manager refuse operations a provider does not advertise. Intrinsic
+correctness gates — such as the [VMClone](../guides/advanced/vm-cloning.md)
+linked-clone pre-check — run regardless of that flag, so advertising a
+capability you do not implement will still surface as a failure.
+
+Capabilities the manager reads from `GetCapabilitiesResponse`
+(`proto/provider/v1/provider.proto`):
 
 | Capability flag | Set via builder | Meaning |
 |----------------|-----------------|---------|
@@ -226,9 +236,12 @@ caches the result per Provider CR. Capabilities the manager reads from
 
 **Be honest.** Returning `supports_linked_clones: true` while having
 `Clone` return a non-linked synthetic response is the kind of drift that
-caused real audit findings against the in-tree libvirt provider in v0.3.6
+caused real audit findings against the in-tree libvirt provider
 (see [Libvirt Host Prep](../operations/libvirt-host-prepare.md#linked-clones-qcow2-backing-files)).
-Reflect the real shape of your implementation; the operator's
+In v0.3.8 the in-tree libvirt provider's `Clone` is `Unimplemented` and
+advertises that honestly — so a [VMClone](../guides/advanced/vm-cloning.md)
+against a libvirt source fails cleanly rather than silently producing a
+broken VM. Reflect the real shape of your implementation; the operator's
 [Provider Capabilities Matrix](../providers/providers-capabilities.md)
 page is the source of truth they consult.
 
@@ -284,7 +297,7 @@ See [Resilience](../operations/resilience.md) for the full classification.
 
 ## mTLS and bearer-token auth
 
-The SDK supports both, with a v0.3.6 caveat about the manager side.
+The SDK supports both, with a v0.3.8 caveat about the manager side.
 
 ### Server side (your provider)
 
@@ -315,7 +328,7 @@ cfg.Middleware = &middleware.Config{
 The interceptor is built at
 `sdk/provider/middleware/middleware.go:222-292`.
 
-### Manager side caveats in v0.3.6
+### Manager side caveats in v0.3.8
 
 !!! danger "The in-tree manager does NOT currently negotiate mTLS or send bearer tokens"
     - mTLS: `internal/runtime/remote/resolver.go:142-148` —
@@ -357,8 +370,8 @@ make proto-breaking # check for breaking changes vs origin/main
 ```
 
 External providers should depend on a **published tag** of the `proto`
-module (e.g. `proto/v0.3.6`), not on `main`. The proto module is tagged
-separately via `make release-proto VERSION=v0.3.6`
+module (e.g. `proto/v0.3.8`), not on `main`. The proto module is tagged
+separately via `make release-proto VERSION=v0.3.8`
 (`Makefile:233-249`).
 
 ## Building and publishing
@@ -372,7 +385,7 @@ Minimal Dockerfile sketch for an SDK-based provider:
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-ARG BUILDER_IMAGE=docker.io/golang:1.26.3
+ARG BUILDER_IMAGE=docker.io/golang:1.26.4
 ARG BASE_IMAGE=gcr.io/distroless/static:nonroot
 
 FROM ${BUILDER_IMAGE} AS build
@@ -407,7 +420,7 @@ spec:
     service:
       port: 9443
     # tls.secretRef field exists in the CRD but is not consumed by the
-    # manager in v0.3.6 — see the box above.
+    # manager in v0.3.8 — see the box above.
 ```
 
 ## Reference implementations
@@ -417,8 +430,8 @@ way to understand the contract:
 
 | Provider | File | Notes |
 |---------|------|-------|
-| **vSphere** | `internal/providers/vsphere/server.go` (~3842 LOC) | Pure-Go, uses `govmomi`. The most feature-complete in-tree provider. |
-| **Libvirt** | `internal/providers/libvirt/server.go` (~752 LOC) + `internal/providers/libvirt/virsh.go` | Uses `virsh` over SSH (no `libvirt-go` CGO at runtime; SSH wrapper instead). Honest disclosures about `Clone` and `ImagePrepare` stubs. |
+| **vSphere** | `internal/providers/vsphere/server.go` (~3842 LOC) | Pure-Go, uses `govmomi`. The most feature-complete in-tree provider. v0.3.8 added vCenter session keepalive + real-probe reconnect ([#190](https://github.com/projectbeskar/virtrigaud/pull/190)). |
+| **Libvirt** | `internal/providers/libvirt/server.go` (~752 LOC) + `internal/providers/libvirt/virsh.go` | Uses `virsh` over SSH (no `libvirt-go` CGO at runtime; SSH wrapper instead). `Clone` is `Unimplemented` in v0.3.8 and advertised as such; `ImagePrepare` is likewise a disclosed stub. v0.3.8 added retry on transient SSH connection failures ([#191](https://github.com/projectbeskar/virtrigaud/pull/191)). |
 | **Proxmox** | `internal/providers/proxmox/server.go` | Uses Proxmox REST API with API-token auth (the recommended Proxmox posture). |
 | **Mock** | `internal/providers/mock/` + `cmd/provider-mock/main.go` | The smallest complete provider; useful as a starting skeleton. |
 
@@ -435,4 +448,4 @@ end-to-end; it's the SDK in production, minus a real hypervisor.
   declaring your own capabilities.
 - [Resilience](../operations/resilience.md) — failure classification and
   CircuitBreaker behavior; informs your error-code choices.
-- [mTLS](../providers/security/mtls.md), [Bearer Token](../providers/security/bearer-token.md), [Network Policies](../providers/security/network-policies.md) — security control gaps you should be aware of in v0.3.6.
+- [mTLS](../providers/security/mtls.md), [Bearer Token](../providers/security/bearer-token.md), [Network Policies](../providers/security/network-policies.md) — security control gaps you should be aware of in v0.3.8.

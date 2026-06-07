@@ -5,33 +5,49 @@ SPDX-License-Identifier: Apache-2.0
 
 # VM Migration User Guide
 
-This page is aligned to **VirtRigaud v0.3.6**. It is the practical
+This page is aligned to **VirtRigaud v0.3.8**. It is the practical
 "how do I move a VM?" guide. For the field-by-field CRD reference see
 [API Reference](api-reference.md); for the architectural model see
 [VM Migration Guide](vm-migration-guide.md).
 
-## What VirtRigaud v0.3.6 actually supports
+## What VirtRigaud v0.3.8 actually supports
 
 !!! danger "Read this before you plan a migration"
-    **The only provider direction smoke-tested end-to-end on a real lab in
-    v0.3.6 is vSphere → Libvirt** (see
+    **The provider direction smoke-tested end-to-end on a real lab is
+    vSphere → Libvirt** (see
     `fieldTesting/MIGRATION_SUCCESS_v0.3.62.md` and
     `fieldTesting/MIGRATION_VERIFICATION_v0.3.62.md`). The migration
     controller, the exporter/importer code paths in each provider, and the
     PVC orchestration are all in place for the other directions, but they
-    have **not been validated in v0.3.6**.
+    have **not been validated**.
+
+    v0.3.8 improves the disk-transfer primitives this relies on: the libvirt
+    provider now supports disk export
+    ([#177](https://github.com/projectbeskar/virtrigaud/pull/177)) and the
+    vSphere provider advertises its disk export/import capabilities accurately
+    ([#178](https://github.com/projectbeskar/virtrigaud/pull/178)).
 
     If you need a different direction (Libvirt → vSphere, vSphere →
     Proxmox, Proxmox → Libvirt, etc.) you should:
 
-    1. Treat it as **alpha** for v0.3.6.
+    1. Treat it as **alpha**.
     2. Smoke-test it in non-production first.
     3. Be prepared to file issues — the team has been catching real bugs in
        the migration controller every release (`fieldTesting/MIGRATION_*`).
 
+!!! tip "Capability gating is available (v0.3.8, opt-in)"
+    The manager flag `--enforce-provider-capabilities`
+    ([#176](https://github.com/projectbeskar/virtrigaud/pull/176), **default
+    off**) makes the manager reject a migration up front if the source or target
+    provider does not advertise the disk export/import capability the migration
+    needs — a clean fail-close instead of a late-phase failure. Because the
+    vSphere (#178) and libvirt (#177) capability advertisements are now
+    accurate, enabling this gate gives trustworthy rejections. See the
+    [API Reference](api-reference.md#capability-gating-176-fail-close-on-providers-lacking-exportimport).
+
 !!! warning "Storage transfer is a Kubernetes PVC, not S3/HTTP/NFS"
     The earlier draft of this page described `s3`, `http`, and `nfs` storage
-    backends. **Those are not implemented in v0.3.6.** The migration
+    backends. **Those are still not implemented as of v0.3.8.** The migration
     controller validates `storage.type != "pvc" && storage.type != ""` and
     rejects the migration with
     `unsupported storage type: <X> (only 'pvc' is supported)`
@@ -80,7 +96,7 @@ Three things happen in sequence, all driven by the migration controller:
 
 ## Quick start: vSphere → Libvirt
 
-This is the path that v0.3.6 actually exercises end-to-end. The other
+This is the path that v0.3.8 actually exercises end-to-end. The other
 directions follow the same shape but should be considered alpha.
 
 ### Prerequisites
@@ -129,7 +145,7 @@ spec:
     timeout: 4h
 
   storage:
-    type: pvc                         # the only valid value in v0.3.6
+    type: pvc                         # the only valid value (as of v0.3.8)
     pvc:
       storageClassName: nfs-client
       size: 100Gi
@@ -179,7 +195,7 @@ PVC size  ≥  source_disk_size_GiB
 ```
 
 In practice, **size the PVC at 1.5× to 2× the source disk size** for
-v0.3.6. The provider writes the export, then (in the conversion phase, if
+v0.3.8. The provider writes the export, then (in the conversion phase, if
 formats differ) `qemu-img convert` writes a sibling file *before* the
 original is deleted.
 
@@ -193,7 +209,7 @@ its capacity — the controller does not resize it.
 | `ReadWriteMany` (default) | Source provider pod and target provider pod live on **different nodes**. | Requires an RWX-capable StorageClass (NFS, EFS, Longhorn-RWX, CephFS). |
 | `ReadWriteOnce` | Both provider pods schedule onto the **same node**, OR the migration is intra-provider (same provider type, same node). | RWO is far more universally available, but the scheduler isn't guaranteed to co-locate the pods. Use only with a pod-anti-affinity-aware setup or a single-node test cluster. |
 
-In v0.3.6 the controller orchestrates a rolling restart of both providers
+In v0.3.8 the controller orchestrates a rolling restart of both providers
 to add the PVC mount; if you pick `ReadWriteOnce` and the pods land on
 different nodes after the restart, the migration will fail at the validation
 phase with a volume-attach error. RWX is the default for a reason.
@@ -207,7 +223,7 @@ phase with a volume-attach error. RWX is the default for a reason.
 | `createSnapshot: true` (default), `snapshotRef` unset | Controller creates a fresh snapshot of the source VM before exporting. Snapshot is cleaned up per `options.cleanupPolicy`. |
 | `snapshotRef: { name: my-snap }`, `createSnapshot: false` | Controller migrates from `my-snap` instead of taking a fresh snapshot. The snapshot is **not** deleted automatically. |
 | `powerOffBeforeMigration: true` | Source VM is powered off before exporting. Recommended for filesystem consistency. |
-| `powerOffBeforeMigration: false` (default) | Source VM runs throughout — but you are still doing a *cold* migration from a snapshot, so guest state at the time of snapshot is what crosses over. There is no live-migration support in v0.3.6. |
+| `powerOffBeforeMigration: false` (default) | Source VM runs throughout — but you are still doing a *cold* migration from a snapshot, so guest state at the time of snapshot is what crosses over. There is no live-migration support in v0.3.8. |
 
 ## What happens to the target VM
 
@@ -238,7 +254,8 @@ class of failure repeats:
 |-------|-------|
 | **Reconcile double-count** ([#105](https://github.com/projectbeskar/virtrigaud/issues/105), fixed in PR [#106](https://github.com/projectbeskar/virtrigaud/pull/106) / G3 + K5) | Pre-v0.3.6 the reconciler used `defer timer.Finish(metrics.OutcomeSuccess)` alongside explicit error finishes, recording two samples per errored migration. The fix uses named-return + deferred outcome-inference. No operator action required if you're already on v0.3.6. |
 | **CircuitBreaker half-open accounting** ([#100](https://github.com/projectbeskar/virtrigaud/issues/100), fixed pre-v0.3.6) | Migration RPCs are gRPC calls and go through the per-Provider CircuitBreaker. Half-open semantics were off; once fixed, Half-Open admits exactly `HalfOpenMaxCalls=3` trial calls and all three must succeed to close the breaker. See [Resilience](../operations/resilience.md). |
-| **SSH host-key bypass on libvirt** (#149) | Documented openly in v0.3.6. If your libvirt host migration is failing with a TLS-ish error and you're behind a proxy, this is unlikely the cause — but the compensating-controls posture from [Libvirt Host Prep](../operations/libvirt-host-prepare.md) applies. |
+| **Transient SSH connection failures on libvirt** ([#191](https://github.com/projectbeskar/virtrigaud/pull/191), v0.3.8) | A migration drives many back-to-back `virsh`-over-SSH calls; bursts can trip the host's `sshd` `MaxStartups` or `fail2ban`, surfacing as `kex_exchange_identification: Connection closed by remote host`. v0.3.8 retries these client-side with bounded backoff, but tight host limits can still fail a migration. Raise `MaxStartups` / allowlist the provider source per [Libvirt Host Prep](../operations/libvirt-host-prepare.md#ssh-connection-rate-limiting-maxstartups-fail2ban). |
+| **Migration PVC reclaimed mid-flight** ([#184](https://github.com/projectbeskar/virtrigaud/pull/184), fixed in v0.3.8) | Previously a provider reconcile could delete the migration-storage PVC out from under an in-flight migration. In v0.3.8 the provider controller no longer deletes those PVCs and watches them. No operator action on v0.3.8+. |
 
 For a recent postmortem catalogue:
 
@@ -252,7 +269,7 @@ ls fieldTesting/MIGRATION_*.md
 |---------|--------------|------------|
 | `phase=Failed`, `message="unsupported storage type: s3"` | You set `storage.type: s3` (or http/nfs). | Change to `storage.type: pvc`. |
 | `phase=Validating` for >5 min, then `Failed` | Provider pod did not become `Ready` after PVC mount roll. | `kubectl describe pod -n virtrigaud-system <provider-pod>`; usually a volume-attach error from a `ReadWriteOnce` PVC landing on a different node than the other provider. Use RWX. |
-| `phase=Exporting` stuck for >30 min on a small disk | gRPC RPC went over the deadline. v0.3.6 has aggressive keep-alives but a misconfigured PVC (e.g. wrong export-path) keeps the RPC blocked. | Check provider logs for the export RPC; check `virtrigaud_circuit_breaker_state{provider=<source>}` — if Open, the source provider has flapped. |
+| `phase=Exporting` stuck for >30 min on a small disk | gRPC RPC went over the deadline. v0.3.8 has aggressive keep-alives but a misconfigured PVC (e.g. wrong export-path) keeps the RPC blocked. | Check provider logs for the export RPC; check `virtrigaud_circuit_breaker_state{provider=<source>}` — if Open, the source provider has flapped. |
 | `phase=Importing` fails with `source disk file not found locally` | The target provider couldn't find the file under `/mnt/migration-storage/<pvc-name>/`. | Re-check the export wrote successfully (`status.storageInfo.url`). Confirm both providers are mounting the same PVC at the same path. |
 | `phase=Ready` but target VM never powers on | `spec.target.powerOn: false` (default). | Manually power on via `kubectl patch vm <target> --type=merge -p '{"spec":{"powerState":"On"}}'`. |
 | `phase=Failed`, retries exhausted (`retryCount` ≥ `options.retryPolicy.maxRetries`) | Underlying issue keeps recurring. | Delete the `VMMigration` (it will clean up its PVC), fix the root cause, recreate. |
@@ -306,7 +323,7 @@ intermediate during the reconcile loop" behavior, not the K8s-GC fallback.
 | Disk transfer speed | StorageClass throughput. NFS over 1GbE caps at ~100 MB/s; CephFS / Longhorn-RWX over 10GbE will comfortably exceed 500 MB/s. |
 | Format conversion overhead | `options.diskFormat` matched to the target's native format means no conversion. vSphere → Libvirt needs `vmdk → qcow2`, which adds ~0.1× the disk size in temp space and ~10–30 % wall time. |
 | Compression overhead | `options.compress: true` trades CPU for bandwidth. Only worth it on slow networks. Off by default. |
-| Provider-pod roll on PVC mount | One-time ~30–60 s per provider pod when the migration starts. Unavoidable in v0.3.6. |
+| Provider-pod roll on PVC mount | One-time ~30–60 s per provider pod when the migration starts. Unavoidable in v0.3.8. |
 | `options.timeout` | Hard wall-clock limit on the entire migration. 4h default. Bump for very large VMs. |
 
 ## Multi-disk VMs
@@ -347,7 +364,7 @@ The intermediate PVC is created in the same namespace as the `VMMigration`.
 
 The in-tree example YAMLs are under
 [`examples/migration/`](https://github.com/projectbeskar/virtrigaud/tree/main/examples/migration)
-in the main repository. The ones that match the v0.3.6 reality (PVC-only
+in the main repository. The ones that match the v0.3.8 reality (PVC-only
 storage) are:
 
 - `vmmigration-basic.yaml`
@@ -355,7 +372,7 @@ storage) are:
 
 If you see example files that reference `s3`, `http`, or `nfs` `storage.type`,
 those reflect an earlier in-development design and should not be used
-against a v0.3.6 cluster.
+against a v0.3.8 cluster.
 
 ## See also
 

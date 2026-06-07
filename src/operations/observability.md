@@ -23,7 +23,7 @@ The `workqueue_*` family is particularly useful alongside `virtrigaud_manager_re
 
 ---
 
-## The `virtrigaud_*` catalog (v0.3.6)
+## The `virtrigaud_*` catalog (v0.3.8)
 
 ### 1. `virtrigaud_build_info`
 
@@ -35,7 +35,7 @@ Populated by `metrics.SetupMetrics()` at manager startup. Use it to confirm that
 
 ```promql
 # Is the right version running?
-virtrigaud_build_info{component="manager", version="v0.3.6"}
+virtrigaud_build_info{component="manager", version="v0.3.8"}
 
 # What git SHA is deployed?
 virtrigaud_build_info{component="manager"} == 1
@@ -51,7 +51,13 @@ If this query returns nothing, the manager has not started successfully.
 **Labels:** `kind`, `outcome`  
 **`outcome` values:** `success`, `error`, `requeue`
 
-Incremented once per reconcile run by every reconciler (VirtualMachine, Provider, VMClass, VMImage, VMNetworkAttachment, VMAdoption, VMSnapshot, VMMigration, and so on). The outcome is inferred from the named return values of the reconcile function via a deferred timer block — no manual instrumentation at each return site.
+Incremented once per reconcile run by every reconciler (VirtualMachine, Provider, VMClass, VMImage, VMNetworkAttachment, VMAdoption, VMSnapshot, VMMigration, and — added in **v0.3.8** — VMClone and VMSet). The outcome is inferred from the named return values of the reconcile function via a deferred timer block — no manual instrumentation at each return site.
+
+!!! note "New `kind` values in v0.3.8"
+    v0.3.8 introduced the VMClone and VMSet controllers, so this counter now
+    emits `kind="VMClone"` and `kind="VMSet"` series in addition to the existing
+    kinds. The label set is otherwise unchanged. Example:
+    `virtrigaud_manager_reconcile_total{kind="VMClone",outcome="success"}`.
 
 `requeue` means the reconciler explicitly requested a requeue without returning an error (e.g. waiting for a provider task to complete). `error` means an error was returned and controller-runtime will apply exponential backoff. `success` means the reconcile completed cleanly.
 
@@ -351,7 +357,7 @@ spec:
 ```bash
 kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8080:8080
 curl -s http://localhost:8080/metrics | grep '^virtrigaud_build_info'
-# Expected: virtrigaud_build_info{component="manager",git_sha="...",go_version="...",version="v0.3.6"} 1
+# Expected: virtrigaud_build_info{component="manager",git_sha="...",go_version="...",version="v0.3.8"} 1
 ```
 
 ---

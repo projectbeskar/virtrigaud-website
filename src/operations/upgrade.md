@@ -40,6 +40,90 @@ helm upgrade virtrigaud virtrigaud/virtrigaud --version v0.2.1
 
 ## Version-Specific Upgrade Notes
 
+### v0.3.7 → v0.3.8
+
+**Additive release. No breaking changes for operators.** v0.3.8 adds two new
+controllers (VMClone + VMSet), a new status field on `VMClone`, the RBAC those
+controllers need, and provider-side connection-resilience fixes. A standard
+`helm upgrade` picks everything up. The one thing to check is the chart's
+templated-provider default — see the Helm note below.
+
+#### What's new (no operator action required)
+
+- **VMClone + VMSet controllers** — the manager now runs two additional
+  reconcilers. The Helm chart adds the RBAC for `vmclones` and `vmsets` (and
+  their `/status` subresources) automatically. If you maintain a hand-rolled
+  ClusterRole instead of the chart's, add read/write on
+  `vmclones`/`vmclones/status` and `vmsets`/`vmsets/status` in the
+  `infra.virtrigaud.io` API group.
+- **New `VMClone.status.targetVMID` field** — purely additive status field
+  surfacing the provider-specific ID of the clone's target VM. No spec change,
+  no migration step.
+- **Provider connection resilience** — the vSphere provider now keeps its
+  vCenter session alive and reconnects on a real probe failure
+  ([#190](https://github.com/projectbeskar/virtrigaud/pull/190)); the libvirt
+  provider now retries transient SSH connection failures with bounded backoff
+  ([#191](https://github.com/projectbeskar/virtrigaud/pull/191)). Both are
+  provider-internal — no Provider CR change. See
+  [Resilience](resilience.md#provider-side-connection-resilience-v038).
+- **Migration-storage PVC safety** — the provider controller no longer deletes
+  migration-storage PVCs and now watches them
+  ([#184](https://github.com/projectbeskar/virtrigaud/pull/184)). No operator
+  action; in-flight migrations are simply safer.
+
+#### Helm note: templated providers are DISABLED by default ([#173](https://github.com/projectbeskar/virtrigaud/pull/173))
+
+The chart no longer renders templated provider Deployments by default. This is a
+**chart default change, not a code breaking change**:
+
+- **If you manage providers as `Provider` CRs** (the recommended pattern, where
+  the operator deploys provider workloads from the CR) — **you are unaffected.**
+  Nothing changes.
+- **If you relied on the chart's templated providers** (rendered directly from
+  Helm values rather than from a `Provider` CR), they will no longer be created
+  after the upgrade. Re-enable each one explicitly:
+
+  ```yaml
+  providers:
+    vsphere:
+      enabled: true
+    libvirt:
+      enabled: true
+    proxmox:
+      enabled: true
+  ```
+
+  Set only the types you actually use.
+
+#### Helm upgrade command
+
+```bash
+helm repo update
+helm upgrade -i virtrigaud virtrigaud/virtrigaud \
+  --version 0.3.8 \
+  --reset-values \
+  -f your-values.yaml
+```
+
+If you use chart-templated providers, remember the `providers.<type>.enabled=true`
+flag above must be in `your-values.yaml` or they will not be rendered.
+
+#### Post-upgrade verification
+
+```bash
+# Confirm the manager is running v0.3.8
+kubectl -n virtrigaud-system port-forward deploy/virtrigaud-manager 8080:8080 &
+curl -s localhost:8080/metrics | grep '^virtrigaud_build_info'
+# Expect: virtrigaud_build_info{version="v0.3.8",...} 1
+
+# Confirm the new reconcilers are emitting (after first VMClone/VMSet activity)
+curl -s localhost:8080/metrics | \
+  grep -E 'virtrigaud_manager_reconcile_total\{kind="(VMClone|VMSet)"'
+
+# All providers should still be ProviderAvailable=True
+kubectl get providers -A
+```
+
 ### v0.3.6 → v0.3.7
 
 Released 2026-05-30. **Security enforcement + multi-arch release.** Two breaking

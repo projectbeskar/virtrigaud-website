@@ -7,13 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 
 This page describes the actual versioning model VirtRigaud follows today, the API-stability commitment, and how the project chooses release tags.
 
-It is aligned to **VirtRigaud v0.3.6** (the current latest, released 2026-05-25).
+It is aligned to **VirtRigaud v0.3.8** (the current latest).
 
 ## TL;DR
 
-- **Current latest**: `v0.3.6`. Helm chart `--version 0.3.6`. Provider images tagged `v0.3.6`.
+- **Current latest**: `v0.3.8`. Helm chart `--version 0.3.8`. Provider images tagged `v0.3.8`.
 - **CRD API version**: `infra.virtrigaud.io/v1beta1` is the **stable** API. Breaking changes need an ADR.
-- **Release pattern**: `rc1 → smoke → final` is the established cadence. Used successfully for v0.3.3, v0.3.5, and v0.3.6.
+- **Release pattern**: `rc1 → smoke → final` is the established cadence. Used successfully for v0.3.3, v0.3.5, v0.3.6, and onward.
 - **Support**: best-effort on the latest minor. The project does not maintain LTS branches. Upgrade to the latest patch within the current minor to get fixes.
 
 ## Components and their version dimensions
@@ -22,14 +22,14 @@ VirtRigaud is composed of several artefacts that each carry a version label:
 
 | Component | Where it lives | Versioning notes |
 |-----------|----------------|------------------|
-| Manager binary | `cmd/manager` → `ghcr.io/projectbeskar/virtrigaud/manager:v0.3.6` | Tracks the project release tag exactly. |
-| Provider binaries | `cmd/provider-{vsphere,libvirt,proxmox,mock}` → `ghcr.io/projectbeskar/virtrigaud/provider-*:v0.3.6` | Currently released in lockstep with the manager. |
-| Helm chart | `charts/virtrigaud` | Chart version matches the project release (`Chart.yaml: 0.3.6`). |
+| Manager binary | `cmd/manager` → `ghcr.io/projectbeskar/virtrigaud/manager:v0.3.8` | Tracks the project release tag exactly. |
+| Provider binaries | `cmd/provider-{vsphere,libvirt,proxmox,mock}` → `ghcr.io/projectbeskar/virtrigaud/provider-*:v0.3.8` | Currently released in lockstep with the manager. |
+| Helm chart | `charts/virtrigaud` | Chart version matches the project release (`Chart.yaml: 0.3.8`). |
 | CRD API | `api/infra.virtrigaud.io/v1beta1` | `v1beta1` — stable in the Kubernetes sense; see [API stability](#api-stability-v1beta1) below. |
 | gRPC contract | `proto/provider/v1/provider.proto` | Separate Go module. New RPCs land additively; breaking proto changes would require a major proto-package bump. |
 | Provider SDK | `sdk/` | Separate Go module. Used by external provider authors. |
 
-All of the above are tagged together as `v0.3.6` for the v0.3.6 release.
+All of the above are tagged together as `v0.3.8` for the v0.3.8 release.
 
 ## Semantic versioning
 
@@ -52,7 +52,7 @@ The v1beta1 contract is enforced project-wide via the `CLAUDE.md` rule that brea
 
 There is no `v1alpha*` and no `v1` for the `infra.virtrigaud.io` group — operators target `v1beta1` for all CRs.
 
-The 10 CRDs at v0.3.6: `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMMigration`, `VMSnapshot`, `VMSet`, `VMPlacementPolicy`, `VMClone`. `VMAdoption` is a controller, not a CRD.
+The 10 CRDs at v0.3.8: `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMMigration`, `VMSnapshot`, `VMSet`, `VMPlacementPolicy`, `VMClone`. `VMAdoption` is a controller, not a CRD.
 
 ## Release cadence and pattern
 
@@ -66,7 +66,7 @@ rc1  →  smoke on vr1.lab.k8  →  final
 |------|---------|
 | `rc1` (release candidate) | Cut from `main` once all gates are green. Built, signed, and promoted to ghcr.io with an `-rc1` suffix. |
 | smoke | Deployed to the project's lab cluster (`vr1.lab.k8`) and exercised with the field-test scenarios. Any regression bounces back to `main` for a fix and a new rc. |
-| final | Tag promoted to its production name (`v0.3.6`) from the same commit, signed, and shipped to the Helm repo. |
+| final | Tag promoted to its production name (e.g. `v0.3.8`) from the same commit, signed, and shipped to the Helm repo. |
 
 Track record:
 
@@ -82,14 +82,14 @@ The chart version is identical to the project version. Always pin in production:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.6 \
+  --version 0.3.8 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
 
 ```bash
 helm upgrade virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.6 \
+  --version 0.3.8 \
   --namespace virtrigaud-system
 ```
 
@@ -102,7 +102,7 @@ Provider pods run separate images, each tagged to the same version as the manage
 ```yaml
 spec:
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
 ```
 
 A provider image must be compatible with the manager that drives it. The recommendation is to keep the provider images on the same `v0.3.x` minor as the manager.
@@ -125,7 +125,7 @@ These categories are treated as breaking and require an ADR + a deprecation cycl
 
 **Capability flag breaking**:
 
-- A provider flipping a capability from `true` to `false` without the operator-facing release notes calling it out — this counts as breaking because the manager's short-circuiting changes behaviour for existing CRs. (Phase 2's v0.3.6 doc alignment corrected two such cells; see [the capability matrix](providers-capabilities.md).)
+- A provider flipping a capability from `true` to `false` without the operator-facing release notes calling it out — this counts as breaking because the manager's short-circuiting changes behaviour for existing CRs. (Phase 2's v0.3.6 doc alignment corrected two such cells; v0.3.8 then flipped libvirt `SupportsLinkedClones` and `SupportsImageImport` to `false` via the #153/#154 honesty pass, with the change called out in the release notes. See [the capability matrix](providers-capabilities.md).)
 
 **Compatibility-safe**:
 
@@ -141,9 +141,9 @@ These categories are treated as breaking and require an ADR + a deprecation cycl
 | Older CR objects on a newer manager | Always valid (additive evolution only). |
 | Newer CR objects on an older manager | Not supported. The older manager will reject the unknown fields. Upgrade the manager first. |
 | Provider image one minor newer than the manager | Best-effort. Do not pin a provider image to a release later than the manager. |
-| Manager one minor newer than provider images | Supported within the current minor (so a v0.3.6 manager works with v0.3.5 provider pods if you stage rollouts). |
+| Manager one minor newer than provider images | Supported within the current minor (so a v0.3.8 manager works with v0.3.7 provider pods if you stage rollouts). |
 
-For the canonical step-by-step upgrade (v0.3.5 → v0.3.6 is the current happy path), see the [Upgrade Guide](../operations/upgrade.md).
+For the canonical step-by-step upgrade (v0.3.7 → v0.3.8 is the current happy path), see the [Upgrade Guide](../operations/upgrade.md).
 
 ## Support window
 
@@ -153,7 +153,7 @@ The project does **not** maintain long-term-support branches. Support is best-ef
 - **Prior minor** — community-only. No proactive backports; fixes accepted via PR.
 - **Older** — not supported. Upgrade.
 
-If you operate VirtRigaud in a regulated environment (the project is documented as deployable in regulated banking environments — see the field-testing notes), pin to a specific patch and upgrade on a schedule rather than chasing latest. Each release tag is reproducible: the manager binary emits `virtrigaud_build_info{version="v0.3.x"}` on `/metrics`, and the container image digest is signed and published to ghcr.io.
+If you operate VirtRigaud in a regulated environment (the project is documented as deployable in regulated banking environments — see the field-testing notes), pin to a specific patch and upgrade on a schedule rather than chasing latest. Each release tag is reproducible: the manager binary emits `virtrigaud_build_info{version="v0.3.8"}` on `/metrics`, and the container image digest is signed and published to ghcr.io.
 
 ## Where to track releases
 
@@ -163,13 +163,13 @@ If you operate VirtRigaud in a regulated environment (the project is documented 
 
 ## Choosing a version
 
-- **New installs in 2026-05+**: use `v0.3.6`.
-- **Upgrading from `v0.3.5`**: routine, no CRD changes; see the [Upgrade Guide v0.3.5 → v0.3.6](../operations/upgrade.md#v035--v036).
+- **New installs**: use `v0.3.8`.
+- **Upgrading from `v0.3.7`**: routine, no CRD changes; see the [Upgrade Guide](../operations/upgrade.md). Note the v0.3.8 capability-negotiation surfacing (`Provider.status.reportedCapabilities` + the opt-in `--enforce-provider-capabilities` flag, default off) and the corrected libvirt clone/image-import capability flags — see the [capability matrix](providers-capabilities.md).
 - **Upgrading from older `v0.3.x`**: same Helm install pattern, but read the intermediate CHANGELOG blocks for new metric families and capability corrections.
 - **Anything pre-`v0.3.0`**: not supported. Migrate to `v0.3.x` directly.
 
 ## API reference
 
-- [Capability matrix](providers-capabilities.md) — the v0.3.6 corrected snapshot.
+- [Capability matrix](providers-capabilities.md) — the v0.3.8 corrected snapshot.
 - [Generated CRD reference](../references/generated-crd-docs.md).
 - [Provider gRPC contract reference](../references/grpc-api.md).

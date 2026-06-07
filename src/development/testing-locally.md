@@ -5,12 +5,12 @@ SPDX-License-Identifier: Apache-2.0
 
 # Testing Locally
 
-This page describes the test suites VirtRigaud ships in **v0.3.6** and how
+This page describes the test suites VirtRigaud ships in **v0.3.8** and how
 to run them. Each layer has a specific scope — they are not interchangeable.
 
 | Layer | Target | What it covers | Cluster required? |
 |-------|--------|----------------|-------------------|
-| **Unit + envtest** | `make test` | Reconciler logic against an in-process Kubernetes API server (controller-runtime's `envtest`). All packages except libvirt (CGO), `test/e2e`, and `test/integration`. | No |
+| **Unit + envtest** | `make test` | Reconciler logic against an in-process Kubernetes API server (controller-runtime's `envtest`). All packages except libvirt (CGO), `test/e2e`, and `test/integration`. The vSphere provider is pure-Go and **is** covered by `make test`. | No |
 | **Integration** | `make test-integration` | Cross-package observability tests (and the seed bed for future controller-integration tests). `test/integration/observability_test.go`. | No |
 | **End-to-end** | `make test-e2e` *(see warning below)* | Kind cluster + ginkgo against the manager image. `test/e2e/`. | **Yes** (Kind) |
 | **Conformance** | hand-run | Per-provider conformance spec at `test/conformance/specs/basic-lifecycle.yaml`. Drives the in-tree conformance runner (`internal/conformance/`). | Yes (provider, real or mock) |
@@ -54,13 +54,17 @@ Internals of the `test` target (`Makefile:127-131`):
   `setup-envtest` step pulls a matching `etcd` + `kube-apiserver` for
   controller-runtime's in-process test cluster.
 - The K8s version used by `envtest` is derived from `go.mod`'s `k8s.io/api`
-  pin (`Makefile:520`). For v0.3.6 that pins to a `1.3x` minor.
+  pin (`Makefile:520`). For v0.3.8 that pins to a `1.3x` minor.
 - Sets `KUBEBUILDER_ASSETS` to the local `bin/k8s/<version>-…` directory
   before invoking `go test`.
 - Excludes `/internal/providers/libvirt`, `/cmd/provider-libvirt`,
   `/test/e2e`, and `/test/integration` — libvirt because it requires CGO
   + `libvirt-dev` headers; the latter two because they have their own
-  targets.
+  targets. The same libvirt-package exclusion applies to `make lint`, so to
+  exercise libvirt you run `go test ./internal/providers/libvirt/...`
+  directly (see [the libvirt note below](#libvirt-provider-tests-dont-run)).
+  The **vSphere** provider is pure-Go and is built/tested/linted by the
+  default targets.
 
 ### Pre-baking the envtest binaries
 
@@ -105,18 +109,18 @@ The integration suite (`test/integration/`) currently contains:
 - `observability_test.go` — cross-package observability assertions
   (metrics families wired through the manager bootstrap).
 - `vm_lifecycle_test.go.disabled` — disabled placeholder for future
-  controller-integration tests. **Not** active in v0.3.6.
+  controller-integration tests. **Not** active in v0.3.8.
 
 The target runs with `-race -coverprofile=cover-integration.out`. No
 cluster is required.
 
 ## End-to-end tests (Kind)
 
-!!! danger "`make test-e2e` is broken in v0.3.6 — track #146"
+!!! danger "`make test-e2e` is broken in v0.3.8 — track #146"
     The `test-e2e` target in the Makefile invokes
     `go test ./test/e2e/ -v -ginkgo.v` (`Makefile:164`).
 
-    In v0.3.6, [PR
+    Since v0.3.6, [PR
     #133](https://github.com/projectbeskar/virtrigaud/pull/133) added a
     `//go:build e2e` build tag to both `test/e2e/e2e_suite_test.go` and
     `test/e2e/e2e_test.go` so that a default `go test ./...` no longer
@@ -124,7 +128,7 @@ cluster is required.
     correct.
 
     However, `make test-e2e` does **not** pass `-tags=e2e` — so as of
-    v0.3.6, `make test-e2e` happily runs zero tests and exits 0. The fix
+    v0.3.8, `make test-e2e` happily runs zero tests and exits 0. The fix
     (adding `-tags=e2e` to the target) is tracked as
     [#146](https://github.com/projectbeskar/virtrigaud/issues/146). Until
     that lands, **run the explicit form**:
@@ -160,10 +164,11 @@ The conformance harness lives in two places:
 
 - `internal/conformance/` — the runner + validator implementation.
 - `test/conformance/specs/` — the spec files. `basic-lifecycle.yaml` is the
-  only spec shipping in v0.3.6.
+  only spec shipping in v0.3.8.
 
-`basic-lifecycle.yaml` exercises the minimal Provider + VMClass + VMImage +
-VirtualMachine create-delete flow against a target provider. To run it:
+`basic-lifecycle.yaml` is the only spec shipping in v0.3.8. It exercises the
+minimal Provider + VMClass + VMImage + VirtualMachine create-delete flow
+against a target provider. To run it:
 
 ```bash
 # Bring up the mock provider (or your real provider) and a manager
@@ -172,7 +177,7 @@ go run ./internal/conformance/... \
   --spec test/conformance/specs/basic-lifecycle.yaml
 ```
 
-There is no `make` shortcut for conformance in v0.3.6; the harness is
+There is no `make` shortcut for conformance in v0.3.8; the harness is
 invoked directly when validating a new provider against the contract.
 
 ## Linting
@@ -221,7 +226,7 @@ hack/test-workflows-locally.sh setup     # one-time
 hack/test-lint-locally.sh                # lint workflow only
 hack/test-ci-locally.sh                  # ci workflow (quick or full)
 hack/test-helm-locally.sh                # helm chart in Kind
-hack/test-release-locally.sh v0.3.7-test # release workflow w/ local registry
+hack/test-release-locally.sh v0.3.8-test # release workflow w/ local registry
 ```
 
 Each script's `--help` flag describes its options. The orchestrator
@@ -253,13 +258,17 @@ golangci-lint run --config .golangci.yml ./...
 ### libvirt provider tests don't run
 
 That is expected. The libvirt provider uses CGO and depends on
-`libvirt-dev` headers, so `make test` deliberately excludes it
-(`Makefile:130`). To exercise it locally:
+`libvirt-dev` headers, so **both `make test` and `make lint` deliberately
+exclude the `internal/providers/libvirt` package** (`Makefile:130`). To
+exercise it locally, run it directly:
 
 ```bash
 sudo apt-get install -y libvirt-dev pkg-config   # Debian/Ubuntu
 CGO_ENABLED=1 go test ./internal/providers/libvirt/...
 ```
+
+The vSphere provider, by contrast, is pure-Go and is covered by the default
+`make test` / `make lint` / `make build` targets — no CGO toolchain needed.
 
 ### `make test-e2e` exits 0 immediately
 
@@ -273,7 +282,7 @@ go test -tags=e2e ./test/e2e/... -v -ginkgo.v
 ### IDE "Run all tests" fails on `TestE2E`
 
 Pre-PR #133 this was the default and the `BeforeSuite` would fail with
-"Kind not running". As of v0.3.6 the e2e suite is gated behind a build
+"Kind not running". Since v0.3.6 the e2e suite is gated behind a build
 tag, so the IDE should no longer pick it up. If you still see it, your
 IDE's Go settings include `-tags=e2e`; remove it for the default test run.
 

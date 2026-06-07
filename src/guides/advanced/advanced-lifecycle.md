@@ -19,6 +19,24 @@ VirtRigaud Stage E introduces comprehensive VM lifecycle management capabilities
 - **Image Preparation**: Automated image import and preparation workflows
 - **Lifecycle Hooks**: Run actions before power-off (`preStop`) or after power-on (`postStart`)
 
+!!! warning "Feature status in v0.3.8 — read before designing around these"
+    Not every resource on this page has an active controller yet. As of
+    **v0.3.8**:
+
+    - **VMClone** — MVP controller is active (`source.vmRef`-only,
+      same-provider, Full/Linked clone). See the dedicated
+      [VM Cloning guide](vm-cloning.md) for the authoritative scope.
+    - **VMSet** — the controller is **not yet active**. The resource exists
+      but reports `Ready=False` / `ControllerNotImplemented`. The
+      rolling-update behavior described below is the intended design, **not**
+      functional in v0.3.8.
+    - **VMPlacementPolicy** — **reference-only** (no dedicated controller).
+      You can attach a policy via `spec.placementRef`, but VirtRigaud does
+      **not** enforce hard/soft placement or anti-affinity in v0.3.8.
+
+    Reconfiguration, snapshots, image preparation, and lifecycle hooks are
+    functional subject to provider support.
+
 ## Lifecycle Hooks
 
 VirtRigaud supports running actions at key points in a VM's power-state transitions. Hooks execute synchronously as part of the power operation — the controller waits for them to complete before continuing.
@@ -228,6 +246,14 @@ The controller will:
 
 ## VM Cloning
 
+!!! tip "Dedicated guide"
+    VMClone has its own focused guide:
+    **[VM Cloning (VMClone)](vm-cloning.md)**. It covers the v0.3.8 MVP scope
+    (vmRef-only source, same-provider, full vs linked clones), provider
+    support (including libvirt `Clone` being unimplemented), what the
+    controller produces, and cleanup semantics. The snippet below is the
+    minimal shape; consult that guide before building around VMClone.
+
 ### Basic Cloning
 
 ```yaml
@@ -236,38 +262,42 @@ kind: VMClone
 metadata:
   name: web-server-clone
 spec:
-  sourceRef:
-    name: web-server
+  source:
+    vmRef:
+      name: web-server          # an already-provisioned VirtualMachine
   target:
     name: web-server-test
     classRef:
       name: test-class
-  linked: true  # Faster, space-efficient
-  powerOn: true
+  options:
+    type: FullClone             # or LinkedClone (requires provider support)
+    powerOn: true
 ```
 
-### Clone Customization
+On success the controller produces an *adopted* target `VirtualMachine` CR
+(labeled `virtrigaud.io/adopted=true`, with its `Status.ID` seeded from the
+provider clone ID). Deleting the `VMClone` does **not** delete the produced
+VM — see [VM Cloning](vm-cloning.md#lifecycle-and-cleanup-semantics).
 
-```yaml
-spec:
-  customization:
-    hostname: web-server-test
-    networks:
-      - name: primary
-        ipAddress: "192.168.1.100"
-        gateway: "192.168.1.1"
-        dns: ["8.8.8.8"]
-    userData:
-      cloudInit:
-        inline: |
-          #cloud-config
-          runcmd:
-            - echo "Test environment" > /etc/motd
-```
+!!! note "Clone customization is not applied by the MVP"
+    The `spec.customization` block (hostname, per-network IPs, cloud-init
+    overrides, etc.) exists on the CRD for forward compatibility but is
+    **not** acted on by the v0.3.8 VMClone controller. The MVP inherits the
+    source VM's shape. Track this limitation via the
+    [VM Cloning guide](vm-cloning.md#mvp-scope-and-limits-v038).
 
 ## Multi-VM Sets (VMSet)
 
-VMSets provide declarative management of multiple VMs with rolling updates.
+!!! warning "VMSet controller is not active in v0.3.8"
+    The VMSet resource exists, but its controller is a **not-yet-active
+    stub**: a VMSet reports `Ready=False` with reason
+    `ControllerNotImplemented`. Replica counts, rolling updates, and the
+    `updateStrategy` below are the **intended design only** — VirtRigaud
+    does **not** manage VMSet replicas in v0.3.8. Manage individual
+    `VirtualMachine` resources (optionally via [VMClone](vm-cloning.md)) until
+    the controller lands.
+
+VMSets are intended to provide declarative management of multiple VMs with rolling updates.
 
 ### Basic VMSet
 
@@ -301,13 +331,25 @@ spec:
 
 ### Rolling Updates
 
-When you update the template spec, VMSet will:
+!!! warning "Design intent, not yet implemented"
+    The rolling-update flow below describes how VMSet is intended to behave
+    once its controller is active. It does **not** run in v0.3.8 (see the
+    VMSet warning above).
+
+When you update the template spec, VMSet is intended to:
 1. Create new VMs with updated configuration
 2. Wait for new VMs to be ready
 3. Delete old VMs respecting `maxUnavailable`
 4. Continue until all replicas are updated
 
 ## Placement Policies
+
+!!! warning "Reference-only in v0.3.8 — not enforced"
+    `VMPlacementPolicy` has **no dedicated controller** in v0.3.8. You can
+    create a policy and attach it via `spec.placementRef`, but VirtRigaud
+    does **not** enforce hard/soft constraints or anti-affinity rules. The
+    rules below document the schema and intended semantics, not active
+    behavior.
 
 ### Advanced Placement Rules
 
@@ -338,10 +380,12 @@ spec:
     name: production-policy
 ```
 
-The provider will attempt to satisfy:
+When a placement controller is implemented, the provider is intended to satisfy:
 1. **Hard constraints**: Must be satisfied
 2. **Soft constraints**: Best effort
 3. **Anti-affinity rules**: Avoid co-location
+
+In v0.3.8 the reference is accepted but the constraints are not enforced.
 
 ## Image Preparation
 
@@ -381,23 +425,32 @@ spec:
 
 ## Provider Capabilities
 
-Different providers support different features. Query capabilities:
+Different providers support different features. As of **v0.3.8**
+([#176](https://github.com/projectbeskar/virtrigaud/pull/176)) the manager
+records what each provider reports under
+`Provider.status.reportedCapabilities`:
 
 ```yaml
-# Example capabilities response
+# Example reported capabilities (Provider status)
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: Provider
 status:
-  capabilities:
+  reportedCapabilities:
     supportsReconfigureOnline: true      # vSphere: true, Libvirt: false
     supportsDiskExpansionOnline: true    # vSphere: true, Libvirt: false
     supportsSnapshots: true              # Both: true
     supportsMemorySnapshots: true        # vSphere: true, Libvirt: varies
-    supportsLinkedClones: true           # Both: true
-    supportsImageImport: true            # Both: true
+    supportsLinkedClones: true           # vSphere/Proxmox; Libvirt: no
+    supportsImageImport: true            # vSphere/Proxmox; Libvirt: stub
     supportedDiskTypes: ["thin", "thick"]
     supportedNetworkTypes: ["VMXNET3", "E1000"]
 ```
+
+An opt-in `--enforce-provider-capabilities` manager flag (default **off**)
+makes the manager refuse operations a provider does not advertise. The
+[VMClone](vm-cloning.md) linked-clone gate runs regardless of that flag.
+For the authoritative per-provider matrix, see the
+[Provider Capabilities Matrix](../../providers/providers-capabilities.md).
 
 ## Observability
 
@@ -521,9 +574,17 @@ kubectl describe vmset web-tier
 
 Existing VMs can be enhanced with advanced features:
 
-1. **Add Placement Policy**: Update VM spec with `placementRef`
-2. **Enable Reconfiguration**: Add resource overrides
-3. **Create Snapshots**: Deploy VMSnapshot resources
-4. **Scale with VMSets**: Migrate to VMSet for multi-instance workloads
+1. **Enable Reconfiguration**: Add resource overrides
+2. **Create Snapshots**: Deploy VMSnapshot resources
+3. **Clone an existing VM**: Use [VMClone](vm-cloning.md) to stamp out a
+   same-provider copy
 
-The controller maintains backward compatibility with existing VM definitions.
+The controller maintains backward compatibility with existing VM
+definitions.
+
+!!! note "Not yet available in v0.3.8"
+    Two items that earlier docs listed here are not functional in v0.3.8:
+    attaching a `placementRef` is accepted but **not enforced**
+    (VMPlacementPolicy is reference-only), and **VMSet** has no active
+    controller, so "scale with VMSets" is not yet a supported path. See the
+    feature-status warning at the top of this page.

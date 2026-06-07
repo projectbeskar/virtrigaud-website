@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # 15-Minute Quickstart
 
-This guide gets you up and running with VirtRigaud v0.3.7 in 15 minutes using either a vSphere or Libvirt provider.
+This guide gets you up and running with VirtRigaud v0.3.8 in 15 minutes using either a vSphere or Libvirt provider.
 
 ## Prerequisites
 
@@ -27,16 +27,24 @@ helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
 helm repo update virtrigaud
 
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.7 \
+  --version 0.3.8 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
+
+!!! note "Providers are disabled by default in v0.3.8"
+    As of v0.3.8 the chart deploys only the manager by default. Provider
+    Deployments are **opt-in** — set `providers.<type>.enabled=true` to
+    deploy a templated provider alongside the manager, or manage providers
+    independently as Provider CRs. This is a secure-by-default change;
+    see the [Upgrade Guide](../operations/upgrade.md) if you relied on
+    auto-deployed providers in v0.3.7.
 
 To enable specific providers at install time:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.7 \
+  --version 0.3.8 \
   --namespace virtrigaud-system \
   --create-namespace \
   --set providers.vsphere.enabled=true \
@@ -47,7 +55,7 @@ To skip CRDs if you manage them separately:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.7 \
+  --version 0.3.8 \
   --namespace virtrigaud-system \
   --create-namespace \
   --skip-crds
@@ -70,19 +78,19 @@ kubectl get pods -n virtrigaud-system
 # All 10 CRDs are installed
 kubectl get crds | grep virtrigaud.io
 
-# Manager is at v0.3.7
+# Manager is at v0.3.8
 kubectl logs -n virtrigaud-system deployment/virtrigaud-manager | head -5
 ```
 
-After the manager starts, confirm v0.3.7 is running via the metrics endpoint:
+After the manager starts, confirm v0.3.8 is running via the metrics endpoint:
 
 ```bash
 kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8080:8080 &
 curl -s http://localhost:8080/metrics | grep '^virtrigaud_build_info'
-# virtrigaud_build_info{component="manager",...,version="v0.3.7"} 1
+# virtrigaud_build_info{component="manager",...,version="v0.3.8"} 1
 ```
 
-Starting with v0.3.7 you will also see the new `virtrigaud_circuit_breaker_state` and `virtrigaud_provider_tasks_inflight` families on `/metrics` (seeded to 0 at boot for every Provider CR). See the [Observability Guide](../operations/observability.md) for the full v0.3.7 metrics surface.
+The `virtrigaud_circuit_breaker_state` and `virtrigaud_provider_tasks_inflight` families are seeded to 0 at boot for every Provider CR. Reconcile metrics now include `kind="VMClone"` and `kind="VMSet"` series. See the [Observability Guide](../operations/observability.md) for the full metrics surface.
 
 ## Step 3: Configure a Provider
 
@@ -111,7 +119,7 @@ spec:
     namespace: default
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.7"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
     service:
       port: 9090
       tls:
@@ -121,11 +129,11 @@ spec:
         insecureSkipVerify: false
 ```
 
-!!! note "mTLS required in v0.3.7"
+!!! note "mTLS required"
     Every Provider CR must include a `spec.runtime.service.tls` block.
     A Provider without it will not reconcile (`TLSConfigured=False,
-    Reason=TLSBlockMissing`). See the [upgrade guide](../operations/upgrade.md#v036--v037)
-    for remediation steps. Images are now multi-arch (`linux/amd64` +
+    Reason=TLSBlockMissing`). See the [upgrade guide](../operations/upgrade.md#v036-v037)
+    for remediation steps. Images are multi-arch (`linux/amd64` +
     `linux/arm64`) — no action required for arm64 clusters.
 
 ### Option B: Libvirt Provider
@@ -151,7 +159,7 @@ spec:
     namespace: default
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.7"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.8"
     service:
       port: 9090
       tls:
@@ -304,7 +312,35 @@ spec:
   memory: true
 ```
 
-### Scale with VMSet
+### Clone a VM
+
+VMClone is functional in v0.3.8 (vSphere and Proxmox; libvirt returns `Unimplemented`):
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClone
+metadata:
+  name: my-first-vm-clone
+  namespace: default
+spec:
+  source:
+    vmRef:
+      name: my-first-vm
+      namespace: default
+  targetName: my-first-vm-clone-target
+  classRef:
+    name: small
+    namespace: default
+  options:
+    type: Full
+```
+
+### VMSet (stub — not functional in v0.3.8)
+
+!!! warning "VMSet controller not yet active"
+    The `VMSet` CRD is installed but the controller is a stub. Any `VMSet`
+    resource will immediately show `Ready=False / Reason=ControllerNotImplemented`.
+    Do not use VMSet in production in v0.3.8.
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -333,7 +369,7 @@ spec:
 ```bash
 kubectl delete vm my-first-vm
 kubectl delete vmsnapshot my-vm-snapshot
-kubectl delete vmset web-servers
+kubectl delete vmclone my-first-vm-clone
 
 # Uninstall VirtRigaud (optional)
 helm uninstall virtrigaud -n virtrigaud-system

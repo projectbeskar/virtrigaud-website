@@ -110,7 +110,7 @@ visible by grepping the provider for the strings it sends to
 grep -rn 'runVirshCommand[^"]*"!", "sudo"' internal/providers/libvirt/
 ```
 
-For v0.3.6, the minimal sudoers grant is:
+The minimal sudoers grant is:
 
 ```text
 # /etc/sudoers.d/virt-admin   (mode 0440, owner root:root)
@@ -207,6 +207,67 @@ spec:
         value: "true"
 ```
 
+### SSH connection rate-limiting (`MaxStartups` / `fail2ban`)
+
+The libvirt provider drives the host by running `virsh` over SSH as a
+subprocess, opening a fresh SSH connection per command. During reconcile storms
+or a migration's back-to-back RPC sequence, the provider can open many
+short-lived SSH connections in a burst. Two host-side controls commonly throttle
+or block those bursts:
+
+- **`sshd`'s `MaxStartups`** caps the number of concurrent *unauthenticated*
+  connections. The default (`10:30:100`) starts randomly dropping new
+  connections once 10 are in the pre-auth phase. A dropped connection surfaces
+  to the provider as
+  `kex_exchange_identification: Connection closed by remote host`.
+- **`fail2ban`** (if you run the `sshd` jail) can interpret a burst of rapid
+  connections from one source as an attack and temporarily ban the provider
+  pod's source IP, after which *every* `virsh` call fails until the ban expires.
+
+!!! note "v0.3.8 mitigates this client-side — but tune the host too"
+    v0.3.8 makes the libvirt provider **retry transient SSH connection failures
+    with bounded backoff** ([#191](https://github.com/projectbeskar/virtrigaud/pull/191)),
+    which absorbs the occasional `kex_exchange_identification` drop without
+    failing the RPC. That retry is the client-side half. If the host's limits
+    are tight, bursts can still outrun the backoff. Raise the host's budget so
+    the two halves meet in the middle:
+
+Recommended host-side tuning:
+
+```bash
+# /etc/ssh/sshd_config.d/10-virtrigaud.conf
+# Raise the concurrent-unauthenticated ceiling for the provider's bursts.
+MaxStartups 60:30:120
+
+# Keep per-connection sessions modest; the provider opens many short connections,
+# not many channels on one connection.
+MaxSessions 10
+```
+
+```bash
+sudo systemctl reload sshd
+```
+
+If you run `fail2ban`, either allowlist the provider pod's source range or relax
+the `sshd` jail for it:
+
+```ini
+# /etc/fail2ban/jail.d/virtrigaud.local
+[sshd]
+# Allowlist the cluster/pod CIDR the provider connects from so legitimate
+# bursts are never counted as failures. Replace with your actual range.
+ignoreip = 127.0.0.1/8 <provider-source-cidr>
+```
+
+```bash
+sudo systemctl restart fail2ban
+sudo fail2ban-client status sshd   # confirm the provider IP is not banned
+```
+
+Prefer **allowlisting the provider's source range** over disabling the jail
+entirely — defence-in-depth still matters, and the provider's connections are
+the only ones that should be bursting from that range.
+
 ## Storage pool setup
 
 ### Default pool
@@ -240,21 +301,18 @@ ls -ld /var/lib/libvirt/images
 
 ### Linked clones (qcow2 backing files)
 
-!!! warning "Capability flag says yes; in-tree Clone RPC is a stub in v0.3.6"
-    The libvirt provider advertises `SupportsLinkedClones: true` from
-    `GetCapabilities` (`internal/providers/libvirt/server.go:463`), and the
-    underlying qcow2 format does support backing files (the host requirement
-    that this section documents). However, the **`Clone` RPC implementation
-    itself** (`internal/providers/libvirt/server.go:428-442`) currently
-    returns a synthetic `vm-clone-<id>` and a synthetic task ID without
-    issuing any storage or libvirt operations. The
-    `StorageProvider.CloneVolume` helper exists at
-    `internal/providers/libvirt/storage.go:459`, but is not yet invoked by
-    the Clone RPC.
+!!! warning "Libvirt Clone is Unimplemented (v0.3.8)"
+    As of v0.3.8 the libvirt provider is **honest** about clone support: its
+    `Clone` RPC returns `Unimplemented` and `GetCapabilities` reports
+    `SupportsLinkedClones=false` / `SupportsImageImport=false` (#153/#154).
+    Earlier docs described a stub that returned a synthetic ID — that has been
+    replaced by an explicit `Unimplemented` so a libvirt `VMClone` fails fast
+    with a clear `ProviderError` rather than silently no-op'ing. (vSphere and
+    Proxmox implement `Clone`.)
 
-    The host preparation in this section is correct for when the Clone RPC
-    starts using `CloneVolume` — it does not enable linked-clone behavior in
-    v0.3.6 on its own.
+    The qcow2 backing-file host preparation in this section remains useful
+    background for if/when libvirt clone is implemented, but it does not
+    enable linked-clone behavior on its own today. Tracking: #153.
 
 The qcow2 format supports a backing file (`qcow2: backing_file=<path>`)
 which lets a clone share unchanged blocks with its parent and only allocate
@@ -540,6 +598,14 @@ failed` and add the correct `known_hosts` entry as described in
 If `nc` works and `virsh version` from inside the provider pod still fails after
 fixing `known_hosts`, it is almost always a credentials / sudo /
 group-membership issue on the libvirt side, not SSH itself.
+
+If the provider logs show `kex_exchange_identification: Connection closed by
+remote host` — especially in bursts during reconcile storms or a migration —
+the host's `sshd` is rate-limiting connections, or `fail2ban` has banned the
+provider's source IP. v0.3.8 retries these transient drops client-side
+([#191](https://github.com/projectbeskar/virtrigaud/pull/191)), but you should
+also raise the host's `MaxStartups` / allowlist the provider source as described
+in [SSH connection rate-limiting](#ssh-connection-rate-limiting-maxstartups-fail2ban).
 
 ### Cloud-init does not run
 

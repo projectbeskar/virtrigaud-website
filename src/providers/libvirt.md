@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The Libvirt provider manages VMs on KVM/QEMU via the `libvirt` daemon, talking to it through `virsh` shelled out over SSH. It is the simplest provider to operate against and is widely deployed on-premises.
 
-This page is aligned to **VirtRigaud v0.3.7**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/libvirt/server.go`.
+This page is aligned to **VirtRigaud v0.3.8**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/libvirt/server.go`.
 
 !!! note "Implementation detail: virsh over SSH"
     Unlike most libvirt integrations that use the C `libvirt-go` bindings (which require cgo), VirtRigaud's libvirt provider shells out to the `virsh` CLI over an SSH tunnel to the remote libvirt host (`internal/providers/libvirt/virsh.go`). This keeps the provider image small (no libvirt-dev runtime) and avoids cgo entirely, at the cost of being more sensitive to SSH-host hygiene. See [Troubleshooting](#troubleshooting) for the SSH-host-issue narrative.
@@ -22,8 +22,9 @@ The libvirt provider advertises the following via `GetCapabilities` (`internal/p
 | `SupportsDiskExpansionOnline` | false | Disk grow requires power cycle (qemu-img resize + guest fs grow). |
 | `SupportsSnapshots` | true | `virsh snapshot-create-as` against qcow2 storage. |
 | `SupportsMemorySnapshots` | **false** | The capability flag is false. The code path *does* allow `--disk-only`-off snapshots on running domains, but the contract advertises no memory-snapshot support and the manager short-circuits memory-snapshot requests against this provider. |
-| `SupportsLinkedClones` | **true** | Linked clones via qcow2 backing files. The matrix previously claimed `false` for this — corrected in v0.3.6 docs alignment. |
-| `SupportsImageImport` | true | Image fetched from URL into a storage pool volume. |
+| `SupportsLinkedClones` | **false** | Corrected in v0.3.8 (#153): the libvirt `Clone` RPC returns `Unimplemented` and `GetCapabilities` reports `SupportsLinkedClones=false`. See [Cloning](#cloning-unimplemented) below. |
+| `SupportsImageImport` | **false** | Corrected in v0.3.8 (#153/#154): `ImagePrepare` returns `Unimplemented`. Stage the base image on the host / storage pool out of band. |
+| `SupportsDiskExport` | **true** | `ExportDisk` / `GetDiskInfo` (#177). Disk import is not supported. |
 | `SupportedDiskTypes` | `qcow2`, `raw`, `vmdk` | QEMU-supported formats (qcow2 is the recommended default). |
 | `SupportedNetworkTypes` | `virtio`, `e1000`, `rtl8139` | QEMU virtual NIC models advertised by `GetCapabilities`. |
 
@@ -42,7 +43,9 @@ For the full cross-provider matrix and resilience / observability narrative:
 - **Describe** — domain state, VNC URL, IPs (via QEMU guest agent or DHCP lease).
 - **Reconfigure** — `virsh setvcpus --config` / `virsh setmem --config`; `--live` is attempted on a best-effort basis but typically needs a restart for persistence.
 - **SnapshotCreate / SnapshotDelete / SnapshotRevert** — `virsh snapshot-*` against qcow2 storage. Synchronous; no `TaskRef` is returned (libvirt operations are blocking from `virsh`'s perspective).
-- **CloneCreate** — `virt-clone` for full clones; qcow2 `backing_file` linkage for linked clones.
+- **Clone** — **`Unimplemented`** as of v0.3.8 (#153). `GetCapabilities` reports `SupportsLinkedClones=false`; the manager will not route clone requests here.
+- **ImagePrepare** — **`Unimplemented`** as of v0.3.8 (#153/#154). `SupportsImageImport=false`; stage base images out of band.
+- **ExportDisk / GetDiskInfo** — disk export with accurate capability flags / formats (#177). Disk import is not implemented. These back the export side of cross-provider migration.
 - **ConsoleUrl** — `vnc://<host>:<port>` parsed from `virsh dumpxml`.
 
 ## Prerequisites
@@ -91,7 +94,7 @@ spec:
     name: libvirt-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.7"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.8"
     service:
       port: 9090
       tls:
@@ -282,6 +285,9 @@ metadata:
 spec:
   source:
     libvirt:
+      # As of v0.3.8 the libvirt provider does NOT fetch this URL itself
+      # (ImagePrepare is Unimplemented, #153/#154). Pre-stage the base image
+      # in the pool out of band; the URL serves as provenance/documentation.
       url: "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
       pool: default
       format: qcow2
@@ -341,26 +347,16 @@ The `SupportsMemorySnapshots=false` capability flag means the manager will not r
 
 Snapshots return synchronously (no `TaskRef`). All work has completed by the time the `SnapshotCreate` RPC returns.
 
-## Linked clones (corrected in v0.3.6)
+## Cloning (Unimplemented)
 
-`SupportsLinkedClones=true`. Libvirt linked clones are implemented as a new qcow2 volume with `backing_file` pointing at the source disk — the child only stores deltas. The matrix previously claimed `false` for this. The provider's `GetCapabilities` response has always reported `true`; v0.3.6 documentation now agrees.
+!!! warning "libvirt does not support cloning as of v0.3.8"
+    The libvirt provider's `Clone` RPC returns **`Unimplemented`**, and `GetCapabilities` reports `SupportsLinkedClones=false` (#153). Both full and linked clones are unsupported on this provider.
 
-```yaml
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClone
-metadata:
-  name: dev-vm-02-clone
-spec:
-  source:
-    vmRef:
-      name: dev-vm-01
-  target:
-    name: dev-vm-02
-  options:
-    type: LinkedClone    # FullClone is also supported (virt-clone full pass)
-```
+    An earlier revision of these docs (and a capability footnote) claimed `SupportsLinkedClones=true`, said linked clones were implemented via qcow2 `backing_file`, and described this as "corrected in v0.3.6". **That claim is reversed as of v0.3.8** — the #153/#154 honesty pass aligned the documented behaviour with the actual `GetCapabilities` response, which advertises no clone support.
 
-Caveat: a linked clone's parent must remain on the same storage pool. Moving or deleting the parent breaks the child.
+If you need cloning today, use a provider that implements it: vSphere or Proxmox. The `VMClone` controller (MVP, #179) drives same-provider full/linked clones only against providers whose `GetCapabilities` advertises support — a `VMClone` targeting a libvirt source/target is rejected rather than silently failing at the host.
+
+To approximate a clone manually on libvirt, copy the disk volume on the host (`qemu-img create -b <parent> -F qcow2 <child>` for a backing-file copy, or `qemu-img convert` for a full copy) and define a new domain pointing at it — this is an out-of-band operation, not driven by VirtRigaud.
 
 ## Reconfigure (restart-required for full effect)
 
@@ -399,6 +395,9 @@ virtrigaud_circuit_breaker_state{provider_type="libvirt", provider="libvirt-lab"
 immediately after a fresh `helm install`, the breaker is doing exactly what it was wired to do (G6 / PR #112): it has detected repeated RPC failures against the libvirt provider pod and has fast-failed further requests rather than spam the SSH endpoint.
 
 The most common root cause in practice is an SSH-host issue on the libvirt side. The v0.3.6-rc1 smoke on the `vr1.lab.k8` lab cluster hit this with a `kex_exchange_identification: Connection closed by remote host` against the libvirt host — sshd was up but refusing the new connection (rate-limit / per-IP block / MaxStartups exhausted). The CircuitBreaker surfaced it immediately on `/metrics`; previous releases would have just spammed the manager log.
+
+!!! note "Transient-SSH retry (v0.3.8, #191)"
+    As of v0.3.8 the libvirt provider **retries transient SSH connection failures** — notably `kex_exchange_identification: Connection closed by remote host` — with bounded backoff before giving up. This absorbs short-lived `MaxStartups` bursts and brief `sshd` hiccups, so the breaker no longer trips on a single momentary refusal. It does **not** paper over a genuinely misconfigured host: operators must still tune the libvirt host's `sshd` `MaxStartups` and any `fail2ban` policy so the provider pod's source IP is not throttled or banned under sustained load. The retry buys resilience against blips, not against a hostile SSH policy.
 
 **Triage steps**:
 

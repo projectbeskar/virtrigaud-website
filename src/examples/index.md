@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Examples
 
-This directory contains examples for VirtRigaud v0.3.6. All YAML examples use the `infra.virtrigaud.io/v1beta1` API.
+This directory contains examples for VirtRigaud v0.3.8. All YAML examples use the `infra.virtrigaud.io/v1beta1` API.
 
 ## Quick Start Examples
 
@@ -22,9 +22,44 @@ This directory contains examples for VirtRigaud v0.3.6. All YAML examples use th
 - **[vmimage-ubuntu.yaml](vmimage-ubuntu.yaml)** - VM image configuration
 - **[vmnetwork-app.yaml](vmnetwork-app.yaml)** - Network attachment configuration
 
+## v0.3.8 Feature Examples
+
+### VMClone (MVP — vSphere and Proxmox only)
+
+The `VMClone` controller is active in v0.3.8. Full and linked clones are supported when the source is a `vmRef` on the same provider. Libvirt returns `Unimplemented`.
+
+- **[advanced/vsphere-clone-example.yaml](advanced/vsphere-clone-example.yaml)** — Full and linked VMClone examples for vSphere
+- **[advanced/proxmox-clone-example.yaml](advanced/proxmox-clone-example.yaml)** — VMClone for Proxmox VE
+
+Minimal clone example:
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClone
+metadata:
+  name: my-clone
+  namespace: default
+spec:
+  source:
+    vmRef:
+      name: source-vm
+      namespace: default
+  targetName: my-clone-target
+  classRef:
+    name: small
+    namespace: default
+  options:
+    type: Full      # or Linked
+```
+
+!!! warning "VMSet not functional in v0.3.8"
+    `VMSet` resources are accepted by the API server but the controller stub
+    immediately sets `Ready=False / Reason=ControllerNotImplemented`. Do not
+    use VMSet for production workloads.
+
 ## v0.2.1 Feature Examples
 
-The following examples were added for v0.2.1 features and are still valid in v0.3.6:
+The following examples were added for v0.2.1 features and are still valid in v0.3.8:
 
 - **[v021-feature-showcase.yaml](v021-feature-showcase.yaml)** - Graceful shutdown, lifecycle hooks, hardware version
 - **[graceful-shutdown-examples.yaml](graceful-shutdown-examples.yaml)** - OffGraceful power state configurations
@@ -40,8 +75,8 @@ The following examples were added for v0.2.1 features and are still valid in v0.
 
 ## Migration Examples
 
-!!! warning "Storage and migration direction constraints in v0.3.6"
-    `storage.type: pvc` is the only accepted value in v0.3.6. S3, NFS, block, and live storage backends do not exist in the CRD and will be rejected by the controller. Additionally, only the vSphere → Libvirt migration direction is tested; other source/target pairs are documented but not validated in production. See [Migration User Guide](../migration/user-guide.md) for details.
+!!! warning "Storage and migration direction constraints"
+    `storage.type: pvc` is the only accepted value. S3, NFS, block, and live storage backends do not exist in the CRD and will be rejected by the controller. Additionally, only the vSphere → Libvirt migration direction is tested; other source/target pairs are documented but not validated in production. See [Migration User Guide](../migration/user-guide.md) for details.
 
 - **[vmmigration-basic.yaml](vmmigration-basic.yaml)** - Basic vSphere → Libvirt migration
 - **[vmmigration-advanced.yaml](vmmigration-advanced.yaml)** - Migration with storage and network mapping
@@ -51,7 +86,8 @@ The following examples were added for v0.2.1 features and are still valid in v0.
 See the [advanced/](advanced/index.md) subdirectory for:
 
 - **[advanced/vm-reconfigure-and-snapshot.yaml](advanced/vm-reconfigure-and-snapshot.yaml)** - VM reconfiguration with pre-reconfigure snapshot
-- **[advanced/vsphere-clone-example.yaml](advanced/vsphere-clone-example.yaml)** - VMClone from an existing VM
+- **[advanced/vsphere-clone-example.yaml](advanced/vsphere-clone-example.yaml)** - VMClone from an existing VM (vSphere, Full + Linked)
+- **[advanced/proxmox-clone-example.yaml](advanced/proxmox-clone-example.yaml)** - VMClone for Proxmox VE
 - **[advanced/console-access-example.yaml](advanced/console-access-example.yaml)** - Console URL access
 - **[advanced/snapshot-lifecycle.yaml](advanced/snapshot-lifecycle.yaml)** - Snapshot lifecycle management
 - **[advanced/vsphere-task-tracking.yaml](advanced/vsphere-task-tracking.yaml)** - Async task tracking status
@@ -115,8 +151,8 @@ src/examples/
 
 ## Version Compatibility
 
-- **v0.3.6**: All examples in this directory
-- **v0.3.x**: Examples are backward compatible within the v0.3.x line
+- **v0.3.8**: All examples in this directory; VMClone examples require v0.3.8+
+- **v0.3.x**: Examples are backward compatible within the v0.3.x line (VMClone examples require v0.3.8)
 - **v0.2.x and older**: Not supported
 
 ## See Also
