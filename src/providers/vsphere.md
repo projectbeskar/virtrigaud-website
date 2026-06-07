@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The vSphere provider manages virtual machines on VMware vSphere (vCenter Server and standalone ESXi) via the `govmomi` SDK. It is the most mature provider in the VirtRigaud tree and powers production deployments.
 
-This page is aligned to **VirtRigaud v0.3.7**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/vsphere/server.go`.
+This page is aligned to **VirtRigaud v0.3.8**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/vsphere/server.go`.
 
 ## Capabilities at a glance
 
@@ -20,8 +20,11 @@ The vSphere provider advertises the following via `GetCapabilities` (`internal/p
 | `SupportsSnapshots` | true | Standard vSphere snapshots (disk state + config). |
 | `SupportsMemorySnapshots` | **false** | vSphere snapshots in this provider do **not** capture RAM state. Memory snapshots must be taken through vCenter directly. |
 | `SupportsLinkedClones` | true | Delta-disk clones sharing a parent VMDK. |
-| `SupportsImageImport` | true | OVF/OVA import + content library deploy. Direct URL-based cloud-image fetch is not yet implemented in v0.3.6 — see the [capability matrix](providers-capabilities.md). |
+| `SupportsImageImport` | true | OVF/OVA import + content library deploy. Direct URL-based cloud-image fetch is not yet implemented as of v0.3.8 — see the [capability matrix](providers-capabilities.md). |
+| `SupportsDiskExport` | **true** | `ExportDisk` / `GetDiskInfo` (#178). Advertises export compression. |
+| `SupportsDiskImport` | **true** | `ImportDisk` (#178). Feeds the cross-provider migration pipeline. |
 | `SupportedDiskTypes` | `thin`, `thick`, `eager-zeroed` | Native VMDK provisioning modes. |
+| `SupportedExportFormats` | `vmdk`, `qcow2`, `raw` | Disk export/import formats advertised by `GetCapabilities` as of v0.3.8 (#178); prior releases understated these. |
 | `SupportedNetworkTypes` | `standard`, `distributed` | Standard vSwitch portgroups and Distributed Virtual Switch portgroups. |
 
 !!! warning "Memory snapshots on vSphere"
@@ -35,9 +38,9 @@ For the full cross-provider matrix and resilience / observability story, see:
 
 ## RPC support
 
-The provider implements the full v0.3.6 gRPC contract (`proto/provider/v1/provider.proto`):
+The provider implements the full gRPC contract (`proto/provider/v1/provider.proto`):
 
-- **Validate** — connectivity + credential check against vCenter.
+- **Validate** — connectivity + credential check against vCenter, with a live probe + session reconnect (see [Session resilience](#session-resilience-v038)).
 - **Create** — clone from a template/VM **or** import disk via OVF/OVA.
 - **Delete** — VM teardown with disk cleanup.
 - **Power** — On / Off / Reboot / Shutdown-Graceful.
@@ -45,9 +48,10 @@ The provider implements the full v0.3.6 gRPC contract (`proto/provider/v1/provid
 - **Reconfigure** — CPU / memory / disk changes (hot when possible).
 - **SnapshotCreate / SnapshotDelete / SnapshotRevert** — disk-only.
 - **CloneCreate** — full or linked.
-- **TaskStatus** — polls the underlying govmomi `Task` until terminal. Counts toward the v0.3.6 `virtrigaud_provider_tasks_inflight` gauge.
+- **TaskStatus** — polls the underlying govmomi `Task` until terminal. Counts toward the `virtrigaud_provider_tasks_inflight` gauge.
 - **ConsoleUrl** — vSphere web client URL with VM instance UUID.
 - **ImagePrepare** — OVF/OVA import and content-library deploy.
+- **ExportDisk / ImportDisk / GetDiskInfo** — disk export and import advertising `vmdk` / `qcow2` / `raw` plus export compression (#178). These back the cross-provider migration pipeline.
 
 ## Prerequisites
 
@@ -92,7 +96,7 @@ spec:
   insecureSkipVerify: false
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.7"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
     service:
       port: 9443
       tls:
@@ -375,6 +379,17 @@ vSphere operations that are long-running (clone, snapshot, reconfigure-with-larg
 
 Since v0.3.6, every in-flight task is counted by the `virtrigaud_provider_tasks_inflight{provider_type="vsphere", provider="<name>"}` gauge (G7.3 / PR #130). The gauge is seeded to `0` at boot so it appears on `/metrics` from the first scrape; useful for catching stuck tasks. See [Observability](../operations/observability.md#11-virtrigaud_provider_tasks_inflight).
 
+## Session resilience (v0.3.8)
+
+As of v0.3.8 (#190), the vSphere provider keeps its vCenter session alive and recovers from long idle periods automatically:
+
+- A **keepalive** runs against the govmomi session so it does not lapse during quiet periods.
+- **`Validate` performs a live probe** of the session and **reconnects** if the session has gone stale.
+
+The practical effect: a provider pod that has been idle for hours (overnight, between batch runs) no longer fails its next RPC with a `NotAuthenticated` / `session is not authenticated` error and then has to be restarted. The breaker stays closed across idle windows.
+
+If you previously worked around stale sessions with a periodic provider-pod restart (CronJob, etc.), you can drop that workaround on v0.3.8.
+
 ## Console access
 
 `Describe` populates `status.consoleURL` with a vSphere web client deep link that includes the VM's instance UUID. Open it in a browser; vCenter prompts for authentication and lands you on the VM's summary tab.
@@ -429,6 +444,10 @@ Older releases hit this when a StoragePod-resolved datastore was reattached to a
 ### "Login failed: incorrect user name or password"
 
 The username in `Provider.spec.credentialSecretRef` Secret must match the **principal name** expected by vCenter — usually `user@vsphere.local`, not bare `user`. Also check whether the user is locked out via Single Sign-On.
+
+### `NotAuthenticated` after a long idle period
+
+On releases before v0.3.8 the govmomi session could lapse during long idle windows, and the next RPC would fail with `NotAuthenticated` / `session is not authenticated` until the provider pod was restarted. v0.3.8 (#190) adds a session keepalive and a live-probe reconnect in `Validate`, so the session self-heals. If you still see this, upgrade to v0.3.8 and confirm the provider image tag is `:v0.3.8`. See [Session resilience](#session-resilience-v038).
 
 ### Template not found
 

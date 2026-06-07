@@ -141,6 +141,7 @@ nav:
           - Provider Versioning: providers/versioning.md
       - Advanced Topics:
           - VM Lifecycle Management: guides/advanced/advanced-lifecycle.md
+          - VM Cloning: guides/advanced/vm-cloning.md
           - Nested Virtualization: guides/advanced/nested-virtualization.md
           - Graceful Shutdown: guides/advanced/graceful-shutdown.md
           - Remote Providers: guides/advanced/remote-providers.md

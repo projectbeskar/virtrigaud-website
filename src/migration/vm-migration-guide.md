@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # VM Migration Guide — architecture and internals
 
 This page is the **architectural deep dive** for VirtRigaud's `VMMigration`
-flow in v0.3.6. It complements the practical [User Guide](user-guide.md)
+flow in v0.3.8. It complements the practical [User Guide](user-guide.md)
 and the field-by-field [API Reference](api-reference.md).
 
 If you want to migrate a VM today, start with the User Guide. If you want
@@ -25,17 +25,28 @@ debugging a failed migration, read on.
 | ADR for transport + storage design | [`docs/adr/0001-transport-grpc-and-capi-integration.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0001-transport-grpc-and-capi-integration.md) |
 | Field-test postmortems | `fieldTesting/MIGRATION_*.md` |
 
-## v0.3.6 supported direction
+## v0.3.8 supported direction
 
-!!! danger "vSphere → Libvirt is the only validated direction in v0.3.6"
+!!! danger "vSphere → Libvirt is the validated direction in v0.3.8"
     The migration controller and all three production providers have the
-    full export / import / format-conversion code. The only direction
-    smoke-tested on a real lab cluster in v0.3.6 is **vSphere → Libvirt**
+    full export / import / format-conversion code. The direction
+    smoke-tested on a real lab cluster is **vSphere → Libvirt**
     (see `fieldTesting/MIGRATION_SUCCESS_v0.3.62.md` and
     `fieldTesting/MIGRATION_VERIFICATION_v0.3.62.md`).
 
     Other directions (Libvirt → vSphere, Proxmox ↔ anything,
-    vSphere → Proxmox) are alpha-quality in v0.3.6.
+    vSphere → Proxmox) are alpha-quality.
+
+!!! note "v0.3.8 disk-transfer improvements"
+    Two v0.3.8 changes harden the export/import primitives this flow depends on:
+    the libvirt provider now supports disk export
+    ([#177](https://github.com/projectbeskar/virtrigaud/pull/177)), and the
+    vSphere provider advertises its disk export/import capabilities accurately
+    ([#178](https://github.com/projectbeskar/virtrigaud/pull/178)) so the
+    optional `--enforce-provider-capabilities` gate
+    ([#176](https://github.com/projectbeskar/virtrigaud/pull/176), default off)
+    makes trustworthy fail-close decisions. See the
+    [API Reference](api-reference.md#capability-gating-176-fail-close-on-providers-lacking-exportimport).
 
 ## High-level model
 
@@ -74,8 +85,8 @@ debugging a failed migration, read on.
                 └──────────────────────────────────┘
 ```
 
-The decisive choice in v0.3.6 is that the **transfer medium is a Kubernetes
-PVC**, not an external storage system. That choice is captured in
+The decisive choice (still current in v0.3.8) is that the **transfer medium is
+a Kubernetes PVC**, not an external storage system. That choice is captured in
 ADR-0001 ([docs/adr/0001-transport-grpc-and-capi-integration.md](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0001-transport-grpc-and-capi-integration.md))
 and reflects three constraints:
 
@@ -178,7 +189,10 @@ Each phase handler is designed to be re-entrant. Concretely, the controller:
   can resume without redoing work.
 - Owns the PVC via owner references, so the K8s GC reclaims it on
   `VMMigration` delete even if the controller never gets a chance to run a
-  cleanup pass.
+  cleanup pass. As of v0.3.8 the `ProviderReconciler` no longer deletes
+  migration-storage PVCs and watches them
+  ([#184](https://github.com/projectbeskar/virtrigaud/pull/184)), so a provider
+  roll cannot reclaim the transfer medium out from under an in-flight migration.
 - Uses K8s annotations on the Provider CRs (`virtrigaud.io/migration-pvc`,
   `virtrigaud.io/reconcile-trigger`) rather than direct state inside the
   Provider's `spec`, so re-running the same migration twice does not
@@ -187,7 +201,7 @@ Each phase handler is designed to be re-entrant. Concretely, the controller:
 ## Reconciler instrumentation
 
 The reconciler is the most heavily instrumented in the codebase as of
-v0.3.6:
+v0.3.8:
 
 - `virtrigaud_manager_reconcile_total{name="VMMigration", outcome=…}` —
   every reconcile records one sample. The
@@ -210,7 +224,7 @@ Plus the indirect signals from the provider RPCs the migration drives:
   semantics** because a single migration can issue many provider RPCs back
   to back. The CB half-open accounting fix in PR
   [#100](https://github.com/projectbeskar/virtrigaud/pull/100) is what
-  makes this reliable in v0.3.6.
+  makes this reliable in v0.3.8.
 
 See [Resilience](../operations/resilience.md#circuitbreaker-on-the-provider-grpc-path-v036)
 for the breaker's behavior in detail.
@@ -231,9 +245,9 @@ Each in-tree provider implements these:
 
 | Provider | Export | Import | Status |
 |---------|--------|--------|--------|
-| **vSphere** | `internal/providers/vsphere/server.go` — uses govmomi `NfcLease` to download the VM's disk to the PVC path. | vSphere is not a primary migration *target* in v0.3.6, but the RPC is wired. | Source side validated end-to-end. |
-| **Libvirt** | Uses `virsh vol-download` (via the SSH'd `virsh` wrapper) to write the disk to the PVC. | `ImportDisk` decodes `pvc://` URLs to local PVC paths (`internal/providers/libvirt/server.go:485-489`) and uses `virsh vol-upload` (or copy + define) to register the imported volume. | Target side validated end-to-end. |
-| **Proxmox** | Uses the Proxmox API to export the disk. | Uses the Proxmox API to import the disk. | Compiles; not validated in v0.3.6 lab. |
+| **vSphere** | `internal/providers/vsphere/server.go` — uses govmomi `NfcLease` to download the VM's disk to the PVC path. As of v0.3.8 the disk export/import capabilities are advertised accurately ([#178](https://github.com/projectbeskar/virtrigaud/pull/178)). | vSphere is not a primary migration *target*, but the RPC is wired. | Source side validated end-to-end. |
+| **Libvirt** | Supports disk export as of v0.3.8 ([#177](https://github.com/projectbeskar/virtrigaud/pull/177)) — uses `virsh vol-download` (via the SSH'd `virsh` wrapper) to write the disk to the PVC. | `ImportDisk` decodes `pvc://` URLs to local PVC paths (`internal/providers/libvirt/server.go:485-489`) and uses `virsh vol-upload` (or copy + define) to register the imported volume. | Target side validated end-to-end. |
+| **Proxmox** | Uses the Proxmox API to export the disk. | Uses the Proxmox API to import the disk. | Compiles; not validated in the lab. |
 | **Mock** | No-op writes. | No-op reads. | Used in unit tests. |
 
 The **PVC URL** is the consistent contract between the controller and the
@@ -320,19 +334,20 @@ import or a clone. Set `source: manual` in that case.
 
 ## Roadmap
 
-The directions explicitly on the roadmap for after v0.3.6:
+The directions explicitly on the roadmap beyond v0.3.8:
 
 - **Validating the other provider directions.** Libvirt → vSphere is the
-  inverse and conceptually trivial — the RPCs exist, the format conversion
-  is `qcow2 → vmdk`. It is gated on a lab cycle, not new code.
-- **Cross-cluster migration.** v0.3.6 assumes both providers are managed
+  inverse and conceptually trivial — the RPCs exist (libvirt disk export landed
+  in v0.3.8, [#177](https://github.com/projectbeskar/virtrigaud/pull/177)), the
+  format conversion is `qcow2 → vmdk`. It is gated on a lab cycle, not new code.
+- **Cross-cluster migration.** v0.3.8 assumes both providers are managed
   by the same VirtRigaud manager. Cross-cluster (federated) migrations
   would require a different transfer medium (probably S3 or HTTP) and is
   not on the v0.3.x scope.
 - **Live migration.** All v0.3.x migrations are cold (snapshot-based).
   Live migration within a hypervisor family (vSphere vMotion, libvirt
   `migrate`) is a separate feature, not a `VMMigration` mode.
-- **Per-Provider CircuitBreaker thresholds.** v0.3.6 uses
+- **Per-Provider CircuitBreaker thresholds.** v0.3.8 still uses
   `resilience.DefaultConfig()` uniformly. A long migration that legitimately
   takes hours might want a higher `FailureThreshold` than a short
   `Describe`-driven reconcile loop. Tracked on the resilience roadmap.

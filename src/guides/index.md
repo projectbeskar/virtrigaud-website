@@ -78,7 +78,7 @@ Each guide covers:
 
 Not all providers support the same features. See the [Provider Capabilities Matrix](../providers/providers-capabilities.md) for a detailed comparison.
 
-This is an abbreviated summary for v0.3.6. For the full authoritative matrix, see [providers/providers-capabilities.md](../providers/providers-capabilities.md).
+This is an abbreviated summary for v0.3.8. For the full authoritative matrix, see [providers/providers-capabilities.md](../providers/providers-capabilities.md).
 
 | Feature | vSphere | Libvirt | Proxmox |
 |---------|---------|---------|---------|
@@ -86,7 +86,7 @@ This is an abbreviated summary for v0.3.6. For the full authoritative matrix, se
 | Power Management | Yes | Yes | Yes |
 | Reconfiguration | Yes | Yes (offline) | Yes |
 | Snapshots | Yes | Yes | Yes |
-| Cloning | Yes | Stub (#153) | Yes |
+| Cloning (VMClone) | Yes | No (Unimplemented) | Yes |
 | Console Access | Yes | Yes (VNC) | Yes (VNC) |
 | Cloud-init | Yes | Yes | Yes |
 | Migration (tested) | vSphere → Libvirt only | target only | — |
@@ -95,7 +95,8 @@ This is an abbreviated summary for v0.3.6. For the full authoritative matrix, se
 
 Once you're comfortable with basic provider setup:
 
-- **[Advanced VM Lifecycle](advanced/advanced-lifecycle.md)** - Snapshots, cloning, reconfiguration
+- **[Advanced VM Lifecycle](advanced/advanced-lifecycle.md)** - Snapshots, reconfiguration, lifecycle hooks
+- **[VM Cloning (VMClone)](advanced/vm-cloning.md)** - Clone an existing VM into a new one (new in v0.3.8)
 - **[Nested Virtualization](advanced/nested-virtualization.md)** - Running hypervisors in VMs
 - **[Graceful Shutdown](advanced/graceful-shutdown.md)** - Proper VM shutdown handling
 - **[Remote Providers](advanced/remote-providers.md)** - Provider architecture deep dive
@@ -146,8 +147,8 @@ When setting up providers, consider:
 
 See the [Security Guide](../operations/security.md) for detailed recommendations.
 
-!!! warning "v0.3.6 security gaps"
-    mTLS between the manager and provider pods is not enforced in v0.3.6 ([#147](https://github.com/projectbeskar/virtrigaud/issues/147)); provider gRPC servers do not require authentication ([#148](https://github.com/projectbeskar/virtrigaud/issues/148)). Use Kubernetes NetworkPolicies to restrict who can reach provider pods until these are resolved. See [Network Policies](../providers/security/network-policies.md).
+!!! warning "v0.3.8 security gaps"
+    mTLS between the manager and provider pods is not enforced in v0.3.8 ([#147](https://github.com/projectbeskar/virtrigaud/issues/147)); provider gRPC servers do not require authentication ([#148](https://github.com/projectbeskar/virtrigaud/issues/148)). Use Kubernetes NetworkPolicies to restrict who can reach provider pods until these are resolved. See [Network Policies](../providers/security/network-policies.md).
 
 ## Getting Help
 
@@ -161,4 +162,4 @@ See the [Security Guide](../operations/security.md) for detailed recommendations
 1. Choose your provider from the list above
 2. Follow the provider-specific setup guide
 3. Create your [first VM](../getting-started/basic-vm-example.md)
-4. Explore [advanced features](../advanced-lifecycle.md)
+4. Explore [advanced features](advanced/advanced-lifecycle.md)

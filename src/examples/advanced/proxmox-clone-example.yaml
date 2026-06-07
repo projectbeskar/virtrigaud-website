@@ -1,0 +1,134 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
+# Proxmox VMClone Example (v0.3.8)
+#
+# Demonstrates the VMClone CRD (controller MVP shipped in v0.3.8) cloning an
+# existing, provisioned VirtualMachine into a new one on the SAME Proxmox
+# provider. Proxmox implements the Clone RPC (full + linked); libvirt does NOT
+# (its Clone RPC returns Unimplemented as of v0.3.8).
+#
+# MVP scope (v0.3.8):
+#   - source.vmRef only (snapshotRef/templateRef/imageRef -> Phase=Failed)
+#   - same-provider clone (the produced VM lives on the source VM's provider)
+#   - Full and Linked clones (Linked requires the provider to report
+#     SupportsLinkedClones=true)
+# The controller produces a VirtualMachine CR named spec.target.name, seeds its
+# Status.ID with the provider's cloned VM ID, and labels it
+# virtrigaud.io/adopted=true so the VirtualMachine controller adopts the clone
+# instead of creating a second VM. Deleting the VMClone does NOT delete the
+# produced VM.
+
+---
+# Provider (Proxmox VE)
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: Provider
+metadata:
+  name: proxmox-prod
+  namespace: default
+spec:
+  type: proxmox
+  endpoint: https://pve.example.com:8006/api2/json
+  credentialSecretRef:
+    name: proxmox-credentials
+  runtime:
+    mode: Remote
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8"
+    service:
+      port: 9443
+
+---
+# VMClass for the source/target VMs
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClass
+metadata:
+  name: small
+  namespace: default
+spec:
+  cpus: 2
+  memory: "4Gi"
+  diskDefaults:
+    type: thin
+    size: "40Gi"
+
+---
+# Source VirtualMachine (must be provisioned — i.e. have a populated Status.ID —
+# before the VMClone can proceed; otherwise the clone stays Phase=Pending).
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VirtualMachine
+metadata:
+  name: app-golden
+  namespace: default
+spec:
+  providerRef:
+    name: proxmox-prod
+  classRef:
+    name: small
+  imageRef:
+    name: ubuntu-24-04
+  powerState: "Off"
+
+---
+# Example 1: Full clone
+# An independent copy with its own storage. Use for long-lived workloads.
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClone
+metadata:
+  name: app-clone-full
+  namespace: default
+spec:
+  source:
+    vmRef:
+      name: app-golden
+  target:
+    name: app-prod-01
+    classRef:
+      name: small
+    labels:
+      app: app-prod
+  options:
+    type: FullClone   # default
+
+---
+# Example 2: Linked clone
+# Copy-on-write copy sharing the parent's base disk. Faster + space-efficient;
+# requires the provider to report SupportsLinkedClones=true (Proxmox does;
+# the controller fails fast with a clear condition if it does not).
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClone
+metadata:
+  name: app-clone-linked
+  namespace: default
+spec:
+  source:
+    vmRef:
+      name: app-golden
+  target:
+    name: app-dev-01
+    classRef:
+      name: small
+  options:
+    type: LinkedClone
+
+# Usage:
+#
+# 1. Apply the source first and wait until it is provisioned:
+#      kubectl apply -f proxmox-clone-example.yaml
+#      kubectl get vm app-golden -o jsonpath='{.status.id}'   # must be non-empty
+#
+# 2. Watch the clones progress (Pending -> Cloning -> Ready):
+#      kubectl get vmclone -w
+#      kubectl get vmclone app-clone-full -o jsonpath='{.status.phase}'
+#
+# 3. The produced VMs (app-prod-01, app-dev-01) appear as VirtualMachine CRs,
+#    adopted (virtrigaud.io/adopted=true) with Status.ID already seeded:
+#      kubectl get vm app-prod-01 -o jsonpath='{.status.id}'
+#      kubectl get vmclone app-clone-full -o jsonpath='{.status.targetVMID}'
+#
+# 4. Deleting a VMClone does NOT delete the produced VM:
+#      kubectl delete vmclone app-clone-full   # app-prod-01 remains
+#
+# Notes:
+# - libvirt does not support Clone in v0.3.8 (Unimplemented). A libvirt VMClone
+#   fails fast with Phase=Failed / ProviderError rather than silently no-op'ing.
+# - Cross-provider cloning is not supported in the MVP (same-provider only).

@@ -5,13 +5,13 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Onboarding Tutorial
 
-This page walks you through bringing a `Provider` CR online end-to-end on a VirtRigaud v0.3.6 cluster. It uses the vSphere provider as the running example because that is the most common starting point; the same shape applies to libvirt and Proxmox with provider-type-specific tweaks called out inline.
+This page walks you through bringing a `Provider` CR online end-to-end on a VirtRigaud v0.3.8 cluster. It uses the vSphere provider as the running example because that is the most common starting point; the same shape applies to libvirt and Proxmox with provider-type-specific tweaks called out inline.
 
 If you are looking to build a **new** provider (a fresh hypervisor like Firecracker, Cloud-Hypervisor, or KubeVirt), that material lives in the developer-facing [provider development guide](../development/providers.md) — this page is for operators wiring up an existing provider against a real hypervisor.
 
 ## Prerequisites
 
-- A Kubernetes cluster with VirtRigaud v0.3.6 installed. If you do not have one yet, follow the [Helm-only install guide](../getting-started/install-helm-only.md).
+- A Kubernetes cluster with VirtRigaud v0.3.8 installed. If you do not have one yet, follow the [Helm-only install guide](../getting-started/install-helm-only.md).
 - `kubectl` configured against the cluster.
 - Cluster admin (or namespace admin in `virtrigaud-system`) — you need to create `Secret`s, `Provider`s, and at least one `VirtualMachine`.
 - Access to the hypervisor you are wiring up (vCenter / libvirt host / PVE cluster) with credentials of an account that can lifecycle VMs.
@@ -23,7 +23,7 @@ helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
 helm repo update
 
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.6 \
+  --version 0.3.8 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
@@ -36,15 +36,15 @@ kubectl get pods -n virtrigaud-system
 # virtrigaud-manager-7d4b8c9d5b-xyz12   1/1     Running   0          1m
 ```
 
-`/metrics` should already expose the v0.3.6 baseline. Port-forward and confirm:
+`/metrics` should already expose the v0.3.8 baseline. Port-forward and confirm:
 
 ```bash
 kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8081:8081 &
 curl -s http://localhost:8081/metrics | grep ^virtrigaud_build_info
-# virtrigaud_build_info{component="manager", ...version="v0.3.6"} 1
+# virtrigaud_build_info{component="manager", ...version="v0.3.8"} 1
 ```
 
-If you see `virtrigaud_build_info{version="v0.3.6"} 1`, the manager is up and the metric surface is wired. See [Observability](../operations/observability.md) for the full metric catalog.
+If you see `virtrigaud_build_info{version="v0.3.8"} 1`, the manager is up and the metric surface is wired. See [Observability](../operations/observability.md) for the full metric catalog.
 
 ## Step 2 — Create the credentials Secret
 
@@ -121,7 +121,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
       insecureSkipVerify: false       # set true ONLY in dev
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
         service:
           port: 9443
     ```
@@ -141,7 +141,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
         name: libvirt-credentials
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.6"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.8"
         service:
           port: 9090
     ```
@@ -162,7 +162,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
       insecureSkipVerify: false
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.6"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8"
         service:
           port: 9443
     ```
@@ -205,7 +205,7 @@ curl -s http://localhost:8081/metrics | grep -E '^(virtrigaud_circuit_breaker_st
 Expected (your provider name will differ):
 
 ```
-virtrigaud_build_info{component="manager", ...version="v0.3.6"} 1
+virtrigaud_build_info{component="manager", ...version="v0.3.8"} 1
 virtrigaud_circuit_breaker_state{provider_type="vsphere", provider="vsphere-lab"} 0
 virtrigaud_provider_tasks_inflight{provider_type="vsphere", provider="vsphere-lab"} 0
 ```
@@ -369,10 +369,10 @@ The provider pod is deleted by the controller when the `Provider` CR is removed 
 
 ## What to read next
 
-- The [capability matrix](providers-capabilities.md) — what each provider can and cannot do, and where the matrix has been corrected in v0.3.6 docs alignment.
+- The [capability matrix](providers-capabilities.md) — what each provider can and cannot do, including the v0.3.8 capability-negotiation surfacing (`Provider.status.reportedCapabilities`) and the corrected libvirt clone / image-import cells.
 - The deep-dive pages for the provider you are operating:
   - [vSphere](vsphere.md) — guestinfo cloud-init, SCSI controller specs, StoragePod selection.
-  - [Libvirt](libvirt.md) — virsh-over-SSH internals, qcow2 linked clones, the I1 / SSH-host narrative.
+  - [Libvirt](libvirt.md) — virsh-over-SSH internals, disk export, why clone/image-import are Unimplemented, the I1 / SSH-host narrative.
   - [Proxmox](proxmox.md) — token vs password auth, memory snapshots, ConsoleURL nuance.
 - [Operations — Resilience](../operations/resilience.md) — the v0.3.6 CircuitBreaker, including how to read the metrics.
 - [Operations — Observability](../operations/observability.md) — the full metric catalog and example Prometheus alerts.

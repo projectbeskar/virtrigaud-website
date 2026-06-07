@@ -5,12 +5,12 @@ SPDX-License-Identifier: Apache-2.0
 
 # mTLS for Manager <-> Provider gRPC
 
-!!! success "mTLS is wired and on by default as of v0.3.7"
-    In v0.3.7, manager↔provider gRPC traffic is protected by **mutual TLS by default** (ADR-0003, #147/#148). The manager dials each provider over TLS 1.3, presenting a client certificate; the provider verifies that certificate against a configured CA and enforces a SAN allow-list before accepting any RPC. Plaintext gRPC is no longer the default and now requires an **explicit, audit-flagged opt-out**.
+!!! success "mTLS is wired and on by default (since v0.3.7, unchanged in v0.3.8)"
+    Manager↔provider gRPC traffic is protected by **mutual TLS by default** (ADR-0003, #147/#148, shipped in v0.3.7). The manager dials each provider over TLS 1.3, presenting a client certificate; the provider verifies that certificate against a configured CA and enforces a SAN allow-list before accepting any RPC. Plaintext gRPC is not the default and requires an **explicit, audit-flagged opt-out**.
 
-    This is a behavioural change from v0.3.6, where the `Provider.spec.runtime.service.tls` field was parsed but had no runtime effect. See the [v0.3.6 → v0.3.7 upgrade note](#breaking-change-v036--v037) below.
+    This behaviour landed in v0.3.7 (a change from v0.3.6, where the `Provider.spec.runtime.service.tls` field was parsed but had no runtime effect) and is **unchanged in v0.3.8** — there are no new mTLS features or breaking changes in v0.3.8. See the historical [v0.3.6 → v0.3.7 upgrade note](#breaking-change-v036-v037-historical) below.
 
-This page describes how to enable and operate mTLS for manager↔provider gRPC in v0.3.7: the Provider CR `tls` block, how the manager and provider enforce it, the SAN allow-list, the secure-by-default/fail-closed behaviour, certificate rotation and its limitation, the Helm `providerTLS` block for chart-templated providers, the `TLSConfigured` status condition, and a worked cert-manager example for producing the TLS Secret.
+This page describes how to enable and operate mTLS for manager↔provider gRPC in v0.3.8: the Provider CR `tls` block, how the manager and provider enforce it, the SAN allow-list, the secure-by-default/fail-closed behaviour, certificate rotation and its limitation, the Helm `providerTLS` block for chart-templated providers, the `TLSConfigured` status condition, and a worked cert-manager example for producing the TLS Secret.
 
 ## Trust model
 
@@ -23,7 +23,7 @@ VirtRigaud uses a **single CA per install** (ADR-0003 decision #5):
 The TLS Secret is **provisioned by the operator**. VirtRigaud reads a Kubernetes Secret containing `tls.crt` / `tls.key` / `ca.crt`; how those bytes are minted — manual `openssl`, an internal PKI pipeline, Vault, External Secrets, or cert-manager — is the operator's choice. **The Helm chart ships no cert-manager `Certificate` or issuer scaffolding**; it only references a Secret you provide. A worked cert-manager example for *producing* that Secret is given [below](#producing-the-secret-with-cert-manager).
 
 !!! note "Per-provider trust roots are deferred"
-    The `tls` block is per-Provider, so the data path can already carry a per-Provider CA bundle, but the manager side is currently single-CA. Per-provider trust roots and SPIFFE/SPIRE identity are out of scope for v0.3.7 and tracked as follow-up ADRs.
+    The `tls` block is per-Provider, so the data path can already carry a per-Provider CA bundle, but the manager side is currently single-CA. Per-provider trust roots and SPIFFE/SPIRE identity remain out of scope in v0.3.8 and are tracked as follow-up ADRs.
 
 ## The Provider CR `tls` block
 
@@ -41,7 +41,7 @@ spec:
   credentialSecretRef:
     name: vsphere-prod-credentials
   runtime:
-    image: ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.7
+    image: ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8
     service:
       tls:
         enabled: true                       # default true
@@ -124,7 +124,7 @@ The allow-list is delivered to the provider via the `VIRTRIGAUD_PROVIDER_ALLOWED
 
 ## Secure-by-default and fail-closed
 
-v0.3.7 is fail-closed. A provider pod that finds **no TLS material** at `/etc/virtrigaud/tls` **and** does not have `VIRTRIGAUD_PROVIDER_INSECURE=true` set will **hard-exit on startup** rather than silently fall back to plaintext, with this error:
+The provider is fail-closed (behaviour shipped in v0.3.7, unchanged in v0.3.8). A provider pod that finds **no TLS material** at `/etc/virtrigaud/tls` **and** does not have `VIRTRIGAUD_PROVIDER_INSECURE=true` set will **hard-exit on startup** rather than silently fall back to plaintext, with this error:
 
 ```
 TLS material missing at /etc/virtrigaud/tls and VIRTRIGAUD_PROVIDER_INSECURE is not set to "true"; either provision /etc/virtrigaud/tls/{tls.crt,tls.key,ca.crt} or set VIRTRIGAUD_PROVIDER_INSECURE=true to opt into plaintext (audit-flagged)
@@ -254,9 +254,12 @@ For a regulated deployment:
 - **Populate `AllowedSANs`** when more than one identity could present a cert signed by the CA, so a provider only accepts its own manager. Leave it empty only when the CA's signing scope is exactly your manager's identity.
 - **Keep TLS Secrets distinct from credential Secrets** — they use different keys and different mount paths (`/etc/virtrigaud/tls` vs `/etc/virtrigaud/credentials`) and should be managed independently.
 
-## Breaking change: v0.3.6 → v0.3.7
+## Breaking change: v0.3.6 → v0.3.7 (historical)
 
-!!! danger "Existing Provider CRs without a `tls` block will not reconcile after upgrade"
+!!! note "Upgrading v0.3.7 → v0.3.8 needs no mTLS action"
+    The breaking change documented below landed on the **v0.3.6 → v0.3.7** upgrade. Upgrading from **v0.3.7 → v0.3.8** requires no mTLS changes — the posture is unchanged. This section is retained for operators still moving off v0.3.6.
+
+!!! danger "Existing Provider CRs without a `tls` block will not reconcile after upgrade from v0.3.6"
     In v0.3.6, the `spec.runtime.service.tls` block had no runtime effect. In v0.3.7, a **nil** `tls` block is a loud failure: the Provider reports `TLSConfigured=False, Reason=TLSBlockMissing` and **no Deployment is created** until the operator decides.
 
     Before or immediately after upgrading, for each existing Provider CR either:
@@ -268,7 +271,7 @@ For a regulated deployment:
 
 ## See also
 
-- [Operations -> Security](../../operations/security.md) — overall v0.3.7 security posture, including the [resolved-gap inventory](../../operations/security.md#v036-security-gap-inventory).
+- [Operations -> Security](../../operations/security.md) — overall v0.3.8 security posture, including the [resolved-gap inventory](../../operations/security.md#v036-security-gap-inventory).
 - [Bearer Token Authentication](bearer-token.md) — the other half of the gRPC-channel and hypervisor-credential auth story.
 - [Network Policies](network-policies.md) — defence-in-depth, and the required compensating control for any Provider you run with `tls.enabled=false`.
 - [Resilience](../../operations/resilience.md) — per-Provider CircuitBreaker limits the blast radius of a degraded or spoofed provider.

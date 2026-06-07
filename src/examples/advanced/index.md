@@ -11,30 +11,54 @@ This directory contains advanced examples demonstrating complex scenarios and v0
 
 These examples showcase production-ready patterns, advanced operations, and best practices for managing VMs at scale with VirtRigaud.
 
-## v0.2.3+ Features
+## v0.3.8 Features
 
-### vSphere Clone Operations
-**File**: [vsphere-clone-example.yaml](vsphere-clone-example.yaml)
+### VMClone Operations (MVP)
 
-Comprehensive cloning examples demonstrating:
+VMClone is a first-class CRD in v0.3.8. The source must be a `vmRef` pointing to an existing `VirtualMachine` on the same provider. Cross-provider clones are not supported. Libvirt returns `Unimplemented`.
+
+**Files**:
+- [vsphere-clone-example.yaml](vsphere-clone-example.yaml) — Full and linked clones on vSphere
+- [proxmox-clone-example.yaml](proxmox-clone-example.yaml) — Full and linked clones on Proxmox VE
+
+```yaml
+# Minimal VMClone — Full clone on vSphere or Proxmox
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClone
+metadata:
+  name: prod-clone
+  namespace: default
+spec:
+  source:
+    vmRef:
+      name: source-vm
+      namespace: default
+  targetName: prod-clone-target
+  classRef:
+    name: medium
+    namespace: default
+  options:
+    type: Full        # Full = independent storage; Linked = shared base disk
+```
+
+Cloning examples demonstrating:
 - **Full Clones**: Independent VMs for production workloads
 - **Linked Clones**: Space-efficient copies for development/testing
-- **Automatic Snapshot Handling**: Seamless snapshot creation for linked clones
-- **Clone from VMs or Templates**: Flexible source options
-- **Rapid Provisioning**: Multiple parallel clones for test environments
+- `spec.source.vmRef` — the only supported source type in v0.3.8 (template refs are not yet supported)
+- Same-provider constraint — `source.vmRef` and the target Provider must match
 
 **Use Cases**:
 - Production workload deployment
 - Development environment provisioning
 - Test environment creation
 - VM backup and disaster recovery
-- Rapid scaling for temporary workloads
 
-**Key Features**:
-- Full clone: ~5-15 minutes, independent storage
-- Linked clone: ~1-3 minutes, shared storage with parent
-- Automatic snapshot management
-- Complete isolation or shared storage options
+**Key characteristics**:
+- Full clone: independent storage; ~5-15 minutes on vSphere
+- Linked clone: shared base disk; ~1-3 minutes on vSphere
+- `status.targetVMID` field populated on successful clone completion
+
+## v0.2.3+ Features
 
 ### vSphere Task Tracking
 **File**: [vsphere-task-tracking.yaml](vsphere-task-tracking.yaml)
@@ -122,7 +146,8 @@ Demonstrates dynamic reconfiguration:
 
 1. **VirtRigaud Installed**:
    ```bash
-   helm install virtrigaud virtrigaud/virtrigaud -n virtrigaud-system
+   helm install virtrigaud virtrigaud/virtrigaud \
+     --version 0.3.8 -n virtrigaud-system --create-namespace
    ```
 
 2. **Provider Configured**:
@@ -319,5 +344,5 @@ Have an advanced example to share? Contributions welcome!
 
 ---
 
-**Note**: These examples target v0.3.6. Ensure you're running VirtRigaud v0.3.6 or later.
+**Note**: These examples target v0.3.8. VMClone examples require v0.3.8 or later. Ensure you're running the correct version before applying.
 

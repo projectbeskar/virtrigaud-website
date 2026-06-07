@@ -23,7 +23,7 @@ This guide covers building VirtRigaud from source and building the documentation
 |---------------------|--------------------------------------|
 | Manager entrypoint  | `cmd/manager/main.go`                |
 | Manager Dockerfile  | `build/Dockerfile.manager`           |
-| Builder image       | `docker.io/golang:1.26.3` (override via `BUILDER_IMAGE`) |
+| Builder image       | `docker.io/golang:1.26.4` (override via `BUILDER_IMAGE`) |
 | Runtime base image  | `gcr.io/distroless/static:nonroot` (override via `BASE_IMAGE`) |
 
 `make build`, `make run`, `make docker-build`, `make docker-build-multiplatform`,
@@ -34,9 +34,10 @@ Dockerfile.
 
 ### Prerequisites
 
-- **Go 1.26.3+** - [Download](https://go.dev/dl/) — the Go toolchain floor
-  was raised to **1.26.3** in v0.3.7. Binary consumers via released images are
-  unaffected; only source builders need to upgrade.
+- **Go 1.26+** - [Download](https://go.dev/dl/) — the Go toolchain floor
+  was raised to **1.26.3** in v0.3.7 and to **1.26.4** in v0.3.8. Binary
+  consumers via released images are unaffected; only source builders need to
+  upgrade. `go.mod` is the source of truth.
 - **Docker** - [Install](https://docs.docker.com/get-docker/)
 - **Kubernetes cluster** - kind, k3s, or remote
 - **kubectl** - [Install](https://kubernetes.io/docs/tasks/tools/)
@@ -121,9 +122,10 @@ make fmt
 ## Corporate / banking deployments
 
 v0.3.6 ([PR #117](https://github.com/projectbeskar/virtrigaud/pull/117), part of
-the H1 build-path consolidation) parametrises `build/Dockerfile.manager` so
+the H1 build-path consolidation) parametrised `build/Dockerfile.manager` so
 forks in environments that cannot pull from `docker.io` / `gcr.io` can point
-at internal mirrors without patching the Dockerfile.
+at internal mirrors without patching the Dockerfile. This is still the
+mechanism in v0.3.8.
 
 ### Override the builder and base images
 
@@ -132,20 +134,20 @@ registry (Artifactory, Harbor, ECR, etc.):
 
 ```bash
 docker build -f build/Dockerfile.manager \
-  --build-arg BUILDER_IMAGE=corp.io/golang:1.26.3 \
+  --build-arg BUILDER_IMAGE=corp.io/golang:1.26.4 \
   --build-arg BASE_IMAGE=corp.io/distroless/static:nonroot \
-  --build-arg VERSION=v0.3.6 \
+  --build-arg VERSION=v0.3.8 \
   --build-arg GIT_SHA=$(git rev-parse HEAD) \
-  -t corp.io/virtrigaud/manager:v0.3.6 .
+  -t corp.io/virtrigaud/manager:v0.3.8 .
 ```
 
 Or via `make`:
 
 ```bash
 make docker-build \
-  BUILDER_IMAGE=corp.io/golang:1.26.3 \
+  BUILDER_IMAGE=corp.io/golang:1.26.4 \
   BASE_IMAGE=corp.io/distroless/static:nonroot \
-  VERSION=v0.3.6 GIT_SHA=$(git rev-parse HEAD)
+  VERSION=v0.3.8 GIT_SHA=$(git rev-parse HEAD)
 ```
 
 Defaults match the upstream public images so unpatched builds behave exactly
@@ -225,8 +227,8 @@ sudo apt-get install golang-go
 # Or download from https://go.dev/dl/
 ```
 
-Go 1.26.3 or higher is required for generating CRD documentation from the
-v0.3.7+ source tree.
+Go 1.26+ is required for generating CRD documentation from the v0.3.8 source
+tree (the toolchain floor is **1.26.4** in v0.3.8).
 
 ### Quick Start
 
@@ -308,13 +310,15 @@ VirtRigaud's Custom Resource Definitions (CRDs):
    reference
 
 This ensures the documentation always reflects the current CRD structure. As
-of v0.3.6 there are **10 CRDs**: VirtualMachine, Provider, VMClass, VMImage,
+of v0.3.8 there are **10 CRDs**: VirtualMachine, Provider, VMClass, VMImage,
 VMNetworkAttachment, VMMigration, VMSnapshot, VMSet, VMPlacementPolicy,
-VMClone. (VMAdoption is a controller, not a CRD.)
+VMClone. (VMAdoption is a controller, not a CRD.) Note that VMSet's
+controller is a not-yet-active stub and VMPlacementPolicy is reference-only
+in v0.3.8 — the CRDs exist but those controllers are not functional.
 
 ## Project Structure
 
-### VirtRigaud Repository (v0.3.6)
+### VirtRigaud Repository (v0.3.8)
 
 ```
 virtrigaud/

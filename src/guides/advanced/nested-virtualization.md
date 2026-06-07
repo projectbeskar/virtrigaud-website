@@ -5,8 +5,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # Nested Virtualization Support
 
-!!! note "Not actively tested in v0.3.6"
-    The configuration patterns in this page are based on the provider implementations and hypervisor capabilities, but nested virtualization is **not part of the v0.3.6 test suite**. The VMClass `performanceProfile.nestedVirtualization` field exists in the API, and the provider-level mechanics described here are correct for each hypervisor, but VirtRigaud does not run end-to-end nested-virt scenarios in CI.
+!!! note "Not actively tested in v0.3.8"
+    The configuration patterns in this page are based on the provider implementations and hypervisor capabilities, but nested virtualization is **not part of the v0.3.8 test suite**. The VMClass `performanceProfile.nestedVirtualization` field exists in the API, and the provider-level mechanics described here are correct for each hypervisor, but VirtRigaud does not run end-to-end nested-virt scenarios in CI.
 
     If you need nested virtualization for a production workload, validate the configuration in your environment before relying on it.
 

@@ -7,11 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 
 The Proxmox provider manages VMs on Proxmox Virtual Environment (PVE) via the native PVE REST API. It is the newest production-grade provider in the VirtRigaud tree and is currently maturing toward general availability.
 
-This page is aligned to **VirtRigaud v0.3.7**. Capability claims trace back to the provider's `GetCapabilities` builder in `internal/providers/proxmox/capabilities.go` and the REST client in `internal/providers/proxmox/pveapi/`.
+This page is aligned to **VirtRigaud v0.3.8**. Capability claims trace back to the provider's `GetCapabilities` builder in `internal/providers/proxmox/capabilities.go` and the REST client in `internal/providers/proxmox/pveapi/`.
 
 ## Status
 
-The Proxmox provider is listed as **Production-beta** in the [capability matrix](providers-capabilities.md). It implements the full v0.3.6 RPC surface, but ConsoleURL is web-UI-deep-link only (not a standalone VNC ticket — see below), and the production-burn-in time is shorter than for vSphere/libvirt.
+The Proxmox provider is listed as **Production-beta** in the [capability matrix](providers-capabilities.md). It implements the full RPC surface, but ConsoleURL is web-UI-deep-link only (not a standalone VNC ticket — see below), and the production-burn-in time is shorter than for vSphere/libvirt.
 
 ## Capabilities at a glance
 
@@ -21,8 +21,8 @@ Built via `capabilities.NewBuilder()` in `internal/providers/proxmox/capabilitie
 |-----------------|-------|---------------|
 | Core (Create/Delete/Power/Describe) | yes | Standard VM lifecycle |
 | `Snapshots` | yes | PVE snapshots via the API. |
-| `MemorySnapshots` | **yes** | Wired by passing `vmstate=1` to the snapshot API (`internal/providers/proxmox/pveapi/client.go:794-828`). The only provider that truly captures RAM state in v0.3.6. |
-| `LinkedClones` | yes | Native PVE linked clones (qcow2 / zfs snapshot-backed). |
+| `MemorySnapshots` | **yes** | Wired by passing `vmstate=1` to the snapshot API (`internal/providers/proxmox/pveapi/client.go:794-828`). The only provider that truly captures RAM state. |
+| `LinkedClones` | yes | Native PVE linked clones (qcow2 / zfs snapshot-backed). The `Clone` RPC is implemented (#179 VMClone controller drives same-provider full/linked clones). |
 | `OnlineReconfigure` | yes | Hot-plug CPU and memory via the config endpoint (guest agent / balloon driver required). |
 | `OnlineDiskExpansion` | yes | Online disk grow via the config endpoint; filesystem grow inside the guest is separate. |
 | `ImageImport` | yes | PVE templates + cloud-image import. |
@@ -112,7 +112,7 @@ spec:
   insecureSkipVerify: false
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.7"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8"
     service:
       port: 9443
       tls:
@@ -348,7 +348,7 @@ The Proxmox provider supports online (hot-plug) reconfiguration via `PUT /api2/j
 
 ## Snapshots — including memory state
 
-Proxmox is the only v0.3.6 provider that genuinely supports memory snapshots. The provider passes `vmstate=1` to the snapshot API when `VMSnapshot.spec.includeMemory: true` (`internal/providers/proxmox/pveapi/client.go:794-828`):
+Proxmox is the only provider that genuinely supports memory snapshots. The provider passes `vmstate=1` to the snapshot API when `VMSnapshot.spec.includeMemory: true` (`internal/providers/proxmox/pveapi/client.go:794-828`):
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1

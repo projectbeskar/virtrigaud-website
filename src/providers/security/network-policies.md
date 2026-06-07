@@ -5,12 +5,12 @@ SPDX-License-Identifier: Apache-2.0
 
 # NetworkPolicies for VirtRigaud
 
-This page gives concrete NetworkPolicy templates for the manager and provider pods in **v0.3.6**. With mTLS not yet wired through the manager-provider gRPC channel (see [mTLS](mtls.md)), **NetworkPolicy is the primary compensating control** for the pod-network path. Regulated deployments should treat the policies on this page as required, not optional.
+This page gives concrete NetworkPolicy templates for the manager and provider pods in **v0.3.8**. Since v0.3.7, manager↔provider gRPC is protected by **mTLS by default** (see [mTLS](mtls.md)), so mTLS — not NetworkPolicy — is the **primary** transport control. NetworkPolicy remains valuable as **defence-in-depth**, and is the **required compensating control** for any Provider you deliberately run with `tls.enabled=false` (audit-flagged plaintext). Regulated deployments should still treat the policies on this page as required, not optional.
 
 !!! warning "NetworkPolicy requires an enforcing CNI"
     NetworkPolicy is a Kubernetes API; enforcement depends on the CNI. The major CNIs that enforce it are Calico, Cilium, Antrea, Kube-router, and Weave. **Flannel does not enforce NetworkPolicy by default.** Verify with `kubectl get pods -n kube-system` and your CNI's documentation before assuming these policies are taking effect.
 
-## Port surface in v0.3.6
+## Port surface in v0.3.8
 
 Verify against `cmd/manager/main.go`, `charts/virtrigaud/templates/manager-deployment.yaml`, `cmd/provider-*/main.go`, and `internal/controller/provider_controller.go:617-652`.
 
@@ -28,7 +28,7 @@ The manager does **not** open a gRPC server port — it is purely a gRPC client 
 
 | Port  | Protocol | Purpose                          | Notes                                                                |
 |-------|----------|----------------------------------|----------------------------------------------------------------------|
-| 9443  | TCP      | gRPC server (`provider.v1.Provider`) | Plaintext in v0.3.6 (see [mTLS](mtls.md))                       |
+| 9443  | TCP      | gRPC server (`provider.v1.Provider`) | mTLS by default since v0.3.7; plaintext only on explicit per-Provider opt-out (see [mTLS](mtls.md)) |
 | 8080  | TCP      | Health probes (`/healthz`)        | HTTP, used by kubelet only. NOT a metrics endpoint.                   |
 
 The provider's health endpoint on `:8080` is a `kubelet`-only path. Provider pods do not export Prometheus metrics — all `virtrigaud_*` series come from the manager pod.
@@ -43,7 +43,7 @@ The provider's health endpoint on `:8080` is a `kubelet`-only path. Provider pod
 | Libvirt      | libvirt daemon over plain TCP (`qemu+tcp://`)    | 16509 TCP       |
 | Proxmox      | Proxmox VE REST API                              | 8006 TCP        |
 
-For the libvirt provider over SSH, also note the [SSH host-key verification gap](../libvirt.md#authentication) and plan the egress allowlist tightly (single host CIDR, not a broad block).
+For the libvirt provider over SSH, note that [SSH host-key verification is on by default since v0.3.7](../libvirt.md#authentication); still plan the egress allowlist tightly (single host CIDR, not a broad block) as defence-in-depth.
 
 ## Default-deny baseline
 
@@ -154,7 +154,7 @@ If your provider runtimes live in a different namespace than the manager, add a 
 
 ## Provider NetworkPolicy
 
-This is the **single most important policy** in v0.3.6. With gRPC plaintext between manager and provider, the provider pod must be reachable only from the manager pod.
+This is a **high-value policy**: the provider pod should be reachable only from the manager pod. In v0.3.8 the gRPC channel is mTLS-protected by default, so this policy is **defence-in-depth** rather than the sole control — but it becomes the **primary** network safeguard for any Provider you run with `tls.enabled=false` (audit-flagged plaintext).
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -243,7 +243,10 @@ Use the template above, with the egress `ipBlock` pointing at the vCenter VIP on
 
 ### Libvirt (qemu+ssh://)
 
-The libvirt provider needs egress to the libvirt host on TCP 22. Combine the NetworkPolicy below with the SSH-host-key warning on the [libvirt provider page](../libvirt.md#authentication) — the NetworkPolicy ensures the SSH traffic does not cross an untrusted boundary, which is the project's official mitigation for the missing host-key verification.
+The libvirt provider needs egress to the libvirt host on TCP 22. SSH host-key verification is on by default since v0.3.7 (see the [libvirt provider page](../libvirt.md#authentication)), so it — not NetworkPolicy — is the primary control on the SSH path. Combine it with the NetworkPolicy below as defence-in-depth, keeping the SSH egress scoped to the single libvirt host so the traffic does not cross an untrusted boundary.
+
+!!! note "Maintainer choice: plaintext gRPC to the libvirt sidecar"
+    The libvirt provider talks plaintext gRPC to its in-pod sidecar while reaching the libvirt host over SSH with verified `known_hosts` — a documented maintainer choice. Verify this posture meets your controls before relying on it in regulated/banking environments.
 
 ```yaml
 egress:

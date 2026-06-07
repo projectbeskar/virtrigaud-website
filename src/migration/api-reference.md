@@ -5,25 +5,44 @@ SPDX-License-Identifier: Apache-2.0
 
 # VMMigration API Reference
 
-This page is aligned to **VirtRigaud v0.3.6** and reflects the
+This page is aligned to **VirtRigaud v0.3.8** and reflects the
 `infra.virtrigaud.io/v1beta1` `VMMigration` CRD exactly as it ships. The
 authoritative source is the Go type definitions at
 `api/infra.virtrigaud.io/v1beta1/vmmigration_types.go`.
 
-!!! danger "v0.3.6 reality: only vSphere → Libvirt is tested end-to-end"
+!!! danger "v0.3.8 reality: vSphere → Libvirt is the validated direction"
     `VMMigration` is wired across `vsphere`, `libvirt`, and `proxmox`
-    providers in code, but the **only direction that has been smoke-tested on
-    a real lab cluster is vSphere → Libvirt**
+    providers in code, and the **direction smoke-tested end-to-end on a real
+    lab cluster is vSphere → Libvirt**
     (`fieldTesting/MIGRATION_SUCCESS_v0.3.62.md`,
-    `fieldTesting/MIGRATION_VERIFICATION_v0.3.62.md`). Other directions
-    (Libvirt → vSphere, vSphere → Proxmox, Proxmox → anything) compile and
-    will reconcile through the phase machine, but have not been validated
-    against real hypervisor pairs at the time of v0.3.6 and **should be
-    treated as roadmap, not supported**.
+    `fieldTesting/MIGRATION_VERIFICATION_v0.3.62.md`). As of v0.3.8 the
+    underlying disk export/import primitives are in better shape on both ends:
+    the libvirt provider now supports disk export
+    ([#177](https://github.com/projectbeskar/virtrigaud/pull/177)), and the
+    vSphere provider's disk export/import capabilities are advertised
+    accurately ([#178](https://github.com/projectbeskar/virtrigaud/pull/178)).
+    Other directions (Libvirt → vSphere, vSphere → Proxmox, Proxmox → anything)
+    compile and will reconcile through the phase machine, but have not been
+    validated against real hypervisor pairs and **should be treated as roadmap,
+    not supported**.
 
-!!! warning "Storage backend in v0.3.6 is PVC-only"
+### Capability gating (#176): fail-close on providers lacking export/import
+
+v0.3.8 adds an opt-in manager flag
+`--enforce-provider-capabilities` ([#176](https://github.com/projectbeskar/virtrigaud/pull/176)),
+**default off**. When enabled, the manager checks each migration's source
+and target providers against the capabilities they advertise
+(`GetCapabilities` — disk export / disk import) and **fails the migration
+closed** at validation time if a provider does not support the operation the
+migration requires, rather than letting it fail deep in the export/import
+phase. Leave it off to preserve pre-v0.3.8 behavior; turn it on in regulated
+or fleet environments where a clear up-front rejection is preferable to a
+late-phase failure. Because the vSphere (#178) and libvirt (#177) capability
+advertisements are now accurate, this gate produces trustworthy decisions.
+
+!!! warning "Storage backend is PVC-only"
     Earlier drafts of the migration docs described `s3`, `http`, and `nfs`
-    storage backends. **Those are not implemented in v0.3.6** — the
+    storage backends. **Those are still not implemented as of v0.3.8** — the
     controller validates
     `Storage.Type != "pvc" && Storage.Type != ""` and rejects the migration
     (`internal/controller/vmmigration_controller.go:1425`). The transfer
@@ -169,7 +188,7 @@ Defined at `vmmigration_types.go:210-220`.
 ```yaml
 spec:
   storage:
-    type: pvc                  # v0.3.6: the only allowed value
+    type: pvc                  # the only allowed value (as of v0.3.8)
     pvc:
       storageClassName: nfs-client
       size: 100Gi
@@ -178,7 +197,7 @@ spec:
 
 | Field | Type | Default | Bounds |
 |-------|------|---------|--------|
-| `type` | enum (`pvc`) | `pvc` | **`pvc` is the only valid value in v0.3.6.** Setting anything else fails validation at `vmmigration_controller.go:1425`. |
+| `type` | enum (`pvc`) | `pvc` | **`pvc` is the only valid value (as of v0.3.8).** Setting anything else fails validation at `vmmigration_controller.go:1425`. |
 | `pvc` | `PVCStorageConfig` | required when `type=pvc` | See below. |
 
 #### `storage.pvc` (`PVCStorageConfig`)
@@ -206,6 +225,14 @@ The migration controller drives a PVC-aware orchestration:
 
 This sequence is the reason a default migration deploy adds ~30–60s of
 rolling-restart overhead per provider pod.
+
+!!! note "Provider controller no longer deletes the migration PVC (v0.3.8)"
+    In v0.3.8 ([#184](https://github.com/projectbeskar/virtrigaud/pull/184)) the
+    `ProviderReconciler` **no longer deletes migration-storage PVCs** during its
+    reconcile, and it now **watches** them. Previously a provider reconcile could
+    race the PVC's lifecycle and reclaim the transfer medium out from under an
+    in-flight migration. Ownership and cleanup of the intermediate PVC stay with
+    the `VMMigration` CR (see [Finalizer](#finalizer)).
 
 ### `spec.metadata` (`MigrationMetadata`, optional)
 

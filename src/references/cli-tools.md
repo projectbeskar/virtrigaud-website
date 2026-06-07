@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # CLI Tools Reference
 
-VirtRigaud provides a set of command-line tools for managing virtual machines, developing providers, running conformance tests, and performing load testing. This guide covers all available CLI tools and their usage in v0.3.6.
+VirtRigaud provides a set of command-line tools for managing virtual machines, developing providers, running conformance tests, and performing load testing. This guide covers all available CLI tools and their usage in v0.3.8.
 
 ## Overview
 
@@ -18,7 +18,7 @@ VirtRigaud provides a set of command-line tools for managing virtual machines, d
 | [`alpha-to-beta-dryrun`](#alpha-to-beta-dryrun) | v1alpha1 migration helper (tombstone) | Operators upgrading from pre-v0.3.0 |
 
 !!! note "Implementation status"
-    Several `vrtg` subcommand handlers print "not implemented" and exit 0 in v0.3.6. The commands are defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg/main.go) and are scaffolded for future releases. Fully implemented commands are noted in each section below.
+    Several `vrtg` subcommand handlers print "not implemented" and exit 0 in v0.3.8. The commands are defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg/main.go) and are scaffolded for future releases. Fully implemented commands are noted in each section below.
 
 ## Installation
 
@@ -26,7 +26,7 @@ VirtRigaud provides a set of command-line tools for managing virtual machines, d
 
 ```bash
 # Download the latest release
-export VIRTRIGAUD_VERSION="v0.3.6"
+export VIRTRIGAUD_VERSION="v0.3.8"
 export PLATFORM="linux-amd64"  # or darwin-amd64, windows-amd64
 
 # Install main CLI tool
@@ -59,10 +59,10 @@ make install-cli PREFIX=/usr/local
 
 ```bash
 # Install specific version
-go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.3.6
-go install github.com/projectbeskar/virtrigaud/cmd/vcts@v0.3.6
-go install github.com/projectbeskar/virtrigaud/cmd/vrtg-provider@v0.3.6
-go install github.com/projectbeskar/virtrigaud/cmd/virtrigaud-loadgen@v0.3.6
+go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.3.8
+go install github.com/projectbeskar/virtrigaud/cmd/vcts@v0.3.8
+go install github.com/projectbeskar/virtrigaud/cmd/vrtg-provider@v0.3.8
+go install github.com/projectbeskar/virtrigaud/cmd/virtrigaud-loadgen@v0.3.8
 
 # Install latest
 go install github.com/projectbeskar/virtrigaud/cmd/vrtg@latest
@@ -123,7 +123,7 @@ vrtg vm events <name> [flags]
 vrtg vm console-url <name> [flags]
 ```
 
-!!! note "v0.3.6 status"
+!!! note "v0.3.8 status"
     `vm list` and `vm describe` query the Kubernetes API directly and print real data. `vm events`, `vm console-url`, `vm snapshot`, `vm clone`, `vrtg init`, and `vrtg diag bundle` are defined but print a "not implemented" message. Output format (`--output json/yaml`) is also not yet implemented.
 
 **Examples:**
@@ -708,6 +708,40 @@ The Markdown summary includes P50 / P95 / P99 latency percentiles per operation 
 
 ---
 
+## manager
+
+The `manager` binary is the VirtRigaud controller manager. It is not invoked by end users directly — it runs as a Deployment inside the cluster, typically installed via the Helm chart. The flags below are relevant to operators tuning its behaviour.
+
+Defined in [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/manager/main.go).
+
+### Selected flags
+
+```
+--enable-http2                      Enable HTTP/2 for metrics and webhook servers (default: false)
+--enforce-provider-capabilities     Gate snapshot and migration operations on the
+                                    provider's self-reported capabilities (default: false)
+```
+
+#### `--enforce-provider-capabilities` (added v0.3.8)
+
+When **OFF** (default): snapshot and migration controllers issue their provider RPCs unconditionally. If a provider cannot handle the operation, the RPC fails and the resource moves to `Failed` — behaviour is unchanged from v0.3.7 and earlier.
+
+When **ON**: the snapshot and migration controllers first check `Provider.status.reportedCapabilities` and refuse capability-dependent operations that the provider explicitly does not advertise, rather than letting the call fail downstream.
+
+!!! warning "Enable with caution"
+    A provider that under-reports a capability (reports `false` for an operation it can actually perform) will have that operation blocked. Confirm your provider's capability flags are accurate before enabling this flag. The flag is intentionally opt-in.
+
+To enable via Helm:
+
+```yaml
+# charts/virtrigaud/values.yaml override
+manager:
+  extraArgs:
+    - --enforce-provider-capabilities
+```
+
+---
+
 ## Advanced Usage
 
 ### Automation and Scripting
@@ -882,7 +916,7 @@ vcts run --provider <provider-name> --verbose
 
 A one-shot migration helper from the v1alpha1 API era. Defined in [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/alpha-to-beta-dryrun/main.go).
 
-!!! warning "Tombstoned in v0.3.6"
+!!! warning "Tombstoned"
     The `v1alpha1` API was removed before v0.3.0. This binary now exits with an error message explaining that v1alpha1 resources should have been migrated before reaching this version. It is retained in the repository as a safety net but has no useful functionality.
 
     If you are upgrading from a pre-v0.3.0 cluster, you must have already migrated your resources to `v1beta1` in a prior release. There is no automated migration path from v1alpha1 at this version.

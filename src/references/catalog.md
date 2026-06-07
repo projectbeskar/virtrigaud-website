@@ -5,9 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Catalog
 
-*Last updated: 2026-05-27T00:00:00Z — aligned to v0.3.6*
+*Last updated: 2026-06-07T00:00:00Z — aligned to v0.3.8*
 
-The VirtRigaud Provider Catalog lists all verified providers available for the VirtRigaud virtualization management platform. Providers listed here ship as part of the main repository at `v0.3.6` and have passing conformance gates in CI.
+The VirtRigaud Provider Catalog lists all verified providers available for the VirtRigaud virtualization management platform. Providers listed here ship as part of the main repository at `v0.3.8` and have passing conformance gates in CI.
 
 ## Provider Overview
 
@@ -15,7 +15,7 @@ The VirtRigaud Provider Catalog lists all verified providers available for the V
 |----------|-------------|--------------|-------------|------------|----------|
 | **Mock Provider** | A mock provider for testing and demonstrations | core, snapshot, clone, image-prepare, advanced | ![Conformance](https://img.shields.io/badge/conformance-pass-green) | virtrigaud@projectbeskar.com | Apache-2.0 |
 | **vSphere Provider** | VMware vSphere provider for VirtRigaud | core, snapshot, clone, advanced | ![Conformance](https://img.shields.io/badge/conformance-pass-green) | virtrigaud@projectbeskar.com | Apache-2.0 |
-| **Libvirt Provider** | Libvirt/KVM provider for VirtRigaud | core, snapshot | ![Conformance](https://img.shields.io/badge/conformance-partial-yellow) | virtrigaud@projectbeskar.com | Apache-2.0 |
+| **Libvirt Provider** | Libvirt/KVM provider for VirtRigaud | core, snapshot (clone: unimplemented [#153](https://github.com/projectbeskar/virtrigaud/issues/153)) | ![Conformance](https://img.shields.io/badge/conformance-partial-yellow) | virtrigaud@projectbeskar.com | Apache-2.0 |
 | **Proxmox Provider** | Proxmox VE provider for VirtRigaud | core, snapshot, clone | ![Conformance](https://img.shields.io/badge/conformance-partial-yellow) | virtrigaud@projectbeskar.com | Apache-2.0 |
 
 ## Quick Start
@@ -34,7 +34,7 @@ helm install my-vsphere-provider virtrigaud/virtrigaud-provider-runtime \
   --namespace vsphere-providers \
   --create-namespace \
   --set image.repository=ghcr.io/projectbeskar/virtrigaud/provider-vsphere \
-  --set image.tag=v0.3.6 \
+  --set image.tag=v0.3.8 \
   --set env[0].name=VSPHERE_SERVER \
   --set env[0].value=vcenter.example.com
 ```
@@ -51,7 +51,7 @@ kubectl get providers -n virtrigaud-system
 
 ### Mock Provider
 
-- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-mock:v0.3.6`
+- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-mock:v0.3.8`
 - **Repository:** [https://github.com/projectbeskar/virtrigaud](https://github.com/projectbeskar/virtrigaud)
 - **Maturity:** stable
 - **Tags:** testing, development, demo
@@ -69,14 +69,14 @@ helm install mock-provider virtrigaud/virtrigaud-provider-runtime \
   --namespace development \
   --create-namespace \
   --set image.repository=ghcr.io/projectbeskar/virtrigaud/provider-mock \
-  --set image.tag=v0.3.6 \
+  --set image.tag=v0.3.8 \
   --set env[0].name=LOG_LEVEL \
   --set env[0].value=debug
 ```
 
 ### vSphere Provider
 
-- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.6`
+- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8`
 - **Repository:** [https://github.com/projectbeskar/virtrigaud](https://github.com/projectbeskar/virtrigaud)
 - **Maturity:** beta
 - **Tags:** vmware, vsphere, enterprise
@@ -107,7 +107,7 @@ helm install vsphere-provider virtrigaud/virtrigaud-provider-runtime \
   --namespace vsphere-providers \
   --create-namespace \
   --set image.repository=ghcr.io/projectbeskar/virtrigaud/provider-vsphere \
-  --set image.tag=v0.3.6 \
+  --set image.tag=v0.3.8 \
   --set env[0].name=VSPHERE_SERVER \
   --set env[0].value=vcenter.example.com \
   --set env[1].name=VSPHERE_USERNAME \
@@ -120,7 +120,7 @@ helm install vsphere-provider virtrigaud/virtrigaud-provider-runtime \
 
 ### Libvirt Provider
 
-- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.6`
+- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.8`
 - **Repository:** [https://github.com/projectbeskar/virtrigaud](https://github.com/projectbeskar/virtrigaud)
 - **Maturity:** beta
 - **Tags:** libvirt, kvm, qemu, open-source
@@ -130,8 +130,10 @@ The libvirt provider manages KVM/QEMU virtual machines through libvirt, supporti
 - VM lifecycle management
 - Power state control
 - Snapshot operations
-- Basic cloning capabilities
 - Local and remote libvirt connections
+
+!!! warning "Clone not supported"
+    The libvirt Clone RPC is Unimplemented ([#153](https://github.com/projectbeskar/virtrigaud/issues/153)). VMClone resources targeting a libvirt provider will fail. The provider does not advertise `supportsLinkedClones` in its reported capabilities.
 
 **Prerequisites:**
 - Libvirt daemon running on target hosts
@@ -144,7 +146,7 @@ helm install libvirt-provider virtrigaud/virtrigaud-provider-runtime \
   --namespace libvirt-providers \
   --create-namespace \
   --set image.repository=ghcr.io/projectbeskar/virtrigaud/provider-libvirt \
-  --set image.tag=v0.3.6 \
+  --set image.tag=v0.3.8 \
   --set env[0].name=LIBVIRT_URI \
   --set env[0].value=qemu:///system \
   --set securityContext.runAsUser=0 \
@@ -153,7 +155,7 @@ helm install libvirt-provider virtrigaud/virtrigaud-provider-runtime \
 
 ### Proxmox Provider
 
-- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.6`
+- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8`
 - **Repository:** [https://github.com/projectbeskar/virtrigaud](https://github.com/projectbeskar/virtrigaud)
 - **Maturity:** beta
 - **Tags:** proxmox, pve, kvm, open-source
@@ -163,7 +165,7 @@ The Proxmox provider manages VMs on Proxmox VE through the Proxmox API, supporti
 - VM lifecycle management
 - Power state control
 - Snapshot operations
-- VM cloning (full clone only in v0.3.6)
+- VM cloning (Full and Linked clones)
 - API token authentication
 
 **Prerequisites:**
@@ -176,12 +178,27 @@ helm install proxmox-provider virtrigaud/virtrigaud-provider-runtime \
   --namespace proxmox-providers \
   --create-namespace \
   --set image.repository=ghcr.io/projectbeskar/virtrigaud/provider-proxmox \
-  --set image.tag=v0.3.6 \
+  --set image.tag=v0.3.8 \
   --set env[0].name=PROXMOX_HOST \
   --set env[0].value=pve.example.com \
   --set env[1].name=PROXMOX_TOKEN_ID \
   --set env[1].valueFrom.secretKeyRef.name=proxmox-creds \
   --set env[1].valueFrom.secretKeyRef.key=token-id
+```
+
+## Reported Capabilities (v0.3.8)
+
+Starting in v0.3.8, the manager fetches each provider's live capability set via the `GetCapabilities` gRPC RPC and surfaces the result in `Provider.status.reportedCapabilities`. A `CapabilitiesReported` status condition is also set on the Provider CR.
+
+These reported capabilities drive two behaviors:
+
+1. **VMClone Linked clones**: the VMClone controller checks `status.reportedCapabilities.supportsLinkedClones` before issuing a Linked clone. If the flag is `false` or unset, the clone is rejected with a clear error.
+2. **Capability enforcement** (opt-in): when the manager is started with `--enforce-provider-capabilities`, snapshot and migration operations are also gated on the provider's reported capabilities. This flag is OFF by default. Enable it only after confirming your provider's capability flags are accurate — a provider that under-reports a capability will block operations it can actually perform.
+
+To inspect reported capabilities:
+
+```bash
+kubectl get provider vsphere-prod -o jsonpath='{.status.reportedCapabilities}' | jq .
 ```
 
 ## Capability Profiles
@@ -288,14 +305,14 @@ To be included in the catalog, providers must:
 
 ## Provider Security Documentation
 
-The following security guides apply to all providers deployed in v0.3.6:
+The following security guides apply to all providers deployed in v0.3.8:
 
 | Guide | Path | Summary |
 |-------|------|---------|
-| mTLS between manager and provider | [`providers/security/mtls.md`](../providers/security/mtls.md) | Current status: mTLS is **not wired** through the Resolver in v0.3.6 (tracked as [#147](https://github.com/projectbeskar/virtrigaud/issues/147)). The guide documents the intended flow and the manual workaround. |
+| mTLS between manager and provider | [`providers/security/mtls.md`](../providers/security/mtls.md) | Current status: mTLS is **not wired** through the Resolver in v0.3.8 (tracked as [#147](https://github.com/projectbeskar/virtrigaud/issues/147)). The guide documents the intended flow and the manual workaround. |
 | Network Policies | [`providers/security/network-policies.md`](../providers/security/network-policies.md) | Kubernetes NetworkPolicy manifests to restrict provider pod egress. |
 | External Secrets | [`providers/security/external-secrets.md`](../providers/security/external-secrets.md) | Integrate with External Secrets Operator to avoid storing hypervisor credentials directly in Kubernetes Secrets. |
-| Bearer Token Auth | [`providers/security/bearer-token.md`](../providers/security/bearer-token.md) | Configure bearer-token-based authentication on provider gRPC endpoints. Note: provider gRPC servers do not enforce auth in v0.3.6 ([#148](https://github.com/projectbeskar/virtrigaud/issues/148)). |
+| Bearer Token Auth | [`providers/security/bearer-token.md`](../providers/security/bearer-token.md) | Configure bearer-token-based authentication on provider gRPC endpoints. Note: provider gRPC servers do not enforce auth in v0.3.8 ([#148](https://github.com/projectbeskar/virtrigaud/issues/148)). |
 
 ## Community and Support
 

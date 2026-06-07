@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Resilience Guide
 
-This document describes the resilience patterns and error-handling mechanisms in VirtRigaud as of **v0.3.6**.
+This document describes the resilience patterns and error-handling mechanisms in VirtRigaud as of **v0.3.8**.
 
 ## Overview
 
@@ -13,6 +13,8 @@ VirtRigaud's resilience model is layered:
 
 - **Error Taxonomy** — Structured error classification (`internal/providers/contracts`)
 - **CircuitBreaker on the provider gRPC RPC path** — One breaker per Provider CR, **wired automatically** since v0.3.6 (G6 / #112). Operators get a visible signal when a provider goes bad and the manager stops hammering it.
+- **Provider-side connection resilience** — The vSphere provider keeps its vCenter session alive and reconnects on a real probe failure; the libvirt provider retries transient SSH connection failures. Both landed in **v0.3.8** (#190, #191) and are documented below.
+- **Migration-storage PVC safety** — The provider controller no longer deletes migration-storage PVCs out from under an in-flight migration (#184, v0.3.8).
 - **Exponential Backoff** — Intelligent retry strategies for transient failures
 - **Timeout Policies** — Per-RPC deadlines prevent resource exhaustion
 - **Rate Limiting** — Provider-side protection
@@ -153,6 +155,73 @@ The expected operator response to a tripped breaker is:
 1. Check `virtrigaud_provider_rpc_requests_total{code="Unavailable"}` to confirm the failure pattern is on the provider, not the manager.
 2. Investigate the provider pod (`kubectl logs deployment/provider-<name>`) and its hypervisor connectivity.
 3. The breaker will self-recover once underlying connectivity is restored — no manual reset required. (`(*resilience.CircuitBreaker).Reset()` exists for emergency use but is not exposed via an admin API in v0.3.6.)
+
+## Provider-side connection resilience (v0.3.8)
+
+The circuit breaker above protects the manager from a *wedged* provider. v0.3.8
+adds the complementary layer: making the providers themselves survive the
+transient hypervisor-connectivity failures that previously tripped the breaker
+unnecessarily. These are provider-internal behaviors — no Provider CR change is
+required to benefit from them.
+
+### vSphere: vCenter session keepalive + real-probe reconnect (#190)
+
+Before v0.3.8, a vSphere provider that sat idle for a long time (no VMs being
+created, a quiet overnight window) could have its vCenter session silently
+expire. The next RPC would fail with `NotAuthenticated`, surface to the manager
+as an infra-class failure, and — after enough of them — trip the per-Provider
+circuit breaker. The operator-visible symptom was a provider that looked healthy
+all day and went `ProviderAvailable=False` after an idle period.
+
+v0.3.8 ([#190](https://github.com/projectbeskar/virtrigaud/pull/190)) fixes this
+on the provider side:
+
+- The provider runs a **session keepalive** so an otherwise-idle vCenter session
+  does not lapse.
+- `Validate` performs a **real probe** against vCenter rather than trusting a
+  cached session handle, so a stale session is detected at health-check time
+  rather than on the next mutating RPC.
+- When the probe detects a dead session, the provider **reconnects
+  transparently** and retries, so a single expired session does not surface as a
+  user-visible failure.
+
+The net effect: a vSphere provider survives long idle periods without the
+`NotAuthenticated` storm that used to trip the breaker. If you previously saw
+`virtrigaud_circuit_breaker_state{provider_type="vsphere"}` flip to Open after
+quiet windows, that pattern should disappear after upgrading to v0.3.8.
+
+### Libvirt: retry transient SSH connection failures (#191)
+
+The libvirt provider drives the host over SSH (`virsh` subprocess). Bursts of
+short-lived SSH connections — common during reconcile storms or migration RPC
+sequences — can hit transient handshake failures such as
+`kex_exchange_identification: Connection closed by remote host`, often because
+the host's `sshd` is rate-limiting concurrent unauthenticated connections.
+
+v0.3.8 ([#191](https://github.com/projectbeskar/virtrigaud/pull/191)) makes the
+libvirt provider **retry these transient SSH connection failures with bounded
+backoff** instead of failing the RPC on the first stumble. A connection that
+would previously have counted as an infra-class failure (and pushed the breaker
+toward Open) now recovers within the provider.
+
+!!! note "Client-side mitigation; tune the host too"
+    The retry is the *client-side* half of the fix. If your libvirt host's
+    `sshd` `MaxStartups` is low (or `fail2ban` is aggressive), bursts can still
+    exhaust the host's connection budget faster than the provider can back off.
+    See [Libvirt Host Preparation](libvirt-host-prepare.md) for the host-side
+    `MaxStartups` / `fail2ban` tuning that complements this retry.
+
+### Migration-storage PVC safety (#184)
+
+The provider controller annotates Provider CRs with a migration PVC and rolls
+the provider pods to mount it (see [VM Migration Guide](../migration/vm-migration-guide.md)).
+In v0.3.8 ([#184](https://github.com/projectbeskar/virtrigaud/pull/184)) the
+provider controller **no longer deletes migration-storage PVCs** as part of its
+reconcile, and it **watches** those PVCs so a roll does not race their lifecycle.
+Ownership and cleanup of the intermediate PVC remain with the `VMMigration` CR
+(see [VMMigration API Reference](../migration/api-reference.md#finalizer)). This
+removes a class of failure where an in-flight migration's transfer medium could
+be reclaimed before the import completed.
 
 ## Error Taxonomy
 
@@ -349,7 +418,7 @@ if !limiter.Allow() {
 return provider.Create(ctx, request)
 ```
 
-`ResourceExhausted` (gRPC code) is *not* an infra-class failure and will not trip the CircuitBreaker — see [Failure classification](#failure-classification--what-trips-the-breaker).
+`ResourceExhausted` (gRPC code) is *not* an infra-class failure and will not trip the CircuitBreaker — see [Failure classification](#failure-classification-what-trips-the-breaker).
 
 ## Condition Mapping
 
@@ -492,4 +561,4 @@ data:
   RATE_LIMIT_BURST: "50"
 ```
 
-> **Note (v0.3.6):** The CircuitBreaker uses `resilience.DefaultConfig()` unconditionally in v0.3.6. Per-Provider override via the ConfigMap above is on the roadmap; the values shown are the design target. Track progress in the [CHANGELOG](https://github.com/projectbeskar/virtrigaud/blob/main/CHANGELOG.md).
+> **Note (still current as of v0.3.8):** The CircuitBreaker uses `resilience.DefaultConfig()` unconditionally — the per-Provider override via the ConfigMap above is still on the roadmap and was not added in v0.3.8. The values shown are the design target. Track progress in the [CHANGELOG](https://github.com/projectbeskar/virtrigaud/blob/main/CHANGELOG.md).

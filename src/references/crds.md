@@ -9,7 +9,24 @@ This document describes all Custom Resource Definitions provided by VirtRigaud.
 
 API group: `infra.virtrigaud.io` / Version: `v1beta1`
 
-VirtRigaud ships **10 CRDs** at v0.3.6. For the full auto-generated field reference, see [generated-crd-docs.md](generated-crd-docs.md).
+VirtRigaud ships **10 CRDs** at v0.3.8. For the full auto-generated field reference, see [generated-crd-docs.md](generated-crd-docs.md).
+
+**Controller status at v0.3.8:**
+
+| CRD | Controller status |
+|-----|-------------------|
+| `VirtualMachine` | Active |
+| `Provider` | Active |
+| `VMClass` | Active |
+| `VMImage` | Active |
+| `VMNetworkAttachment` | Active |
+| `VMMigration` | Active |
+| `VMSnapshot` | Active |
+| `VMClone` | Active (MVP — `source.vmRef` only, same-provider) |
+| `VMSet` | Stub — `Ready=False / ControllerNotImplemented`; no replica management |
+| `VMPlacementPolicy` | Reference-only — no standalone controller; consumed via `VirtualMachine.spec.placementRef` |
+
+`VMAdoption` is a **controller** (in `internal/controller/`), not a CRD.
 
 ---
 
@@ -59,6 +76,9 @@ Full schema: [generated-crd-docs.md#virtualmachine](generated-crd-docs.md#virtua
 | `snapshots` | `[]VMSnapshotInfo` | Available snapshots |
 | `provider` | `map[string]string` | Provider-specific details |
 | `message` | `string` | Additional state details |
+
+!!! note "Double-create guard (v0.3.8)"
+    The VM controller skips the provider `Create` RPC for any VirtualMachine that carries the label `virtrigaud.io/adopted=true` **and** has an empty `Status.ID`. This guard prevents a duplicate create for VMs produced by VMClone or the VMAdoption controller, which seed `Status.ID` at bind time.
 
 ### Example
 
@@ -274,6 +294,38 @@ Full schema: [generated-crd-docs.md#provider](generated-crd-docs.md#provider)
 | `resourcePool` | `string` | Default resource pool |
 | `network` | `string` | Default network |
 
+### Status
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `conditions` | `[]Condition` | Status conditions, including `CapabilitiesReported` (added v0.3.8) |
+| `reportedCapabilities` | `ReportedCapabilities` | Provider's self-reported capability set, fetched from `GetCapabilities` RPC (added v0.3.8) |
+| `capabilities` | `[]ProviderCapability` | Legacy capability list |
+| `version` | `string` | Provider binary version |
+| `connectedVMs` | `int32` | VMs currently managed by this provider |
+| `observedGeneration` | `int64` | Last observed generation |
+
+#### ReportedCapabilities (v0.3.8)
+
+The manager calls the provider's `GetCapabilities` RPC after each successful connect and writes the result into `status.reportedCapabilities`. A `CapabilitiesReported` condition is also set (`True` on success, `False` with reason `Unavailable` if the RPC fails or the provider is unreachable).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `supportsReconfigureOnline` | `bool` | Online CPU/memory reconfigure |
+| `supportsDiskExpansionOnline` | `bool` | Online disk expansion |
+| `supportsSnapshots` | `bool` | VM snapshot support |
+| `supportsMemorySnapshots` | `bool` | Memory-inclusive snapshots |
+| `supportsLinkedClones` | `bool` | Linked (copy-on-write) clone support |
+| `supportsImageImport` | `bool` | Image import/preparation |
+| `supportedDiskTypes` | `[]string` | Supported disk formats |
+| `supportedNetworkTypes` | `[]string` | Supported NIC models |
+| `supportsDiskExport` | `bool` | Disk export (migration source) |
+| `supportsDiskImport` | `bool` | Disk import (migration target) |
+| `supportedExportFormats` | `[]string` | Supported export formats |
+| `supportedImportFormats` | `[]string` | Supported import formats |
+
+Full schema: [generated-crd-docs.md#provider](generated-crd-docs.md#provider)
+
 ### ProviderRuntimeSpec
 
 | Field | Type | Default | Description |
@@ -307,7 +359,7 @@ spec:
     cluster: Compute-Cluster
     storagePod: DatastoreCluster-SSD   # auto-selects datastore with most free space
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.3"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
     service:
       port: 9443
 ```
@@ -398,7 +450,7 @@ Used for adopted or migrated VMs instead of `imageRef`.
 
 ## VMMigration
 
-The `VMMigration` CRD manages live or offline migration of a virtual machine from one provider to another. In v0.3.6 only the **vSphere → Libvirt** direction is tested. Other pairs may work but are unverified.
+The `VMMigration` CRD manages live or offline migration of a virtual machine from one provider to another. Only the **vSphere → Libvirt** direction is tested. Other pairs may work but are unverified.
 
 Full schema: [generated-crd-docs.md#vmmigration](generated-crd-docs.md#vmmigration)
 
@@ -432,7 +484,7 @@ spec:
 
 ## VMSnapshot
 
-The `VMSnapshot` CRD represents a point-in-time snapshot of a VirtualMachine. Creating a VMSnapshot resource triggers the provider's snapshot RPC. Libvirt Clone and ImagePrepare RPCs are stubs in v0.3.6 ([#153](https://github.com/projectbeskar/virtrigaud/issues/153), [#154](https://github.com/projectbeskar/virtrigaud/issues/154)).
+The `VMSnapshot` CRD represents a point-in-time snapshot of a VirtualMachine. Creating a VMSnapshot resource triggers the provider's snapshot RPC. The libvirt ImagePrepare RPC remains a stub ([#154](https://github.com/projectbeskar/virtrigaud/issues/154)).
 
 Full schema: [generated-crd-docs.md#vmsnapshot](generated-crd-docs.md#vmsnapshot)
 
@@ -463,7 +515,10 @@ spec:
 
 ## VMSet
 
-The `VMSet` CRD manages a fleet of identically-configured VirtualMachines (analogous to a ReplicaSet for VMs). The controller reconciles the desired replica count against live VirtualMachine objects.
+!!! warning "Not functional in v0.3.8"
+    The `VMSet` CRD is defined and accepted by the API server, but the controller is a stub. Every VMSet resource will immediately receive a `Ready=False` condition with reason `ControllerNotImplemented` and message `"VMSet has no active controller in this release (#179)"`. No replica management, scaling, or VM creation occurs. Do not use VMSet in production.
+
+The `VMSet` CRD is intended to manage a fleet of identically-configured VirtualMachines (analogous to a ReplicaSet for VMs). The controller has not yet been implemented.
 
 Full schema: [generated-crd-docs.md#vmset](generated-crd-docs.md#vmset)
 
@@ -471,7 +526,7 @@ Full schema: [generated-crd-docs.md#vmset](generated-crd-docs.md#vmset)
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `replicas` | `int32` | Yes | Desired instance count |
+| `replicas` | `int32` | Yes | Desired instance count (not yet acted on) |
 | `selector` | `LabelSelector` | Yes | Matches VMs managed by this set |
 | `template` | `VMTemplateSpec` | Yes | VirtualMachine spec template |
 | `scalePolicy` | `VMSetScalePolicy` | No | `Concurrent` (default) or `Sequential` |
@@ -506,6 +561,9 @@ spec:
 
 ## VMPlacementPolicy
 
+!!! note "Reference-only object"
+    `VMPlacementPolicy` has no standalone controller. It is a data-carrier consumed by the VirtualMachine controller when a VM sets `spec.placementRef`. Creating a VMPlacementPolicy resource on its own has no direct effect.
+
 The `VMPlacementPolicy` CRD defines affinity and anti-affinity rules that influence where VMs are placed within a provider. VirtualMachines reference a policy via `spec.placementRef`.
 
 Full schema: [generated-crd-docs.md#vmplacementpolicy](generated-crd-docs.md#vmplacementpolicy)
@@ -535,17 +593,36 @@ spec:
 
 ## VMClone
 
-The `VMClone` CRD manages a clone operation — creates a new VirtualMachine from a source VM or template. In v0.3.6 the Libvirt Clone RPC is a stub ([#153](https://github.com/projectbeskar/virtrigaud/issues/153)).
+The `VMClone` CRD manages a clone operation — creates a new VirtualMachine from a source VM. As of v0.3.8 the VMClone controller is **active (MVP)**. See limitations below.
 
 Full schema: [generated-crd-docs.md#vmclone](generated-crd-docs.md#vmclone)
+
+### v0.3.8 limitations
+
+- **Source**: only `source.vmRef` (clone from a live VM) is supported. Using `source.snapshotRef`, `source.templateRef`, or `source.imageRef` will set the VMClone to `Failed` with message `"clone source type not yet supported; use source.vmRef"`.
+- **Same-provider only**: the target must resolve to the same provider as the source VM. Cross-provider clone is not supported.
+- **Linked clones**: supported only when the provider advertises `supportsLinkedClones=true` in its `status.reportedCapabilities`. vSphere and Proxmox support this; the libvirt Clone RPC is **Unimplemented** ([#153](https://github.com/projectbeskar/virtrigaud/issues/153)) — any VMClone targeting a libvirt provider will fail.
+- **Produced VM**: the controller creates a target `VirtualMachine` CR labeled `virtrigaud.io/adopted=true` with `Status.ID` seeded to the cloned VM's provider ID. The target VM is bound to the VMClone via owner references.
+- **Deletion**: deleting a VMClone does **not** delete the produced VirtualMachine. The target VM must be deleted separately.
 
 ### Spec summary
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `source` | `VMCloneSource` | Yes | `vmRef` (clone from live VM) or `snapshotRef` (clone from snapshot) |
-| `target` | `VMCloneTarget` | Yes | Destination name and optional class/placement overrides |
-| `options` | `VMCloneOptions` | No | `type`: `FullClone` (default) or `LinkedClone`; `powerOn`: auto-power after clone |
+| `source` | `CloneSource` | Yes | `vmRef` only in v0.3.8 (see limitations above) |
+| `target` | `VMCloneTarget` | Yes | Destination name, namespace, and optional class/placement/network overrides |
+| `options` | `CloneOptions` | No | `type`: `FullClone` (default) or `LinkedClone`; `powerOn`: auto-power after clone |
+| `customization` | `VMCustomization` | No | Cloud-init or Ignition customization for the target VM |
+| `metadata` | `CloneMetadata` | No | Labels/annotations for clone audit |
+
+### Status
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `phase` | `VMClonePhase` | `Pending`, `Cloning`, `Completed`, `Failed` |
+| `targetVMID` | `string` | Provider-specific identifier of the cloned VM (new in v0.3.8) |
+| `conditions` | `[]Condition` | Status conditions |
+| `observedGeneration` | `int64` | Last observed generation |
 
 ### Example
 
@@ -564,12 +641,12 @@ spec:
       name: small
   options:
     type: FullClone
-    powerOn: true
+    powerOn: false
 ```
 
 ---
 
-## CRD count at v0.3.6
+## CRD count at v0.3.8
 
 The 10 CRDs in `infra.virtrigaud.io/v1beta1`: `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMMigration`, `VMSnapshot`, `VMSet`, `VMPlacementPolicy`, `VMClone`.
 

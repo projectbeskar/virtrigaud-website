@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # vSphere Hardware Version Management
 
-This page is aligned to **VirtRigaud v0.3.6**. It describes how the vSphere
+This page is aligned to **VirtRigaud v0.3.8**. It describes how the vSphere
 provider's `HardwareUpgrade` gRPC RPC works, what the manager controller
 currently does (and does *not*) do with it, and what an operator needs from
 vCenter / ESXi for it to succeed.
@@ -53,7 +53,7 @@ The RPC blocks until vCenter reports the upgrade task complete.
 
 ## What the manager controller currently does with it
 
-!!! warning "There is no operator-facing controller path that triggers `HardwareUpgrade` in v0.3.6."
+!!! warning "There is no operator-facing controller path that triggers `HardwareUpgrade` in v0.3.8."
     The `HardwareUpgrade` RPC is implemented end-to-end in the vSphere
     provider and reachable over gRPC, but the `VirtualMachineReconciler` in
     `internal/controller/virtualmachine_controller.go` does **not** call it as
@@ -93,7 +93,7 @@ authoritative.
 | 18 | 7.0 U1 | Enhanced VMXNET3 features. |
 | 19 | 7.0 U2 | PTP precision time, vSphere Bitfusion. |
 | 20 | 7.0 U3 | Wider vGPU support. |
-| 21 | 8.0 | DPU passthrough, current GA at time of v0.3.6. |
+| 21 | 8.0 | DPU passthrough, current GA at time of v0.3.8. |
 
 VirtRigaud does **not** keep its own allowlist of `vmx-N` values — any integer
 that the underlying govmomi `vm.UpgradeVM` call accepts will succeed.
@@ -138,7 +138,7 @@ spec:
 If `extraConfig.vsphere.hardwareVersion` is unset, the provider does not pass a
 `Version` to govmomi and vCenter picks its default for the targeted ESXi.
 
-## Upgrading an existing VM out-of-band (workaround for v0.3.6)
+## Upgrading an existing VM out-of-band (workaround for v0.3.8)
 
 This is the gRPC-direct path described above. Useful when you have a fleet of
 existing VMs at `vmx-15` and want to bump them to `vmx-21` without recreating
@@ -155,15 +155,19 @@ Prerequisites:
    or whatever the chart exposes).
 4. You must satisfy the provider's auth requirements at the gRPC layer.
 
-!!! danger "Provider gRPC servers do not enforce auth in v0.3.6 (#148)"
-    The in-tree provider mains do not enable `Auth.RequireTLS` or
-    `BearerTokenAuth` from the SDK middleware (`sdk/provider/middleware/middleware.go:81-94`).
-    The compensating control is a `NetworkPolicy` that restricts ingress to
-    the provider pod to the manager pod only (see
+!!! danger "Provider gRPC endpoints enforce mTLS (v0.3.7+) but not bearer auth (#148)"
+    Since v0.3.7 the provider gRPC channel **requires mTLS** (#147) — a direct
+    caller must present a client certificate the provider trusts (constrained by
+    `VIRTRIGAUD_PROVIDER_ALLOWED_SANS`), so the plaintext example below only
+    applies to a lab provider explicitly opted out of TLS. The in-tree provider
+    mains still do **not** enable SDK `BearerTokenAuth`
+    (`sdk/provider/middleware/middleware.go:81-94`), so the compensating control
+    for authorization remains a `NetworkPolicy` that restricts ingress to the
+    provider pod to the manager pod only (see
     [Network Policies](../providers/security/network-policies.md) and
     [Security](security.md)). If you call the provider gRPC endpoint
     directly from your own tool, **only do so from a pod that the
-    NetworkPolicy permits**.
+    NetworkPolicy permits**, and supply the mTLS client material.
 
 Programmatic call (Go):
 
@@ -181,7 +185,11 @@ import (
 )
 
 func upgradeVMHardwareVersion(endpoint, vmID string, targetVersion int32) error {
-    // v0.3.6: gRPC channel is plaintext. mTLS not wired (#147).
+    // NOTE: since v0.3.7 the provider enforces mTLS (#147). This insecure
+    // dial only works against a lab provider explicitly opted out of TLS
+    // (VIRTRIGAUD_PROVIDER_INSECURE=true). For a production provider, build
+    // credentials from your client cert/key + the provider CA with
+    // credentials.NewTLS(...) instead.
     conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
     if err != nil {
         return fmt.Errorf("dial provider: %w", err)
@@ -231,7 +239,7 @@ mirrors the vSphere managed-object-reference value).
 | `VM must be powered off for hardware upgrade, current state: poweredOn` (`server.go:995`) | Hardware upgrade can only be issued against a powered-off VM. | Set `spec.powerState: Off`, wait for reconcile, retry. |
 | `target version vmx-N is not newer than current version vmx-M` (`server.go:1021`) | The `target_version` is the same as or lower than the current version. | Pick a higher integer. Downgrades are not supported through this RPC. |
 | `failed to start hardware upgrade: <govmomi error>` (`server.go:1027`) | vCenter rejected the upgrade — usually because the target `vmx-N` is not supported by the host or by the guest OS hardware family. | Check vCenter compatibility for the host the VM is registered on. |
-| `failed to check VM power state: ...` / `failed to get VM properties: ...` | The vSphere session has expired or `id` is wrong. | Check the [Resilience](resilience.md) page; the CircuitBreaker will surface the underlying session failure. Re-check the VirtualMachine `status.id`. |
+| `failed to check VM power state: ...` / `failed to get VM properties: ...` | The vSphere session has expired or `id` is wrong. | As of v0.3.8 ([#190](https://github.com/projectbeskar/virtrigaud/pull/190)) the provider keeps the vCenter session alive and reconnects on a real-probe failure, so transient session expiry should self-heal; a persistent failure means `id` is wrong or vCenter is unreachable. Re-check the VirtualMachine `status.id`; see [Resilience](resilience.md#provider-side-connection-resilience-v038). |
 
 ## Cross-references
 
