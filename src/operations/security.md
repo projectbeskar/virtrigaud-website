@@ -283,13 +283,37 @@ This is an operational hardening toggle, not a transport or credential control; 
 
 - **Container images are scanned with Trivy** on every release (`.github/workflows/release.yml:185-198`). The release workflow **fails** if Trivy finds any HIGH or CRITICAL severity vulnerability. v0.3.6 itself was held back until 3 HIGH-severity OpenTelemetry CVEs (CVE-2026-29181, CVE-2026-24051, CVE-2026-39883) were addressed by PR #144.
 - **Code is scanned with Trivy in repo mode** on every CI run (`.github/workflows/ci.yml:160-171`). Results are uploaded to the GitHub Security tab as SARIF.
-- **Container image signing with cosign** is enabled on releases (`.github/workflows/release.yml:136-140`). Verify images before pulling in regulated environments:
+- **Release artifacts are signed and attested with cosign** (`.github/workflows/release.yml`). Every published multi-arch image — and its per-arch children, via `cosign sign --recursive` — carries a keyless **signature** (Fulcio + Rekor), an **SBOM** attestation (`spdxjson`), and **SLSA L3 provenance** (`slsa-github-generator`, `generator_container_slsa3.yml@v2.1.0`).
 
-  ```bash
-  cosign verify ghcr.io/projectbeskar/virtrigaud/manager:v0.3.8 \
-    --certificate-identity-regexp='.*' \
-    --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
-  ```
+#### Verifying release artifacts
+
+From **v0.3.9 onward**, the signature, SBOM, and SLSA provenance are all stored in the **legacy `.sig`/`.att` tag format** — the release pins cosign to `v2.6.3` (#172) so its `sign`/`attest` output matches the SLSA generator's tag. As a result, a **single cosign version (any ≥ 2.2)** verifies all three with default flags. Prefer an immutable `@sha256:…` digest over a tag:
+
+```bash
+IMAGE=ghcr.io/projectbeskar/virtrigaud/manager:v0.3.9
+ISSUER=https://token.actions.githubusercontent.com
+# Accepts both the release workflow (signature/SBOM) and the SLSA generator
+# (provenance) identities; tighten per-artifact if you need a stricter policy.
+ID_RE='https://github.com/(projectbeskar/virtrigaud|slsa-framework/slsa-github-generator)/.*'
+
+# 1. Signature
+cosign verify "$IMAGE" \
+  --certificate-identity-regexp="$ID_RE" \
+  --certificate-oidc-issuer="$ISSUER"
+
+# 2. SBOM (SPDX)
+cosign verify-attestation "$IMAGE" --type spdxjson \
+  --certificate-identity-regexp="$ID_RE" \
+  --certificate-oidc-issuer="$ISSUER"
+
+# 3. SLSA provenance
+cosign verify-attestation "$IMAGE" --type slsaprovenance \
+  --certificate-identity-regexp="$ID_RE" \
+  --certificate-oidc-issuer="$ISSUER"
+```
+
+!!! note "v0.3.6–v0.3.8: split storage format"
+    Releases v0.3.6 through v0.3.8 were signed with cosign **v3.0.x**, which stored the signature + SBOM in the **new Sigstore-bundle (OCI 1.1 referrer)** format while SLSA provenance stayed on the **legacy `.att`** tag. No single cosign version discovers all three with default flags for those releases: use **cosign ≥ 2.6** for the signature + SBOM, and **cosign 2.2.x** for the SLSA provenance. Every artifact is cryptographically valid (Fulcio + Rekor) — this was a discovery-format split, not a missing or invalid attestation, and it is resolved from v0.3.9 (#172).
 
 ### GitHub Actions pinning
 
@@ -299,7 +323,7 @@ All third-party Actions are pinned to **40-character commit SHAs**, not floating
 
 - `go.sum` is verified on every CI run via `go mod download` against the module proxy.
 - `make verify-tidy` (the convention) fails on a dirty `go mod tidy` diff.
-- The project does not currently run `govulncheck` in CI as a blocking check; that is on the v0.4.0 hardening list.
+- `govulncheck` runs as a **blocking CI gate** on every run (added in v0.3.7, #151), failing the build on a known vulnerability in a reachable code path — complementing the Trivy image/repo scans.
 
 ## CRD input validation
 
