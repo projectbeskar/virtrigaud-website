@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Capabilities Matrix
 
-This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.3.8**.
+This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.3.9**.
 
 Cells marked ✅ / ❌ in this matrix are cross-referenced against each provider's `GetCapabilities` gRPC response (`internal/providers/{vsphere,libvirt,proxmox}/server.go`) and the capability builder registrations in `internal/providers/{proxmox}/capabilities.go` / `sdk/provider/capabilities/`. Where a feature is implemented in code but not yet exposed through the capability flag (or vice versa), the cell carries a footnote rather than being silently changed.
 
@@ -47,7 +47,7 @@ All providers implement these core operations:
 | **Reboot** | ✅ | ✅ | ✅ | ✅ | Graceful and forced restart |
 | **Suspend** | ✅ | ❌ | ✅ | ✅ | Memory state preservation |
 | **Describe** | ✅ | ✅ | ✅ | ✅ | VM state and properties |
-| **Reconfigure** | ✅ | ⚠️ | ✅ | ✅ | CPU/Memory/Disk changes (Libvirt requires restart) |
+| **Reconfigure** | ✅ | ✅[^reconfigure] | ✅ | ✅ | CPU/Memory/Disk changes; libvirt online with hot-add headroom (see note) |
 | **TaskStatus** | ✅ | N/A | ✅ | ✅ | Async operation tracking |
 | **ConsoleURL** | ✅ | ✅ | ⚠️ | ✅ | Remote console access (Proxmox planned) |
 
@@ -57,8 +57,8 @@ All providers implement these core operations:
 |------------|---------|---------|---------|------|-------|
 | **CPU Configuration** | ✅ | ✅ | ✅ | ✅ | Cores, sockets, threading |
 | **Memory Allocation** | ✅ | ✅ | ✅ | ✅ | Static memory sizing |
-| **Hot CPU Add** | ✅ | ❌ | ✅ | ✅ | Online CPU expansion |
-| **Hot Memory Add** | ✅ | ❌ | ✅ | ✅ | Online memory expansion |
+| **Hot CPU Add** | ✅ | ✅[^reconfigure] | ✅ | ✅ | Online CPU expansion |
+| **Hot Memory Add** | ✅ | ✅[^reconfigure] | ✅ | ✅ | Online memory expansion |
 | **Resource Reservations** | ✅ | ❌ | ✅ | ✅ | Guaranteed resources |
 | **Resource Limits** | ✅ | ❌ | ✅ | ✅ | Resource capping |
 
@@ -67,14 +67,14 @@ All providers implement these core operations:
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
 | **Disk Creation** | ✅ | ✅ | ✅ | ✅ | Virtual disk provisioning |
-| **Disk Expansion** | ✅ | ⚠️[^1] | ✅ | ✅ | Online disk growth |
+| **Disk Expansion** | ✅ | ✅[^diskexpand] | ✅ | ✅ | Online disk growth |
 | **Multiple Disks** | ✅ | ✅ | ✅ | ✅ | Multi-disk VMs |
 | **Thin Provisioning** | ✅ | ✅ | ✅ | ✅ | Space-efficient disks |
 | **Thick Provisioning** | ✅ | ✅ | ✅ | ✅ | Pre-allocated storage |
 | **Storage Policies** | ✅ | ❌ | ✅ | ✅ | Policy-based placement |
 | **Storage Pools** | ✅ | ✅ | ✅ | ✅ | Organized storage management |
 
-[^1]: Libvirt advertises `SupportsDiskExpansionOnline=false` in its `GetCapabilities` response. Disk growth works but requires a VM power cycle.
+[^diskexpand]: As of v0.3.9 (#201), libvirt advertises `SupportsDiskExpansionOnline=true`. Online grow runs via `virsh blockresize` (grow-only; shrink is not supported) followed by a best-effort in-guest filesystem grow via the QEMU guest agent (`resize2fs` / `xfs_growfs`). If the guest agent is absent or the layout is non-standard (LVM, multiple partitions), the block device is enlarged but the guest filesystem must be grown manually. Lab-verified: `blockresize … 20G` succeeded live on a running guest.
 
 ### Network Configuration
 
@@ -93,12 +93,14 @@ All providers implement these core operations:
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
 | **Template Deployment** | ✅ | ✅ | ✅ | ✅ | Deploy from templates |
-| **Clone Operations** | ✅ | ❌[^2] | ✅ | ✅ | Full VM duplication (vSphere/Proxmox `Clone`; libvirt returns `Unimplemented`) |
-| **Linked Clones** | ✅ | ❌[^2] | ✅ | ✅ | COW-based clones (libvirt reports `SupportsLinkedClones=false`) |
-| **Full Clones** | ✅ | ❌[^2] | ✅ | ✅ | Independent copies (libvirt `Clone` is `Unimplemented`) |
-| **VM Reconfiguration** | ✅ | ⚠️ Restart Required | ✅ | ✅ | Online resource modification |
+| **Clone Operations** | ✅ | ✅[^clone] | ✅ | ✅ | Full VM duplication; libvirt: same-provider full or linked (qcow2 overlay) |
+| **Linked Clones** | ✅ | ✅[^clone] | ✅ | ✅ | COW-based clones; libvirt: qcow2 overlay via `backing_file` |
+| **Full Clones** | ✅ | ✅[^clone] | ✅ | ✅ | Independent copies; libvirt: full volume clone |
+| **VM Reconfiguration** | ✅ | ✅[^reconfigure] | ✅ | ✅ | Online resource modification |
 
-[^2]: Libvirt's `Clone` RPC returns `Unimplemented` and `GetCapabilities` reports `SupportsLinkedClones=false` (`internal/providers/libvirt/server.go`, corrected by #153/#154 in v0.3.8). An earlier doc-alignment footnote claimed libvirt advertised `SupportsLinkedClones=true` and was "corrected in v0.3.6" — that claim is **reversed** as of v0.3.8: libvirt linked clones (and clones generally) are unsupported. The VMClone controller (MVP, #179) drives same-provider full/linked clones on the providers that implement `Clone` (vSphere, Proxmox).
+[^clone]: As of v0.3.9 (#153/#208/#221), libvirt's `Clone` RPC is fully implemented and `GetCapabilities` reports `SupportsLinkedClones=true`. Linked clone = qcow2 overlay (`backing_file`); full clone = volume copy. Same-provider only. Clone hardening (#208/#221) ensures the per-VM UEFI `<nvram>` varstore is re-pointed to an independent copy (no shared nvram between source and clone), and hot-add headroom is preserved across a class-override clone. Earlier documentation (including v0.3.8 footnotes) stated libvirt clone was `Unimplemented` — that is reversed in v0.3.9.
+
+[^reconfigure]: As of v0.3.9 (#203), libvirt advertises `SupportsReconfigureOnline=true`. Online CPU/memory reconfigure via `virsh setvcpus --live` / `virsh setmem --live` works **only on VMs created with the hot-add flags** (`VMClass.spec.performanceProfile.cpuHotAddEnabled` and/or `memoryHotAddEnabled` set at create time). Headroom is provisioned at create (4× ceiling, vCPU hard-capped at 64). VMs created without these flags — including all pre-v0.3.9 VMs — still require a power-cycle for CPU/memory changes. Lab-verified: `virsh setvcpus … 4 --live` and `virsh setmem … --live` both succeeded with no power-cycle on a properly configured UEFI VM.
 
 ### Snapshot Operations
 
@@ -107,37 +109,40 @@ All providers implement these core operations:
 | **Create Snapshots** | ✅ | ✅ | ✅ | ✅ | Point-in-time captures |
 | **Delete Snapshots** | ✅ | ✅ | ✅ | ✅ | Snapshot cleanup |
 | **Revert Snapshots** | ✅ | ✅ | ✅ | ✅ | Restore VM state |
-| **Memory Snapshots** | ❌[^3] | ❌ | ✅ | ✅ | Include RAM state |
+| **Memory Snapshots** | ✅[^memsnap] | ✅[^memsnap] | ✅ | ✅ | Include RAM state |
 | **Quiesced Snapshots** | ✅ | ❌ | ✅ | ✅ | Consistent filesystem |
 | **Snapshot Trees** | ✅ | ✅ | ✅ | ✅ | Hierarchical snapshots |
 
-[^3]: vSphere advertises `SupportsMemorySnapshots=false` in its `GetCapabilities` response — vSphere snapshots do not include memory state by default. The previous matrix incorrectly marked this `✅`; corrected in v0.3.6 docs alignment. Operators who need memory-state snapshots on vSphere must take them through vCenter directly today.
+[^memsnap]: All three providers support RAM-inclusive snapshots as of v0.3.9. **vSphere** (#200): `CreateSnapshot(memory=true)`; requires the VM powered on (vSphere rejects memory snapshots of a powered-off VM). **Libvirt** (#202): `virsh snapshot-create-as` without `--disk-only`; running VM captures disk + RAM state; stopped VM honestly downgrades to disk-only with a WARN logged. **Proxmox**: PVE-native RAM-inclusive snapshots. Set `spec.memory: true` on the `VMSnapshot` CR to request a memory snapshot. An earlier v0.3.6/v0.3.8 footnote stated vSphere and libvirt both advertised `SupportsMemorySnapshots=false` — that is reversed in v0.3.9 for both providers.
 
 ### Image Management
 
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
 | **OVA/OVF Import** | ✅ | ❌ | ✅ | ✅ | Standard VM formats |
-| **Image Import (URL)** | ⚠️[^4] | ❌[^6] | ✅ | ✅ | Remote image fetch; libvirt `ImagePrepare` returns `Unimplemented` (#153/#154); vSphere tracked but no URL-based fetch yet |
+| **Image Import (URL)** | ⚠️[^4] | ✅[^imageimport] | ✅ | ✅ | Remote image fetch; libvirt `ImagePrepare` implemented (#154); vSphere: OVA/OVF + content library only |
 | **Content Libraries** | ✅ | ❌ | ❌ | ✅ | Centralized image management |
 | **Image Conversion** | ❌ | ✅ | ✅ | ✅ | Format transformation |
 | **Image Caching** | ✅ | ✅ | ✅ | ✅ | Performance optimization |
 
 [^4]: vSphere advertises `SupportsImageImport=true` (OVA/OVF + content library); direct cloud-image URL fetch is not yet implemented. Operators today should land cloud images in the content library out-of-band.
 
-[^6]: As of v0.3.8 (#153/#154), libvirt's `ImagePrepare` RPC returns `Unimplemented` and `GetCapabilities` reports `SupportsImageImport=false`. The earlier docs claimed libvirt fetched images from a URL into a storage pool volume; that path is not implemented. Operators must stage the base image on the libvirt host (or storage pool) out of band.
+[^imageimport]: As of v0.3.9 (#154), libvirt's `ImagePrepare` RPC is fully implemented and `GetCapabilities` reports `SupportsImageImport=true`. `VMImage.spec.prepare` drives lazy, VM-create-time image import into a libvirt storage pool. A `VMImage` with `prepare.onMissing: Fail` whose image is not yet present on the target provider will hold new VM creation with a `WaitingForDependencies` condition ("image not prepared on provider") until preparation completes. Images without a `prepare` block create normally. Earlier v0.3.8 documentation stated `ImagePrepare` was `Unimplemented` — that is reversed in v0.3.9.
 
 ### Disk Export / Import
 
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
-| **Disk Export** | ✅[^7] | ✅[^8] | ❌ | ✅ | `ExportDisk` / `GetDiskInfo`; vSphere also advertises export compression |
-| **Disk Import** | ✅[^7] | ❌[^8] | ❌ | ✅ | `ImportDisk`; libvirt advertises export-only |
-| **Export Formats** | `vmdk`, `qcow2`, `raw` | per `GetDiskInfo` | — | simulated | vSphere `GetCapabilities` advertises all three (#178) |
+| **Disk Export** | ✅[^7] | ✅[^8] | ✅ | ✅ | `ExportDisk` / `GetDiskInfo`; vSphere also advertises export compression |
+| **Disk Import** | ✅[^7] | ✅[^8] | ✅ | ✅ | `ImportDisk`; libvirt: `pvc://` / `file://` sources |
+| **Export Compression** | ✅ | ✅ | ✅[^proxmoxcomp] | simulated | vSphere and libvirt honor `req.Compress`; Proxmox (#219) |
+| **Export Formats** | `vmdk`, `qcow2`, `raw` | per `GetDiskInfo` | `qcow2`, `raw`, `vmdk` | simulated | vSphere & Proxmox `GetCapabilities` advertise all three (#178 / #198) |
 
 [^7]: As of v0.3.8 (#178), vSphere's `GetCapabilities` advertises disk **export and import** plus the `vmdk`, `qcow2`, and `raw` formats and export compression. Prior releases understated these flags (export/import reported as unsupported/zero); the cells above match the actual v0.3.8 response in `internal/providers/vsphere/server.go`.
 
-[^8]: As of v0.3.8 (#177), libvirt implements `ExportDisk` / `GetDiskInfo` with accurate capability flags and formats, so disk **export** is supported. Disk **import** remains unsupported per libvirt's real capability flags. These cells feed the cross-provider migration pipeline (vSphere → libvirt export/convert/import).
+[^8]: libvirt implements both `ExportDisk` / `GetDiskInfo` (#177, v0.3.8) and `ImportDisk` (accepting `pvc://` and `file://` sources), and `GetCapabilities` reports `SupportsDiskExport=true` **and** `SupportsDiskImport=true`. These feed the cross-provider migration pipeline (vSphere → libvirt export/convert/import). Proxmox likewise advertises both export and import for `qcow2`/`raw`/`vmdk` (#198).
+
+[^proxmoxcomp]: As of v0.3.9 (#219), Proxmox's `ExportDisk` honors the `Compress` field for qcow2 targets and advertises `SupportsExportCompression=true` in `GetCapabilities`.
 
 ### Guest Operating System
 
@@ -242,9 +247,13 @@ The capability builder lives at `sdk/provider/capabilities/` in the main repo an
 - **Bridge Networking**: Direct host network bridging
 - **Storage Pool Flexibility**: Multiple storage backend support
 - **Host Device Passthrough**: Hardware device assignment
-- **Reconfiguration Support**: CPU/memory/disk changes via virsh (restart required)
+- **Online Reconfiguration** (#203): Live CPU/memory changes via `virsh setvcpus/setmem --live` for VMs created with `cpuHotAddEnabled`/`memoryHotAddEnabled` on the VMClass (headroom provisioned at create, 4× ceiling, vCPU max 64). Power-cycle required for VMs without the flags.
+- **Online Disk Expansion** (#201): Live grow via `virsh blockresize` + best-effort in-guest FS grow. Grow-only.
+- **Clone Support** (#153/#208/#221): Full and linked (qcow2 overlay) clones, same-provider. UEFI nvram re-pointed per clone; hot-add headroom preserved across class-override clones.
+- **Image Preparation** (#154): `VMImage.spec.prepare` drives lazy VM-create-time image import into a storage pool.
+- **Memory Snapshots** (#202): RAM-inclusive checkpoints on running VMs; disk-only downgrade with WARN for stopped VMs.
 - **VNC Console Access**: Direct VNC console URL generation for remote viewers
-- **Disk Export**: `ExportDisk` / `GetDiskInfo` (#177) — feeds cross-provider migration; import not supported
+- **Disk Export / Import**: `ExportDisk` / `GetDiskInfo` (#177) + `ImportDisk` (`pvc://` / `file://` sources) — feeds the cross-provider migration pipeline
 
 ### Proxmox VE Exclusive
 
@@ -291,9 +300,9 @@ Reflects each provider's `GetCapabilities.SupportedNetworkTypes` response.
 
 All provider images are available from the GitHub Container Registry:
 
-- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8`
-- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.8`
-- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8`
+- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.9`
+- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.9`
+- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.9`
 
 The mock provider (`provider-mock`) is a development/conformance-testing image only.
 It is **not** published under release tags and is **not** part of the multi-arch
@@ -377,7 +386,6 @@ the container runtime selects the correct layer automatically.
 - SR-IOV networking
 - NUMA topology optimization
 - Enhanced performance monitoring
-- Online disk expansion (currently requires power cycle)
 
 #### Proxmox
 - HA configuration
@@ -396,7 +404,8 @@ the container runtime selects the correct layer automatically.
 
 ## Version History
 
-- **v0.3.8**: Capability negotiation surfaced on `Provider.status.reportedCapabilities` + `CapabilitiesReported` condition, with opt-in `--enforce-provider-capabilities` (default off, fail-open) (#176); vSphere `GetCapabilities` now advertises disk export **and** import + `vmdk`/`qcow2`/`raw` formats + export compression (#178); libvirt implements `ExportDisk`/`GetDiskInfo` (#177); libvirt `Clone`/`ImagePrepare` corrected to `Unimplemented` with `SupportsLinkedClones=false` and `SupportsImageImport=false` (#153/#154); VMClone controller MVP (same-provider full/linked, vSphere+Proxmox) (#179); vSphere vCenter session keepalive + live-probe reconnect (#190); libvirt transient-SSH retry with bounded backoff (#191); Helm templated providers disabled by default (#173).
+- **v0.3.9**: Libvirt online CPU/memory reconfigure (#203) — `SupportsReconfigureOnline=true`; hot-add headroom provisioned at create via VMClass flags; lab-verified live. Libvirt online disk expansion (#201) — `SupportsDiskExpansionOnline=true`; `virsh blockresize` + best-effort in-guest FS grow; lab-verified. Libvirt memory snapshots (#202) — `SupportsMemorySnapshots=true`; RAM-inclusive checkpoints on running VMs. Libvirt Clone (#153) — `SupportsLinkedClones=true`; qcow2 overlay (linked) + full copy, same-provider. Libvirt clone hardening (#208/#221) — UEFI nvram re-pointed per clone; hot-add headroom preserved across class-override clones. End-to-end image preparation (#154) — `SupportsImageImport=true`; `VMImage.spec.prepare` drives lazy import on libvirt/vSphere/Proxmox. Proxmox export compression (#219) — honors `Compress` for qcow2 targets. vSphere memory snapshots (#200) — `SupportsMemorySnapshots=true`; `CreateSnapshot(memory=true)`.
+- **v0.3.8**: Capability negotiation surfaced on `Provider.status.reportedCapabilities` + `CapabilitiesReported` condition, with opt-in `--enforce-provider-capabilities` (default off, fail-open) (#176); vSphere `GetCapabilities` now advertises disk export **and** import + `vmdk`/`qcow2`/`raw` formats + export compression (#178); libvirt implements `ExportDisk`/`GetDiskInfo` (#177); VMClone controller MVP (same-provider full/linked, vSphere+Proxmox) (#179); vSphere vCenter session keepalive + live-probe reconnect (#190); libvirt transient-SSH retry with bounded backoff (#191); Helm templated providers disabled by default (#173).
 - **v0.3.7**: mTLS enforced on all Provider CRs (`TLSConfigured` condition); libvirt SSH host-key verification on by default; multi-arch images (amd64+arm64); manager RBAC tightened.
 - **v0.3.6**: Manager-side CircuitBreaker wired on all provider RPCs (G6); G7 metric families completed; H1 build-path consolidation. No new provider-side capabilities.
 - **v0.3.5**: Observability G-track foundation — provider RPC metrics surface for every provider.
@@ -409,4 +418,4 @@ the container runtime selects the correct layer automatically.
 
 ---
 
-*This document reflects VirtRigaud v0.3.8 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*
+*This document reflects VirtRigaud v0.3.9 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*

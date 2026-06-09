@@ -7,24 +7,25 @@ SPDX-License-Identifier: Apache-2.0
 
 The Libvirt provider manages VMs on KVM/QEMU via the `libvirt` daemon, talking to it through `virsh` shelled out over SSH. It is the simplest provider to operate against and is widely deployed on-premises.
 
-This page is aligned to **VirtRigaud v0.3.8**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/libvirt/server.go`.
+This page is aligned to **VirtRigaud v0.3.9**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/libvirt/server.go`.
 
 !!! note "Implementation detail: virsh over SSH"
     Unlike most libvirt integrations that use the C `libvirt-go` bindings (which require cgo), VirtRigaud's libvirt provider shells out to the `virsh` CLI over an SSH tunnel to the remote libvirt host (`internal/providers/libvirt/virsh.go`). This keeps the provider image small (no libvirt-dev runtime) and avoids cgo entirely, at the cost of being more sensitive to SSH-host hygiene. See [Troubleshooting](#troubleshooting) for the SSH-host-issue narrative.
 
 ## Capabilities at a glance
 
-The libvirt provider advertises the following via `GetCapabilities` (`internal/providers/libvirt/server.go:457-468`):
+The libvirt provider advertises the following via `GetCapabilities` (`internal/providers/libvirt/server.go`):
 
 | Capability flag | Value | What it means |
 |-----------------|-------|---------------|
-| `SupportsReconfigureOnline` | **false** | CPU/memory changes via `virsh setvcpus`/`setmem` are applied with `--config`; full effect typically requires a power cycle. |
-| `SupportsDiskExpansionOnline` | false | Disk grow requires power cycle (qemu-img resize + guest fs grow). |
+| `SupportsReconfigureOnline` | **true** | Online CPU/memory changes via `virsh setvcpus/setmem --live` for VMs created with hot-add headroom (see [Online reconfigure](#online-cpu-and-memory-reconfigure-203)). VMs without the flags still require a power-cycle. |
+| `SupportsDiskExpansionOnline` | **true** | Live disk grow via `virsh blockresize` + best-effort in-guest FS grow; grow-only (see [Online disk expansion](#online-disk-expansion-201)). |
 | `SupportsSnapshots` | true | `virsh snapshot-create-as` against qcow2 storage. |
-| `SupportsMemorySnapshots` | **false** | The capability flag is false. The code path *does* allow `--disk-only`-off snapshots on running domains, but the contract advertises no memory-snapshot support and the manager short-circuits memory-snapshot requests against this provider. |
-| `SupportsLinkedClones` | **false** | Corrected in v0.3.8 (#153): the libvirt `Clone` RPC returns `Unimplemented` and `GetCapabilities` reports `SupportsLinkedClones=false`. See [Cloning](#cloning-unimplemented) below. |
-| `SupportsImageImport` | **false** | Corrected in v0.3.8 (#153/#154): `ImagePrepare` returns `Unimplemented`. Stage the base image on the host / storage pool out of band. |
-| `SupportsDiskExport` | **true** | `ExportDisk` / `GetDiskInfo` (#177). Disk import is not supported. |
+| `SupportsMemorySnapshots` | **true** | Full system checkpoints including RAM via `snapshot-create-as` without `--disk-only` on running VMs; stopped VMs downgrade to disk-only with a WARN (see [Memory snapshots](#memory-snapshots-202)). |
+| `SupportsLinkedClones` | **true** | Clone RPC implemented: qcow2 overlay (linked) + volume copy (full), same-provider (#153). UEFI nvram re-pointed per clone (#208/#221). See [Cloning](#cloning-153208221). |
+| `SupportsImageImport` | **true** | `ImagePrepare` RPC implemented: lazy VM-create-time import into a storage pool (#154). See [Image preparation](#image-preparation-154). |
+| `SupportsDiskExport` | true | `ExportDisk` / `GetDiskInfo` (#177). Disk import is not supported. |
+| `SupportsExportCompression` | true | `ExportDisk` honors `req.Compress` via `qemu-img -c` for qcow2 (#199). Default (Compress=false) is uncompressed. |
 | `SupportedDiskTypes` | `qcow2`, `raw`, `vmdk` | QEMU-supported formats (qcow2 is the recommended default). |
 | `SupportedNetworkTypes` | `virtio`, `e1000`, `rtl8139` | QEMU virtual NIC models advertised by `GetCapabilities`. |
 
@@ -41,11 +42,11 @@ For the full cross-provider matrix and resilience / observability narrative:
 - **Delete** — destroy + undefine domain, optionally remove volumes.
 - **Power** — start / shutdown / destroy / reboot.
 - **Describe** — domain state, VNC URL, IPs (via QEMU guest agent or DHCP lease).
-- **Reconfigure** — `virsh setvcpus --config` / `virsh setmem --config`; `--live` is attempted on a best-effort basis but typically needs a restart for persistence.
-- **SnapshotCreate / SnapshotDelete / SnapshotRevert** — `virsh snapshot-*` against qcow2 storage. Synchronous; no `TaskRef` is returned (libvirt operations are blocking from `virsh`'s perspective).
-- **Clone** — **`Unimplemented`** as of v0.3.8 (#153). `GetCapabilities` reports `SupportsLinkedClones=false`; the manager will not route clone requests here.
-- **ImagePrepare** — **`Unimplemented`** as of v0.3.8 (#153/#154). `SupportsImageImport=false`; stage base images out of band.
-- **ExportDisk / GetDiskInfo** — disk export with accurate capability flags / formats (#177). Disk import is not implemented. These back the export side of cross-provider migration.
+- **Reconfigure** — online CPU/memory changes via `virsh setvcpus --live` / `virsh setmem --live` for VMs with hot-add headroom; disk expansion via `virsh blockresize` (see [Online reconfigure](#online-cpu-and-memory-reconfigure-203) and [Online disk expansion](#online-disk-expansion-201)).
+- **SnapshotCreate / SnapshotDelete / SnapshotRevert** — `virsh snapshot-*` against qcow2 storage. Memory snapshots supported on running VMs (`spec.memory: true`). Synchronous; no `TaskRef` is returned.
+- **Clone** — qcow2 overlay (linked) or volume copy (full), same-provider (#153). UEFI nvram re-pointed per clone; hot-add headroom preserved across class-override clones (#208/#221). See [Cloning](#cloning-153208221).
+- **ImagePrepare** — lazy VM-create-time image import into a storage pool (#154). `VMImage.spec.prepare` controls the trigger. See [Image preparation](#image-preparation-154).
+- **ExportDisk / GetDiskInfo** — disk export with accurate capability flags / formats (#177). Honors `Compress` for qcow2 (#199). Disk import is not implemented. These back the export side of cross-provider migration.
 - **ConsoleUrl** — `vnc://<host>:<port>` parsed from `virsh dumpxml`.
 
 ## Prerequisites
@@ -94,7 +95,7 @@ spec:
     name: libvirt-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.8"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.9"
     service:
       port: 9090
       tls:
@@ -285,12 +286,15 @@ metadata:
 spec:
   source:
     libvirt:
-      # As of v0.3.8 the libvirt provider does NOT fetch this URL itself
-      # (ImagePrepare is Unimplemented, #153/#154). Pre-stage the base image
-      # in the pool out of band; the URL serves as provenance/documentation.
       url: "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
       pool: default
       format: qcow2
+  # As of v0.3.9, libvirt ImagePrepare is fully implemented (#154).
+  # With prepare.onMissing: Fail, new VM creation is held with a
+  # WaitingForDependencies condition until the image is available in the pool.
+  # Omit this block entirely to skip the prepare gate and manage images out of band.
+  prepare:
+    onMissing: Fail
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
@@ -336,35 +340,197 @@ spec:
 
 ## Snapshots
 
-Libvirt snapshots are implemented via `virsh snapshot-create-as` (`internal/providers/libvirt/provider_virsh.go:1381-1444`). The provider:
+Libvirt snapshots are implemented via `virsh snapshot-create-as`. The provider:
 
-1. Checks domain state with `getDomainState`.
+1. Checks domain state.
 2. Builds a snapshot name (auto-generates one if `nameHint` is empty).
 3. Emits `--atomic` to ensure consistency.
-4. Adds `--disk-only` for stopped domains or when `includeMemory` is false.
-
-The `SupportsMemorySnapshots=false` capability flag means the manager will not route memory-snapshot requests to this provider — operators who need memory state should snapshot through `virsh` directly out of band.
+4. Adds `--disk-only` only for stopped domains or when `spec.memory` is false.
 
 Snapshots return synchronously (no `TaskRef`). All work has completed by the time the `SnapshotCreate` RPC returns.
 
-## Cloning (Unimplemented)
+## Memory snapshots (#202)
 
-!!! warning "libvirt does not support cloning as of v0.3.8"
-    The libvirt provider's `Clone` RPC returns **`Unimplemented`**, and `GetCapabilities` reports `SupportsLinkedClones=false` (#153). Both full and linked clones are unsupported on this provider.
+As of v0.3.9, libvirt supports RAM-inclusive snapshots (`SupportsMemorySnapshots=true`). Set `spec.memory: true` on a `VMSnapshot` CR:
 
-    An earlier revision of these docs (and a capability footnote) claimed `SupportsLinkedClones=true`, said linked clones were implemented via qcow2 `backing_file`, and described this as "corrected in v0.3.6". **That claim is reversed as of v0.3.8** — the #153/#154 honesty pass aligned the documented behaviour with the actual `GetCapabilities` response, which advertises no clone support.
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMSnapshot
+metadata:
+  name: my-vm-pre-upgrade
+  namespace: default
+spec:
+  vmRef:
+    name: my-vm
+  nameHint: "pre-upgrade"
+  memory: true
+  description: "Full checkpoint before upgrade"
+```
 
-If you need cloning today, use a provider that implements it: vSphere or Proxmox. The `VMClone` controller (MVP, #179) drives same-provider full/linked clones only against providers whose `GetCapabilities` advertises support — a `VMClone` targeting a libvirt source/target is rejected rather than silently failing at the host.
+| VM state at snapshot time | Result |
+|--------------------------|--------|
+| Running | Full checkpoint: disk state + RAM state captured. Restoring brings the VM back to the exact in-memory state. |
+| Stopped | Disk-only snapshot; a WARN is logged. The resulting snapshot is still usable for rollback. |
 
-To approximate a clone manually on libvirt, copy the disk volume on the host (`qemu-img create -b <parent> -F qcow2 <child>` for a backing-file copy, or `qemu-img convert` for a full copy) and define a new domain pointing at it — this is an out-of-band operation, not driven by VirtRigaud.
+A memory snapshot is significantly larger and slower than a disk-only snapshot (roughly disk size plus current RAM allocation). Storage backend must support qcow2; raw-on-LVM will fail on a running domain.
 
-## Reconfigure (restart-required for full effect)
+Memory snapshots are supported on all three providers — see [Memory Snapshots in the capabilities matrix](providers-capabilities.md#snapshot-operations).
 
-The provider attempts `virsh setvcpus --live --config` and `virsh setmem --live --config`. The `--live` flag works on a best-effort basis when the guest is running and has the virtio balloon / virtio vcpu drivers; `--config` always succeeds and persists across reboot.
+## Cloning (#153/#208/#221)
 
-The `SupportsReconfigureOnline=false` capability flag is the contract — the manager won't surprise an operator with an online reconfigure expectation against libvirt. Operators planning capacity changes against this provider should expect a power-cycle window.
+As of v0.3.9, the libvirt `Clone` RPC is fully implemented (`SupportsLinkedClones=true`). Both full and linked clones are supported on the same provider.
 
-Disk expansion currently requires the VM to be powered off (qemu-img resize + guest filesystem grow on next boot).
+| Clone type | Mechanism |
+|-----------|-----------|
+| **Linked** (default) | qcow2 overlay using `backing_file` — fast, space-efficient; guest writes go to the overlay, the base image is shared read-only. |
+| **Full** | Volume copy via `qemu-img convert` — independent copy with no dependency on the source disk. |
+
+Clone operations are same-provider only. Cross-provider movement uses [VM Migration](../migration/vm-migration-guide.md).
+
+### Clone hardening
+
+Clone hardening (#208/#221) provides two guarantees on top of the basic clone:
+
+1. **UEFI nvram re-pointed**: each cloned VM receives its own independent copy of the UEFI `<nvram>` varstore. Source and clone do not share secure-boot state or EFI variables — modifying one does not affect the other.
+2. **Hot-add headroom preserved**: if the source VM was created with a class that set `cpuHotAddEnabled` or `memoryHotAddEnabled`, a class-override clone preserves that headroom (the `<vcpu current=…>` ceiling and the `<memory>` balloon maximum are re-emitted in the cloned domain XML at the correct values, not defaulted).
+
+### Creating a clone
+
+Use the `VMClone` CR:
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClone
+metadata:
+  name: clone-from-libvirt-vm
+  namespace: default
+spec:
+  source:
+    vmRef:
+      name: my-source-vm
+  target:
+    name: my-cloned-vm
+  options:
+    type: LinkedClone    # or FullClone
+```
+
+See [VM Cloning](../guides/advanced/vm-cloning.md) for full VMClone semantics.
+
+## Image preparation (#154)
+
+As of v0.3.9, libvirt's `ImagePrepare` RPC is fully implemented (`SupportsImageImport=true`). `VMImage.spec.prepare` controls whether the image is fetched into a storage pool at VM-create time.
+
+### How the prepare gate works
+
+When a `VMImage` has a `prepare` block with `onMissing: Fail`, the VirtualMachine controller checks whether the image is present on the target provider before issuing a `Create` RPC. If the image is not yet prepared:
+
+- The VM enters a `WaitingForDependencies` condition with message "image not prepared on provider".
+- The controller requeues and retries once preparation completes.
+- No `Create` is issued to the provider until the image is available.
+
+If the `VMImage` has **no** `prepare` block, or `onMissing` is not `Fail`, VM creation proceeds normally — the image must already be staged on the provider host.
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMImage
+metadata:
+  name: ubuntu-22-04
+spec:
+  source:
+    libvirt:
+      url: "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
+      pool: default
+      format: qcow2
+  prepare:
+    onMissing: Fail   # hold VM creation until image is ready on provider
+```
+
+!!! tip "Operators staging images out of band"
+    If you pre-stage base images on the libvirt host manually (outside VirtRigaud), omit the `prepare` block entirely. The provider will find the volume already in the pool and proceed with `Create` normally.
+
+## Online CPU and memory reconfigure (#203)
+
+As of v0.3.9, `SupportsReconfigureOnline=true` for libvirt. Online CPU/memory changes run via `virsh setvcpus --live` / `virsh setmem --live` — **no power-cycle required** — but only for VMs that were created with hot-add headroom provisioned.
+
+### The hot-add-at-create requirement
+
+The headroom is provisioned in the domain XML **at create time**. Set the VMClass flags before creating the VM:
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClass
+metadata:
+  name: hotplug-enabled
+  namespace: default
+spec:
+  cpu: 4
+  memory: "8Gi"
+  performanceProfile:
+    cpuHotAddEnabled: true    # reserve headroom for live vCPU grow
+    memoryHotAddEnabled: true # reserve headroom for live memory balloon grow
+```
+
+The created domain XML will contain:
+
+```xml
+<vcpu placement='static' current='4'>16</vcpu>   <!-- 4 boot online, 16 ceiling -->
+<memory unit='MiB'>32768</memory>                 <!-- balloon maximum: 4× initial -->
+<currentMemory unit='MiB'>8192</currentMemory>    <!-- initial guest-visible allocation -->
+```
+
+The `current=` attribute lets the guest boot with fewer vCPUs online than the ceiling; the extra slots are brought online by `setvcpus --live`. `<memory>` is the balloon maximum — `setmem --live` inflates the balloon up to this value.
+
+### Ceilings and limits
+
+| Resource | Ceiling formula | Hard cap |
+|----------|----------------|----------|
+| vCPUs | 4× initial (rounded up if needed) | 64 vCPUs |
+| Memory | 4× initial | None (balloon max only; guest only uses `currentMemory` at boot) |
+
+### When a power-cycle is still required
+
+- The desired value exceeds the ceiling provisioned at create.
+- The VM was created **without** the hot-add flags (includes all VMs created before v0.3.9).
+- Any **decrease** in vCPU count or memory (shrink is never live).
+
+The provider logs a WARN with the reason and the VirtualMachine controller falls back to a power-cycle reconfigure path.
+
+To enable online reconfigure on an existing VM, delete and recreate it with a VMClass that has the hot-add flags set.
+
+## Online disk expansion (#201)
+
+As of v0.3.9, `SupportsDiskExpansionOnline=true` for libvirt. The provider can grow a running domain's primary disk **without a power-cycle** via `virsh blockresize`.
+
+- **Grow-only**: a desired size ≤ current size is a no-op (logged at INFO).
+- The primary disk target is resolved from the live domain topology (`virsh domblklist`) — naming-convention agnostic.
+- After the block device is enlarged, a best-effort in-guest filesystem grow runs via the QEMU guest agent (`growpart` → `resize2fs` / `xfs_growfs /`). This step is non-fatal: the block device is already larger regardless of whether the guest agent succeeds.
+
+### When manual filesystem grow is needed
+
+The in-guest grow is skipped (WARN logged) when:
+
+- The QEMU guest agent is not installed or not running.
+- The guest uses a non-standard partition layout (LVM, multiple partitions, non-root XFS mount).
+
+In these cases, finish the grow in the guest:
+
+```bash
+# inside the guest — example for a single ext4/XFS root partition
+growpart /dev/vda 1
+resize2fs /dev/vda1    # ext4
+# or
+xfs_growfs /           # XFS
+```
+
+### Triggering a disk expand
+
+Patch `spec.disks[*].sizeGiB` to a larger value:
+
+```bash
+kubectl patch vm my-vm --type merge -p '{"spec":{"disks":[{"name":"data","sizeGiB":200,"type":"thin"}]}}'
+```
+
+The controller detects the delta and calls the provider's Reconfigure RPC with the new size.
 
 ## Console access
 
@@ -458,7 +624,7 @@ spec:
 - **virtio everywhere**: `disk.bus=virtio`, `network.model=virtio`, `vga` only when you need a console.
 - **`cache=none` + `io=native` + `aio=native`** for production storage; the provider's default for qcow2 is `writeback` which is OK for dev.
 - **CPU mode `host-passthrough`**: best raw performance, breaks live migration between dissimilar hosts. Use `host-model` if you need migration portability.
-- **Hot-add is best-effort**: budget a power-cycle window for capacity changes.
+- **Hot-add requires at-create opt-in**: set `cpuHotAddEnabled`/`memoryHotAddEnabled` on the VMClass before creating the VM. VMs without these flags still require a power-cycle for capacity changes.
 
 ## API reference
 

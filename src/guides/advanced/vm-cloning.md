@@ -10,20 +10,19 @@ The **VMClone** controller lets you clone an existing, provisioned
 shipped as an MVP in **v0.3.8**
 ([#179](https://github.com/projectbeskar/virtrigaud/pull/179)).
 
-This page covers what the VMClone controller does in v0.3.8, the MVP scope
-and its limits, a worked example, what the controller produces, and the
-cleanup / capability-gating semantics you should understand before relying
-on it.
+This page covers what the VMClone controller does, the scope and limits, a worked example, what the controller produces, and the cleanup / capability-gating semantics you should understand before relying on it.
 
-!!! note "MVP — read the scope before you build around it"
-    The v0.3.8 VMClone controller is intentionally narrow: **`source.vmRef`
+**v0.3.9 update**: libvirt clone support is now fully implemented. The "libvirt does not support Clone" warning from v0.3.8 is reversed — see [Libvirt clone support](#libvirt-clone-support-v039).
+
+!!! note "Scope — read before you build around it"
+    The VMClone controller is intentionally narrow: **`source.vmRef`
     only**, **same-provider only**, and **Full / Linked clone types only**.
     Other source kinds (`snapshotRef`, `templateRef`, `imageRef`) are
     declared in the CRD but **not yet implemented** — they set the clone to
     `Phase=Failed` with a "not yet supported" message. The rest of the
     `VMClone` schema (rich customization, retry policy, performance/storage
     options, progress reporting) is present on the API for forward
-    compatibility but is **not** acted on by the MVP controller.
+    compatibility but is **not** acted on by the current controller.
 
 ## What VMClone does
 
@@ -37,7 +36,8 @@ seeded with the provider-reported clone ID.
 ```
 ┌──────────────┐        clone        ┌──────────────────────┐
 │  VMClone CR  │ ──────────────────▶ │  Provider (vSphere /  │
-│              │                     │  Proxmox) Clone RPC    │
+│              │                     │  Proxmox / Libvirt)    │
+│              │                     │  Clone RPC             │
 │ source.vmRef │ ◀────────────────── │  → new VM ID           │
 └──────┬───────┘     target VM ID    └──────────────────────┘
        │
@@ -50,23 +50,35 @@ seeded with the provider-reported clone ID.
 └──────────────────────────────────────────────┘
 ```
 
-## MVP scope and limits (v0.3.8)
+## Scope and limits
 
-| Dimension | v0.3.8 behavior |
-|-----------|-----------------|
+| Dimension | Behavior |
+|-----------|----------|
 | **Source** | `source.vmRef` only. The referenced `VirtualMachine` must already be provisioned (non-empty `Status.ID`); otherwise the controller waits and requeues. |
 | **Other sources** | `source.snapshotRef`, `source.templateRef`, `source.imageRef` → `Phase=Failed` with "clone source type not yet supported; use `source.vmRef`". |
-| **Provider scope** | **Same-provider only.** The clone lands on the source VM's provider. Cross-provider clone is not supported (use [VM Migration](../../migration/vm-migration-guide.md) for moving a VM between providers). |
-| **Clone types** | `FullClone` (default) and `LinkedClone`. `LinkedClone` is gated on the provider's reported `SupportsLinkedClones` capability — see below. `InstantClone` exists in the enum but is not implemented by the MVP. |
-| **Provider support** | vSphere and Proxmox support `Clone`. **libvirt `Clone` is `Unimplemented`** in v0.3.8 — a VMClone targeting a libvirt-backed source will fail. |
-| **Customization** | The MVP inherits the source VM's shape; the rich `spec.customization` block is **not** applied yet. |
+| **Provider scope** | **Same-provider only.** The clone lands on the source VM's provider. Cross-provider movement uses [VM Migration](../../migration/vm-migration-guide.md). |
+| **Clone types** | `FullClone` (default) and `LinkedClone`. `LinkedClone` is gated on the provider's reported `SupportsLinkedClones` capability. `InstantClone` exists in the enum but is not yet implemented. |
+| **Provider support** | vSphere, Proxmox, and **libvirt** (as of v0.3.9) all support `Clone`. |
+| **Customization** | The controller inherits the source VM's shape; the rich `spec.customization` block is **not** applied yet. |
 
-!!! warning "libvirt does not support Clone in v0.3.8"
-    The in-tree libvirt provider returns `Unimplemented` for the `Clone`
-    RPC and advertises that through its capabilities. If your source VM
-    runs on a libvirt provider, the VMClone will not succeed. Use vSphere or
-    Proxmox sources for cloning in v0.3.8. See the
-    [Provider Capabilities Matrix](../../providers/providers-capabilities.md).
+## Libvirt clone support (v0.3.9)
+
+As of v0.3.9 (#153/#208/#221), the libvirt provider fully implements the `Clone` RPC and reports `SupportsLinkedClones=true`. Both clone types work on the same provider:
+
+| Clone type | Libvirt mechanism |
+|-----------|-------------------|
+| **Linked** | qcow2 overlay (`backing_file`) — fast and space-efficient; the base image is shared read-only, guest writes go to the overlay. |
+| **Full** | Volume copy via `qemu-img convert` — fully independent disk with no dependency on the source. |
+
+Clone operations are always same-provider; the source and target `VirtualMachine` must reference the same `Provider` CR.
+
+### UEFI nvram handling
+
+When the source VM uses UEFI firmware, the cloned domain receives its own independent `<nvram>` varstore (re-pointed by the provider at clone time, #208). Source and clone do not share EFI variables or secure-boot state. Modifying secure-boot configuration on one does not affect the other.
+
+### Hot-add headroom preservation
+
+If the source VM was created from a VMClass with `cpuHotAddEnabled` or `memoryHotAddEnabled`, a class-override clone preserves the headroom in the cloned domain XML (#221). The 4× vCPU ceiling and balloon maximum are recomputed from the override class (or inherited from the source class if no override is specified), not defaulted to bare-minimum values.
 
 ## Worked example
 
@@ -205,13 +217,15 @@ features that a provider cannot honor are surfaced honestly rather than
 no-op'd. For the authoritative per-provider matrix, see the
 [Provider Capabilities Matrix](../../providers/providers-capabilities.md).
 
-!!! note "Capability negotiation (v0.3.8)"
-    v0.3.8 also added provider capability reporting on
+!!! note "Capability negotiation"
+    v0.3.8 added provider capability reporting on
     `Provider.status.reportedCapabilities` and an opt-in
     `--enforce-provider-capabilities` manager flag (default **off**)
     ([#176](https://github.com/projectbeskar/virtrigaud/pull/176)). The
     linked-clone pre-check above is an intrinsic correctness gate and runs
-    regardless of that flag.
+    regardless of that flag. As of v0.3.9, libvirt reports
+    `SupportsLinkedClones=true`, so both linked and full clones are available
+    on libvirt-backed VMs.
 
 ## Related resources
 

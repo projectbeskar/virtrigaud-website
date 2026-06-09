@@ -284,7 +284,7 @@ VM — see [VM Cloning](vm-cloning.md#lifecycle-and-cleanup-semantics).
     overrides, etc.) exists on the CRD for forward compatibility but is
     **not** acted on by the v0.3.8 VMClone controller. The MVP inherits the
     source VM's shape. Track this limitation via the
-    [VM Cloning guide](vm-cloning.md#mvp-scope-and-limits-v038).
+    [VM Cloning guide](vm-cloning.md#scope-and-limits).
 
 ## Multi-VM Sets (VMSet)
 
