@@ -111,7 +111,7 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6 — see H1 in
 
 ## Custom Resources
 
-VirtRigaud v0.3.8 ships **10 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
+VirtRigaud v0.3.9 ships **10 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
 
 | Kind | Purpose |
 |---|---|
@@ -122,24 +122,30 @@ VirtRigaud v0.3.8 ships **10 Custom Resource Definitions** in the `infra.virtrig
 | `VMNetworkAttachment` | Logical network the VM attaches to (resolved per-provider). |
 | `VMSnapshot` | A point-in-time snapshot of a VirtualMachine. |
 | `VMMigration` | Inter-provider VM migration (export → import). |
-| `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.3.8. |
+| `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.3.9. |
 | `VMPlacementPolicy` | Placement / anti-affinity rules. Applied via `VirtualMachine.spec.placementRef`; no standalone controller. |
-| `VMClone` | One-shot full or linked clone of an existing VM (MVP — vSphere and Proxmox only). |
+| `VMClone` | One-shot full or linked clone of an existing VM (vSphere, Proxmox, and Libvirt as of v0.3.9). |
 
 The manager also runs a `VMAdoption` reconciler (not a CRD — it reconciles `Provider` resources annotated with `virtrigaud.io/adopt-vms: "true"`, discovers VMs the hypervisor already owns, and creates `VirtualMachine` CRs labelled `virtrigaud.io/adopted=true` for them, plus an `adopted-Ncpu-Nmb` `VMClass` per unique sizing). See the [generated CRD reference](references/generated-crd-docs.md) for the full schema.
 
 ## Version Information
 
-This documentation covers **VirtRigaud v0.3.8**.
+This documentation covers **VirtRigaud v0.3.9**.
 
 ### Recent Releases
 
+- **v0.3.9** — *Libvirt online operations + clone + image-prepare + memory snapshots on all three providers.*
+    - **Libvirt online CPU/memory reconfigure (#203).** `virsh setvcpus/setmem --live` with no power-cycle for VMs created with `cpuHotAddEnabled`/`memoryHotAddEnabled` on the VMClass (4× headroom, 64-vCPU cap). Lab-proven.
+    - **Libvirt online disk expansion (#201).** `virsh blockresize` + best-effort in-guest FS grow. Grow-only; no power-cycle. Lab-proven.
+    - **Libvirt memory snapshots (#202).** RAM-inclusive checkpoints on running VMs. Stopped VM downgrades to disk-only with a WARN.
+    - **Libvirt clone (#153) + clone hardening (#208/#221).** Full and linked (qcow2 overlay) clones, same-provider. UEFI nvram re-pointed per clone; hot-add headroom preserved across class-override clones.
+    - **End-to-end image preparation (#154).** `VMImage.spec.prepare` drives lazy VM-create-time image import on libvirt, vSphere (OVA/OVF), and Proxmox. `prepare.onMissing: Fail` holds VM creation with `WaitingForDependencies` until the image is ready.
+    - **Proxmox export compression (#219).** `ExportDisk` honors `Compress` for qcow2 targets.
+    - **Memory snapshots on all three providers.** vSphere (#200): `CreateSnapshot(memory=true)`; libvirt (#202): `snapshot-create-as`; Proxmox: PVE-native.
 - **v0.3.8** — *VMClone MVP + VMSet stub + secure-by-default chart.*
-    - **VMClone controller (MVP).** Full and linked clones are now functional via the `VMClone` CRD. Source must be a `vmRef` (same-provider only). Supported on vSphere and Proxmox; libvirt returns `Unimplemented`. See the [VMClone examples](examples/advanced/index.md#vmclone-operations-mvp).
-    - **VMSet: CRD defined, controller not yet active.** A `VMSet` resource is accepted by the API server but the controller emits `Ready=False / Reason=ControllerNotImplemented`. Do not use VMSet for production workloads in v0.3.8.
-    - **VMPlacementPolicy: reference-only.** No standalone controller; placement rules are applied via `VirtualMachine.spec.placementRef`.
-    - **Chart (#173): providers disabled by default.** Templated provider Deployments are now opt-in (`providers.<type>.enabled=true`). A fresh `helm install` deploys only the manager; provider pods must be enabled explicitly or managed as independent Provider CRs. This is a secure-by-default change — existing installations that relied on auto-deployed providers must set `providers.<type>.enabled=true` on upgrade.
-    - **New VMClone and VMSet CRDs + RBAC** land automatically via the chart's CRD-upgrade hook on `helm upgrade`.
+    - **VMClone controller (MVP).** Full and linked clones functional via `VMClone` CRD (vSphere and Proxmox; libvirt added in v0.3.9).
+    - **VMSet: CRD defined, controller not yet active.** A `VMSet` resource is accepted but emits `Ready=False / Reason=ControllerNotImplemented`.
+    - **Chart (#173): providers disabled by default.** Opt-in via `providers.<type>.enabled=true`.
 - **v0.3.7** — mTLS enforcement, multi-arch images, circuit-breaker metrics.
 - **v0.3.6** — Observability + supply-chain release (CircuitBreaker, G7 metrics, H1 build consolidation, Go 1.26 floor, OTel CVE fixes).
 - **v0.3.5** — Observability G-track foundation (RPC metrics, error counters, reconcile metrics).
