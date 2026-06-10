@@ -103,6 +103,18 @@ The trade-off is that **the disk has to fit in a PVC twice** (once for
 the export, transiently again during format conversion). The User Guide's
 sizing rule (1.5–2× source disk size) is the operational consequence.
 
+!!! warning "Co-location requirement: one namespace"
+    Because the transfer PVC is mounted into **both** the source and target
+    provider pods, and a Kubernetes pod can only mount a PVC from its **own
+    namespace**, the `VMMigration`, the **source** Provider, and the **target**
+    Provider must all live in the **same namespace**. A migration that
+    references a Provider in another namespace (via `providerRef.namespace`)
+    cannot work — the disk can never be mounted on both ends — and is now
+    **rejected immediately** in the `Validating` phase with a clear message
+    rather than hanging until the mount times out. Cross-namespace transfer
+    would require a different medium (e.g. streaming the disk over gRPC) and is
+    not supported today.
+
 ## The phase machine
 
 Phases are defined at `vmmigration_types.go:363-390`. The reconciler
@@ -169,7 +181,7 @@ dispatches on `migration.Status.Phase` at
 | Phase | Reconciler entry | Key actions |
 |-------|------------------|-------------|
 | `Pending` | `handlePendingPhase` | Validates spec invariants, transitions to `Validating`. |
-| `Validating` | `handleValidatingPhase` | Resolves source + target providers; validates `storage.type=pvc`; creates/reuses the PVC; **annotates both Provider CRs** to trigger a roll; waits for both providers `Ready`. (`vmmigration_controller.go:311-365`) |
+| `Validating` | `handleValidatingPhase` | Resolves source + target providers; validates `storage.type=pvc`; **enforces co-location** (migration + both providers in one namespace, else fail fast); creates/reuses the PVC. The `ProviderReconciler` watches migration PVCs and rolls each provider Deployment to add the PVC as a volume; this phase then performs a **non-blocking** check that both providers have a `Ready` pod with the PVC mounted, requeuing until they do or a deadline (from the PVC's age) elapses. |
 | `Snapshotting` | `handleSnapshottingPhase` | If `spec.source.snapshotRef` is set, uses it. Else issues a `SnapshotCreate` RPC against the source provider. (`vmmigration_controller.go:369-…`) |
 | `Exporting` | `handleExportingPhase` | Calls `ExportDisk` RPC on the source provider with a `pvc://<pvc-name>/…` destination. (`vmmigration_controller.go:469-…`) |
 | `Transferring` | implicit during `Exporting` in PVC mode | In the PVC model the export *is* the transfer; the phase exists in the enum for backend models other than PVC. |
