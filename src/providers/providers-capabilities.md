@@ -127,7 +127,7 @@ All providers implement these core operations:
 
 [^4]: vSphere advertises `SupportsImageImport=true` (OVA/OVF + content library); direct cloud-image URL fetch is not yet implemented. Operators today should land cloud images in the content library out-of-band.
 
-[^imageimport]: As of v0.3.9 (#154), libvirt's `ImagePrepare` RPC is fully implemented and `GetCapabilities` reports `SupportsImageImport=true`. `VMImage.spec.prepare` drives lazy, VM-create-time image import into a libvirt storage pool. A `VMImage` with `prepare.onMissing: Fail` whose image is not yet present on the target provider will hold new VM creation with a `WaitingForDependencies` condition ("image not prepared on provider") until preparation completes. Images without a `prepare` block create normally. Earlier v0.3.8 documentation stated `ImagePrepare` was `Unimplemented` — that is reversed in v0.3.9.
+[^imageimport]: As of v0.3.9 (#154), libvirt's `ImagePrepare` RPC is fully implemented and `GetCapabilities` reports `SupportsImageImport=true`. `VMImage.spec.prepare` drives lazy, VM-create-time image import into a libvirt storage pool. A `VMImage` with an **import-style** source (a download `url`/OVA) and `prepare.onMissing: Fail` whose image is not yet imported will hold new VM creation with a `WaitingForDependencies` condition ("image not prepared on provider") until preparation completes. Images that reference an **already-present** artifact (a libvirt pool-file `path`, an existing template) — or that have no `prepare` block — create normally. Earlier v0.3.8 documentation stated `ImagePrepare` was `Unimplemented` — that is reversed in v0.3.9.
 
 ### Disk Export / Import
 
