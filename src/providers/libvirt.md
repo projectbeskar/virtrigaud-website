@@ -422,13 +422,13 @@ As of v0.3.9, libvirt's `ImagePrepare` RPC is fully implemented (`SupportsImageI
 
 ### How the prepare gate works
 
-When a `VMImage` has a `prepare` block with `onMissing: Fail`, the VirtualMachine controller checks whether the image is present on the target provider before issuing a `Create` RPC. If the image is not yet prepared:
+The prepare gate applies only to **import-style** sources — a source that must fetch a new artifact onto the provider (a libvirt `url`, a vSphere OVA, an HTTP/registry/DataVolume pull). When such a `VMImage` has a `prepare` block with `onMissing: Fail` and the image is not yet imported:
 
 - The VM enters a `WaitingForDependencies` condition with message "image not prepared on provider".
 - The controller requeues and retries once preparation completes.
 - No `Create` is issued to the provider until the image is available.
 
-If the `VMImage` has **no** `prepare` block, or `onMissing` is not `Fail`, VM creation proceeds normally — the image must already be staged on the provider host.
+A **reference-style** source — a libvirt pool-file `path`, an existing vSphere `templateName`/`contentLibrary`, or an existing Proxmox template — points at something **already present** on the provider, so there is nothing to import. As of v0.3.9 these create normally **even with `onMissing: Fail`**; the gate does not apply (a wrong path/template simply fails at `Create` time, where a missing backing artifact belongs). Likewise, a `VMImage` with **no** `prepare` block creates normally — the image must already be staged on the provider host.
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
