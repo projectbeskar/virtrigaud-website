@@ -323,11 +323,16 @@ spec:
   network:
     vsphere:
       portgroup: "VM Network"
-  ipAllocation:
-    type: Static
-    address: "192.168.100.50/24"
-    gateway: "192.168.100.1"
-    dns: ["192.168.1.10", "8.8.8.8"]
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: mgmt-network
+spec:
+  network:
+    vsphere:
+      portgroup: "Management"
+
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
@@ -347,10 +352,24 @@ spec:
       type: thin
       scsi:
         controllerType: pvscsi
+
+  # Network configuration (references VMNetworkAttachment resources).
+  # Static addressing is requested inline here (pushed to the guest via
+  # guestinfo.network.* — see "Static IP Assignment" below). The mgmt NIC omits
+  # these fields and therefore uses DHCP / the template default.
   networks:
     - name: app
       networkRef:
         name: app-network
+      ipAddress: "192.168.100.50"
+      prefix: 24
+      gateway: "192.168.100.1"
+      dns: "192.168.1.10,8.8.8.8"
+    - name: mgmt-network
+      networkRef:
+        name: mgmt-network
+
+  # vSphere placement (no 'datacenter' field — datacenter is derived from the provider endpoint)
   placement:
     cluster: "Compute-Cluster"
     resourcePool: "Production"
@@ -419,10 +438,221 @@ kind: Provider
 metadata:
   name: vsphere-dc-b
 spec:
-  type: vsphere
-  endpoint: https://vcenter-b.example.com/sdk
-  credentialSecretRef:
-    name: vsphere-credentials-b
+  network:
+    vsphere:
+      portgroup: "LS-Backend-App"
+    type: external
+
+---
+# Reference them from the VM
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VirtualMachine
+metadata:
+  name: multi-nic-vm
+spec:
+  # ...
+  networks:
+    - name: frontend
+      networkRef:
+        name: frontend-network
+    - name: backend
+      networkRef:
+        name: backend-network
+```
+
+### Static IP Assignment (guestinfo)
+
+When a template boots without DHCP, VirtRigaud can hand the guest a static IP by
+writing it into the VM's **guestinfo** properties at create time. This is the
+mechanism used by the vSphere provider for static addressing.
+
+#### How to request a static IP
+
+Set the address fields **inline on the `VirtualMachine`'s `spec.networks` entry** —
+not on the `VMNetworkAttachment`:
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VirtualMachine
+metadata:
+  name: static-ip-vm
+spec:
+  providerRef:
+    name: vsphere-prod
+  classRef:
+    name: standard-vm
+  imageRef:
+    name: ubuntu-22-04-template
+  powerState: On
+  networks:
+    - name: app
+      # networkRef is optional. When omitted, the template's existing NIC is
+      # reused and only the guestinfo IP settings below are applied.
+      networkRef:
+        name: app-network
+      ipAddress: "192.168.100.50"   # static IPv4 address
+      prefix: 24                     # CIDR prefix length (1–32)
+      gateway: "192.168.100.1"       # default gateway
+      dns: "192.168.1.10,8.8.8.8"    # comma-separated resolvers
+```
+
+| `spec.networks[]` field | guestinfo key written        | Notes                                        |
+| ----------------------- | ---------------------------- | -------------------------------------------- |
+| `ipAddress`             | `guestinfo.network.ip`       | When empty, **nothing is written** (DHCP).   |
+| `prefix`                | `guestinfo.network.prefix`   | Only written when `> 0`.                      |
+| `gateway`               | `guestinfo.network.gateway`  | Only written when non-empty.                  |
+| `dns`                   | `guestinfo.network.dns`      | Comma-separated; only written when non-empty. |
+
+!!! note "Only the first network entry drives the static IP"
+    The provider applies the IP fields of `spec.networks[0]` as a single-NIC
+    static configuration. Additional entries still attach NICs (via their
+    `networkRef`), but their `ipAddress`/`prefix`/`gateway`/`dns` are not pushed
+    into guestinfo today.
+
+!!! warning "The guest must consume the keys"
+    VirtRigaud only *publishes* `guestinfo.network.*`. The values are inert unless
+    the **template** contains a boot-time agent that reads them and configures the
+    interface. Cloud images do not do this by default — bake the helper below (or
+    an equivalent netplan/NetworkManager generator) into the template. If the IP
+    never applies, this missing guest-side step is almost always the cause.
+
+#### Guest-side helper (template bake-in)
+
+A minimal `oneshot` unit that reads the keys with `vmware-rpctool` and renders a
+netplan config on first boot:
+
+```bash
+#!/usr/bin/env bash
+# /usr/local/sbin/apply-guestinfo-network.sh — run before networking comes up.
+set -euo pipefail
+
+get() { vmware-rpctool "info-get guestinfo.network.$1" 2>/dev/null || true; }
+
+IP=$(get ip); PREFIX=$(get prefix); GW=$(get gateway); DNS=$(get dns)
+
+# No static IP published → leave DHCP/template defaults in place.
+[ -n "$IP" ] || exit 0
+
+IFACE=$(ls /sys/class/net | grep -E '^(en|eth)' | head -n1)
+DNS_YAML=$(echo "$DNS" | tr ',' '\n' | sed 's/^/        - /')
+
+cat > /etc/netplan/90-guestinfo.yaml <<EOF
+network:
+  version: 2
+  ethernets:
+    ${IFACE}:
+      dhcp4: false
+      addresses: [${IP}/${PREFIX:-24}]
+      routes:
+        - to: default
+          via: ${GW}
+      nameservers:
+        addresses:
+${DNS_YAML}
+EOF
+
+netplan apply
+```
+
+```ini
+# /etc/systemd/system/apply-guestinfo-network.service
+[Unit]
+Description=Apply static network from vSphere guestinfo
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/apply-guestinfo-network.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable it in the template (`systemctl enable apply-guestinfo-network.service`)
+before converting the VM to a template. `open-vm-tools` must be installed so that
+`vmware-rpctool` is available.
+
+#### Verifying
+
+From a host with [`govc`](https://github.com/vmware/govmomi/tree/main/govc),
+confirm the keys landed on the created VM:
+
+```bash
+govc vm.info -e static-ip-vm | grep guestinfo.network
+# guestinfo.network.ip:      192.168.100.50
+# guestinfo.network.prefix:  24
+# guestinfo.network.gateway: 192.168.100.1
+# guestinfo.network.dns:     192.168.1.10,8.8.8.8
+```
+
+If the keys are present but the guest is still on DHCP, the guest-side helper is
+missing or failed — check `journalctl -u apply-guestinfo-network` inside the VM.
+
+!!! info "Relationship to cloud-init and `VMNetworkAttachment.ipAllocation`"
+    `guestinfo.network.*` is **independent** of the cloud-init guestinfo keys
+    (`guestinfo.userdata` / `guestinfo.metadata`); a template may honour either or
+    both. The `ipAllocation` block on `VMNetworkAttachment` is **not** wired to the
+    vSphere static-IP path today — use the inline `spec.networks[]` fields shown
+    above for static addressing.
+
+### High Availability
+
+```yaml
+# VM with HA/DRS settings
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VirtualMachine
+metadata:
+  name: critical-application
+spec:
+  providerRef:
+    name: vsphere-prod
+  # ... other config ...
+
+  # High availability configuration
+  availability:
+    # HA restart priority
+    restartPriority: "high"          # disabled, low, medium, high
+    isolationResponse: "powerOff"    # none, powerOff, shutdown
+    vmMonitoring: "vmMonitoringOnly" # vmMonitoringDisabled, vmMonitoringOnly, vmAndAppMonitoring
+
+    # DRS configuration
+    drsAutomationLevel: "fullyAutomated"  # manual, partiallyAutomated, fullyAutomated
+    drsVmBehavior: "fullyAutomated"       # manual, partiallyAutomated, fullyAutomated
+
+    # Anti-affinity rules
+    antiAffinityGroups: ["web-tier", "database-tier"]
+
+    # Host affinity (pin to specific hosts)
+    hostAffinityGroups: ["production-hosts"]
+```
+
+### Snapshot Management
+
+```yaml
+# Advanced snapshot configuration
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMSnapshot
+metadata:
+  name: pre-upgrade-snapshot
+spec:
+  vmRef:
+    name: web-application
+
+  # Snapshot settings
+  name: "Pre-upgrade snapshot"
+  description: "Snapshot before application upgrade"
+  memory: true                    # Include memory state
+  quiesce: true                   # Quiesce guest filesystem
+
+  # Retention policy
+  retention:
+    maxSnapshots: 3               # Keep max 3 snapshots
+    maxAge: "7d"                  # Delete after 7 days
+
+  # Schedule (optional)
+  schedule: "0 2 * * 0"          # Weekly at 2 AM Sunday
 ```
 
 ## Troubleshooting

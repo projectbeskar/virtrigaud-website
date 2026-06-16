@@ -1,0 +1,62 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
+# vSphere Static IP Example
+#
+# Demonstrates assigning a static IPv4 address to a vSphere VM via the
+# guestinfo.network.* mechanism. The address fields are set INLINE on the
+# VirtualMachine's spec.networks[] entry — VirtRigaud writes them as guestinfo
+# properties (guestinfo.network.ip/prefix/gateway/dns) at create time.
+#
+# ⚠️  Guest-side requirement:
+#   The template must contain a boot-time agent that reads guestinfo.network.*
+#   (via `vmware-rpctool "info-get guestinfo.network.ip"`) and configures the
+#   interface. Stock cloud images do NOT do this by default. See
+#   docs/providers/vsphere.md → "Static IP Assignment (guestinfo)" for a ready
+#   to bake-in systemd unit + netplan generator.
+#
+# Requires an active vSphere environment.
+
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: app-network
+  namespace: default
+spec:
+  network:
+    vsphere:
+      portgroup: "VM Network"
+
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VirtualMachine
+metadata:
+  name: vsphere-static-ip-vm
+  namespace: default
+spec:
+  providerRef:
+    name: vsphere-prod
+  classRef:
+    name: standard-vm
+  imageRef:
+    name: ubuntu-22-04-template
+  powerState: On
+
+  networks:
+    - name: app
+      # networkRef is optional. Omit it to keep the template's existing NIC and
+      # only push the static IP settings below into guestinfo.
+      networkRef:
+        name: app-network
+      ipAddress: "192.168.100.50"    # -> guestinfo.network.ip
+      prefix: 24                      # -> guestinfo.network.prefix (CIDR length)
+      gateway: "192.168.100.1"        # -> guestinfo.network.gateway
+      dns: "192.168.1.10,8.8.8.8"     # -> guestinfo.network.dns (comma-separated)
+
+  # Optional: cloud-init runs alongside the guestinfo network keys. The two are
+  # independent — an image may honour either or both.
+  userData:
+    cloudInit:
+      inline: |
+        #cloud-config
+        hostname: vsphere-static-ip-vm

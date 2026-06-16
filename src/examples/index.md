@@ -28,6 +28,15 @@ This directory contains examples for VirtRigaud v0.3.8. All YAML examples use th
 
 The `VMClone` controller is active in v0.3.8. Full and linked clones are supported when the source is a `vmRef` on the same provider. Libvirt returns `Unimplemented`.
 
+### Networking Examples
+- **[vsphere-static-ip.yaml](vsphere-static-ip.yaml)** - Static IPv4 assignment via `guestinfo.network.*`
+- **[vmnetwork-app.yaml](vmnetwork-app.yaml)** - Network attachment configuration
+
+### Advanced Provider Examples
+- **[vsphere-advanced-example.yaml](vsphere-advanced-example.yaml)** - Advanced vSphere with v0.2.1 features
+- **[libvirt-advanced-example.yaml](libvirt-advanced-example.yaml)** - Advanced LibVirt configuration
+- **[proxmox-complete-example.yaml](proxmox-complete-example.yaml)** - Complete Proxmox setup
+
 - **[advanced/vsphere-clone-example.yaml](advanced/vsphere-clone-example.yaml)** — Full and linked VMClone examples for vSphere
 - **[advanced/proxmox-clone-example.yaml](advanced/proxmox-clone-example.yaml)** — VMClone for Proxmox VE
 
