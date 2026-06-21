@@ -5,26 +5,17 @@ SPDX-License-Identifier: Apache-2.0
 
 # VMMigration API Reference
 
-This page is aligned to **VirtRigaud v0.3.8** and reflects the
+This page is aligned to **VirtRigaud v0.3.11** and reflects the
 `infra.virtrigaud.io/v1beta1` `VMMigration` CRD exactly as it ships. The
 authoritative source is the Go type definitions at
 `api/infra.virtrigaud.io/v1beta1/vmmigration_types.go`.
 
-!!! danger "v0.3.8 reality: vSphere → Libvirt is the validated direction"
-    `VMMigration` is wired across `vsphere`, `libvirt`, and `proxmox`
-    providers in code, and the **direction smoke-tested end-to-end on a real
-    lab cluster is vSphere → Libvirt**
-    (`fieldTesting/MIGRATION_SUCCESS_v0.3.62.md`,
-    `fieldTesting/MIGRATION_VERIFICATION_v0.3.62.md`). As of v0.3.8 the
-    underlying disk export/import primitives are in better shape on both ends:
-    the libvirt provider now supports disk export
-    ([#177](https://github.com/projectbeskar/virtrigaud/pull/177)), and the
-    vSphere provider's disk export/import capabilities are advertised
-    accurately ([#178](https://github.com/projectbeskar/virtrigaud/pull/178)).
-    Other directions (Libvirt → vSphere, vSphere → Proxmox, Proxmox → anything)
-    compile and will reconcile through the phase machine, but have not been
-    validated against real hypervisor pairs and **should be treated as roadmap,
-    not supported**.
+!!! info "v0.3.11: all three providers validated in both directions"
+    `VMMigration` is fully validated across `vsphere`, `libvirt`, and `proxmox`
+    providers, in any direction, over both S3 and NFS staging backends (ADR-0006
+    Slices 1–4, [#236](https://github.com/projectbeskar/virtrigaud/issues/236)).
+    NFS staging was validated on 2026-06-21 against a real OpenMediaVault server.
+    PVC mode (`storage.type: pvc`) is retained for compatibility.
 
 ### Capability gating (#176): fail-close on providers lacking export/import
 
@@ -34,22 +25,9 @@ v0.3.8 adds an opt-in manager flag
 and target providers against the capabilities they advertise
 (`GetCapabilities` — disk export / disk import) and **fails the migration
 closed** at validation time if a provider does not support the operation the
-migration requires, rather than letting it fail deep in the export/import
-phase. Leave it off to preserve pre-v0.3.8 behavior; turn it on in regulated
-or fleet environments where a clear up-front rejection is preferable to a
-late-phase failure. Because the vSphere (#178) and libvirt (#177) capability
-advertisements are now accurate, this gate produces trustworthy decisions.
-
-!!! warning "Storage backend is PVC-only"
-    Earlier drafts of the migration docs described `s3`, `http`, and `nfs`
-    storage backends. **Those are still not implemented as of v0.3.8** — the
-    controller validates
-    `Storage.Type != "pvc" && Storage.Type != ""` and rejects the migration
-    (`internal/controller/vmmigration_controller.go:1425`). The transfer
-    medium is a Kubernetes PVC (`ReadWriteMany` by default) mounted into
-    both provider pods during the migration. See [User
-    Guide](user-guide.md#storage) for the rationale and ADR-0001 for the
-    design.
+migration requires. Leave it off to preserve pre-v0.3.8 behavior; turn it on
+in regulated or fleet environments where a clear up-front rejection is preferable
+to a late-phase failure.
 
 ## Resource overview
 
@@ -63,7 +41,7 @@ spec:
   source:                # MigrationSource (required)
   target:                # MigrationTarget (required)
   options:               # MigrationOptions (optional)
-  storage:               # MigrationStorage (optional in schema; required in practice — see below)
+  storage:               # MigrationStorage (optional in schema; required in practice)
   metadata:              # MigrationMetadata (optional)
 status:
   # ... fields below
@@ -96,17 +74,17 @@ Defined at `vmmigration_types.go:46-72`.
 | `vmRef.name` | string | required | Name of the source `VirtualMachine` resource (in the same namespace as the `VMMigration`). |
 | `providerRef` | `ObjectRef` | inferred from source VM | Explicit source-provider reference. Optional; if omitted, the controller resolves the provider from the source VM's `providerRef`. |
 | `snapshotRef.name` | string | unset | Name of an existing snapshot resource to migrate from. If set, `createSnapshot` is ignored. |
-| `createSnapshot` | bool | `true` | If true and `snapshotRef` is unset, the controller creates a snapshot before exporting. |
-| `powerOffBeforeMigration` | bool | `false` | If true, the source VM is powered off before exporting. |
-| `deleteAfterMigration` | bool | `false` | If true, the source VM is **deleted** after a successful migration. Off by default for obvious safety reasons. |
+| `createSnapshot` | bool | `true` | If true and `snapshotRef` is unset, the controller creates a snapshot before exporting. Set to `false` when using NFS to avoid multi-disk/CDROM snapshot pitfalls. |
+| `powerOffBeforeMigration` | bool | `false` | If true, the source VM is powered off before exporting. **Required for vSphere source** (ESXi locks a running VM's disk). |
+| `deleteAfterMigration` | bool | `false` | If true, the source VM is **deleted** after a successful migration. Off by default for safety. |
 
 ```yaml
 spec:
   source:
     vmRef:
       name: my-vsphere-vm
-    createSnapshot: true
-    powerOffBeforeMigration: false
+    createSnapshot: false
+    powerOffBeforeMigration: true
     deleteAfterMigration: false
 ```
 
@@ -151,12 +129,12 @@ Defined at `vmmigration_types.go:128-163`.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `diskFormat` | enum (`qcow2`, `vmdk`, `raw`) | provider native | Target disk format. The exporter / importer converts via `qemu-img` as needed. |
+| `diskFormat` | enum (`qcow2`, `vmdk`, `raw`) | provider native | Target disk format. The target provider converts via `qemu-img` as needed. |
 | `compress` | bool | `false` | Compress during transfer. |
-| `verifyChecksums` | bool | `true` | SHA256 verify on import. Strongly recommended on. |
+| `verifyChecksums` | bool | `true` | Integrity verification after import. For S3: SHA256 source vs target. For NFS: target-side `qemu-img check` (no in-stream checksum). Strongly recommended on. |
 | `timeout` | `metav1.Duration` | `4h` | Hard upper bound on the entire migration. |
 | `retryPolicy` | `MigrationRetryPolicy` | see below | Retry policy for individual phase failures. |
-| `cleanupPolicy` | enum (`Always`, `OnSuccess`, `Never`) | `OnSuccess` | When to clean up intermediate storage. |
+| `cleanupPolicy` | enum (`Always`, `OnSuccess`, `Never`) | `OnSuccess` | When to clean up intermediate staging objects/files/PVCs. |
 | `validationChecks` | `ValidationChecks` | see below | Which post-import validation checks to run. |
 
 #### `options.retryPolicy` (`MigrationRetryPolicy`)
@@ -176,7 +154,7 @@ Defined at `vmmigration_types.go:187-208`.
 | Field | Type | Default | Notes |
 |-------|------|---------|-------|
 | `checkDiskSize` | bool | `true` | Compare source vs target disk size. |
-| `checkChecksum` | bool | `true` | Compare source vs target SHA256. |
+| `checkChecksum` | bool | `true` | SHA256 comparison (S3) or target-side `qemu-img check` (NFS). |
 | `checkBoot` | bool | `false` | Power on the target and confirm boot. Opt-in. |
 | `checkConnectivity` | bool | `false` | Network reachability test against the target. Opt-in. |
 
@@ -185,54 +163,147 @@ Defined at `vmmigration_types.go:187-208`.
 Where the disk data lives between export and import.
 Defined at `vmmigration_types.go:210-220`.
 
+The `type` field selects the staging backend. Exactly one of the `pvc`, `nfs`,
+or `s3` sub-blocks must match the selected `type` (webhook-enforced).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `type` | enum (`pvc`, `nfs`, `s3`) | `pvc` | Staging backend. `pvc` is the compatibility path; `nfs` and `s3` are the recommended backends as of v0.3.11. |
+| `transferMode` | enum (`auto`, `relay`, `direct`) | `auto` | Transfer mode hint. For `s3`: `auto` and `relay` are equivalent (pod-side relay is the only implemented mode; `direct` is roadmap). For `nfs`: this field is informational — the transport is qemu-img, not pod-mediated; the controller exempts NFS from the relay gate. |
+| `pvc` | `PVCStorageConfig` | required when `type=pvc` | See [storage.pvc](#storagepvc-pvcstorageconfig-compat-only). |
+| `nfs` | `NFSStorageConfig` | required when `type=nfs` | See [storage.nfs](#storagenfs-nfsstorageconfig). |
+| `s3` | `S3StorageConfig` | required when `type=s3` | See [storage.s3](#storages3-s3storageconfig). |
+
+#### `storage.nfs` (`NFSStorageConfig`)
+
+Defined at `vmmigration_types.go` (added in ADR-0006 Slice 4).
+
 ```yaml
 spec:
   storage:
-    type: pvc                  # the only allowed value (as of v0.3.8)
+    type: nfs
+    nfs:
+      server: 172.16.56.13
+      export: /export/virtrigaud
+      uid: 1000
+      gid: 1000
+    transferMode: auto
+```
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `server` | string | required | Hostname or IP of the NFS server. SSRF-checked against `--migration-storage-allowed-hosts`; loopback and link-local are always rejected. |
+| `export` | string | required | Absolute export path on the server, e.g. `/export/virtrigaud`. |
+| `path` | string | unset | Subpath under the export. Omit to use the export root (recommended — the staged object is a flat file; nested paths require the directory to exist on the server). |
+| `uid` | `*int64` (0–4294967295) | unset | Numeric uid the NFS client presents via AUTH_SYS. Effectively mandatory for cross-provider migrations: each provider runs qemu-img as a different identity; set to the uid that owns the export files. |
+| `gid` | `*int64` (0–4294967295) | unset | Numeric gid the NFS client presents via AUTH_SYS. Same constraint as `uid`. |
+| `readOnly` | bool | `false` | Mount read-only. Not useful for migration (the source leg must write). |
+
+!!! warning "uid/gid are pointer types — omitting them is meaningful"
+    In the Go type, `uid` and `gid` are `*int64`. An unset field means "present
+    the process's own uid/gid to the NFS server", not `0`. For cross-provider
+    migrations where each provider runs as a different OS user, omitting both
+    fields typically results in `NFS3ERR_ACCES` on at least one leg.
+
+!!! danger "NFSv3 AUTH_SYS: no Kerberos, no encryption"
+    The disk bytes travel over the network **unencrypted**. The uid/gid is
+    asserted, not authenticated. Operate on a trusted network segment;
+    keep `root_squash` on the export; use one export per tenant.
+    For encrypted-in-transit requirements, use the S3 backend with a
+    TLS-terminated endpoint.
+
+**NFS per-provider transport mechanisms:**
+
+| Provider | How qemu-img reaches the NFS export |
+|---------|-------------------------------------|
+| **libvirt** | The libvirt **host** runs `qemu-img` against `nfs://<server>/<export>/<file>` using the **libnfs** userspace driver. No kernel mount; no pod relay. |
+| **vSphere** | The provider **pod** runs `qemu-img` against `nfs://` via libnfs. The vSphere provider image ships the Debian `qemu-block-extra` package which provides `block-nfs.so`. |
+| **Proxmox** | The PVE **node** kernel-mounts the export (the node's native kernel NFS client, same mechanism PVE uses for NFS storage pools). `pve-qemu-kvm` has no libnfs driver — `qemu-img nfs://` fails with `Unknown protocol 'nfs'` on a PVE node. The provider uses `setpriv` to present the configured `uid`/`gid` when running `qemu-img` against the mount. |
+
+**Staged object naming** (flat file in export root or `path` subdir):
+
+```text
+vmmigrations-<namespace>-<migration-name>-<stage>.qcow2
+```
+
+NFS cannot auto-create directories the way S3 key prefixes do. One export per
+tenant keeps staged objects from colliding.
+
+#### `storage.s3` (`S3StorageConfig`)
+
+Defined at `vmmigration_types.go` (added in ADR-0006 Slices 1–3).
+
+```yaml
+spec:
+  storage:
+    type: s3
+    transferMode: relay
+    s3:
+      bucket: virtrigaud
+      endpoint: http://minio.example:9000   # omit for AWS S3
+      region: us-east-1
+      usePathStyle: true                    # true for MinIO/Ceph/rustfs; false for AWS
+      credentialsSecretRef:
+        name: s3-migration-credentials
+```
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `bucket` | string | required | S3 bucket name. |
+| `endpoint` | string | unset | S3 endpoint URL. Omit for AWS S3. Required for MinIO, Ceph RGW, rustfs, and other S3-compatible stores. SSRF-checked against `--migration-storage-allowed-hosts`. |
+| `region` | string | required | AWS region string (e.g. `us-east-1`). Required even for non-AWS endpoints. |
+| `prefix` | string | unset | Key prefix for staged objects (e.g. `migrations/`). |
+| `usePathStyle` | bool | `false` | Set `true` for MinIO, Ceph RGW, rustfs, and other path-style endpoints. Set `false` for AWS S3 (virtual-hosted-style). |
+| `credentialsSecretRef.name` | string | required | Name of a `Secret` in the same namespace as the `VMMigration`. Keys: `accessKeyID`, `secretAccessKey`, optional `sessionToken`. **Never inline credentials in the CR.** |
+
+The provider pod is the S3 client. Bytes flow: source host → source pod → S3 →
+target pod → target host. `transferMode: auto` resolves to `relay` (the only
+implemented mode; `direct` is roadmap).
+
+**S3 credentials Secret shape:**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: s3-migration-credentials
+  namespace: default
+type: Opaque
+stringData:
+  accessKeyID: <your-access-key>
+  secretAccessKey: <your-secret-key>
+  # sessionToken: <optional>
+```
+
+#### `storage.pvc` (`PVCStorageConfig`, compat-only)
+
+Retained from v0.3.8. Mounts a `ReadWriteMany` PVC into both provider pods.
+No longer the recommended path. Use `nfs` or `s3` for new migrations.
+Defined at `vmmigration_types.go:222-250`.
+
+```yaml
+spec:
+  storage:
+    type: pvc
     pvc:
       storageClassName: nfs-client
       size: 100Gi
       accessMode: ReadWriteMany
 ```
 
-| Field | Type | Default | Bounds |
-|-------|------|---------|--------|
-| `type` | enum (`pvc`) | `pvc` | **`pvc` is the only valid value (as of v0.3.8).** Setting anything else fails validation at `vmmigration_controller.go:1425`. |
-| `pvc` | `PVCStorageConfig` | required when `type=pvc` | See below. |
-
-#### `storage.pvc` (`PVCStorageConfig`)
-
-Defined at `vmmigration_types.go:222-250`.
-
 | Field | Type | Default | Notes |
 |-------|------|---------|-------|
 | `name` | string | unset | Name of an existing PVC to reuse. If unset, the controller creates a temporary PVC owned by the `VMMigration` (auto-cleanup on deletion). |
 | `storageClassName` | string | required when `name` is unset | StorageClass for the auto-created PVC. |
-| `size` | string (`100Gi`-style) | required when `name` is unset | Capacity for the auto-created PVC. Pattern: `^[0-9]+(\\.[0-9]+)?(Ei?|Pi?|Ti?|Gi?|Mi?|Ki?)$`. |
-| `accessMode` | enum (`ReadWriteOnce`, `ReadWriteMany`, `ReadOnlyMany`) | `ReadWriteMany` | RWX is the default because both provider pods need to mount the PVC simultaneously. RWO works only if both providers run on the same node. |
-| `mountPath` | string | `/mnt/migration-storage` | Path inside the provider pods where the PVC is mounted. The libvirt provider's `ImportDisk` decodes `pvc://<name>/...` URLs to `${mountPath}/<name>/...` (`internal/providers/libvirt/server.go:485-489`). |
+| `size` | string (`100Gi`-style) | required when `name` is unset | Capacity for the auto-created PVC. Pattern: `^[0-9]+(\\.[0-9]+)?(Ei?|Pi?|Ti?|Gi?|Mi?|Ki?)$`. Size at **1.5×–2× the source disk** to accommodate sibling conversion files. |
+| `accessMode` | enum (`ReadWriteOnce`, `ReadWriteMany`, `ReadOnlyMany`) | `ReadWriteMany` | RWX required unless both providers run on the same node. |
+| `mountPath` | string | `/mnt/migration-storage` | Path inside provider pods where the PVC is mounted. |
 
-The migration controller drives a PVC-aware orchestration:
-
-1. Creates the PVC if needed.
-2. Annotates **both** source and target `Provider` CRs with
-   `virtrigaud.io/migration-pvc=<pvc-name>` and a reconcile-trigger
-   timestamp.
-3. The `ProviderReconciler` adds the PVC to each provider Deployment's
-   volume mounts and rolls the pods.
-4. The migration controller waits for both providers to be `Ready` again
-   before transitioning out of the validation phase.
-
-This sequence is the reason a default migration deploy adds ~30–60s of
-rolling-restart overhead per provider pod.
-
-!!! note "Provider controller no longer deletes the migration PVC (v0.3.8)"
-    In v0.3.8 ([#184](https://github.com/projectbeskar/virtrigaud/pull/184)) the
-    `ProviderReconciler` **no longer deletes migration-storage PVCs** during its
-    reconcile, and it now **watches** them. Previously a provider reconcile could
-    race the PVC's lifecycle and reclaim the transfer medium out from under an
-    in-flight migration. Ownership and cleanup of the intermediate PVC stay with
-    the `VMMigration` CR (see [Finalizer](#finalizer)).
+!!! note "Provider controller no longer deletes the migration PVC (v0.3.8+)"
+    Since v0.3.8 ([#184](https://github.com/projectbeskar/virtrigaud/pull/184))
+    the `ProviderReconciler` **no longer deletes migration-storage PVCs** and
+    watches them. Previously a provider reconcile could race the PVC's lifecycle
+    and reclaim the transfer medium out from under an in-flight migration.
 
 ### `spec.metadata` (`MigrationMetadata`, optional)
 
@@ -267,8 +338,8 @@ the controller fills them in as it progresses.
 | `completionTime` | `metav1.Time` | When the migration completed (success or failure). |
 | `progress` | `MigrationProgress` | See below. |
 | `diskInfo` | `MigrationDiskInfo` | Source / target disk metadata + checksums. |
-| `storageInfo` | `MigrationStorageInfo` | PVC URL, size, upload time, cleanup state. |
-| `storagePVCName` | string | Name of the PVC created or reused for this migration. |
+| `storageInfo` | `MigrationStorageInfo` | Staging URL, size, upload time, cleanup state. |
+| `storagePVCName` | string | Name of the PVC created or reused (PVC mode only). |
 | `conditions` | `[]metav1.Condition` | Standard K8s condition list. See [Condition types](#condition-types). |
 | `observedGeneration` | int64 | Last `spec.generation` the controller acted on. |
 | `retryCount` | int32 | How many times the migration has been retried. |
@@ -302,7 +373,7 @@ Defined at `vmmigration_types.go:424-458`.
 | `targetFormat` | string | Target format. |
 | `targetSize` | `resource.Quantity` | Target disk size. |
 | `checksum` | string | SHA256 of the transferred disk (legacy field). |
-| `sourceChecksum` | string | SHA256 measured at source. |
+| `sourceChecksum` | string | SHA256 measured at source (S3 backend; NFS uses target-side check). |
 | `targetChecksum` | string | SHA256 measured at target after import. |
 
 ### `status.storageInfo` (`MigrationStorageInfo`)
@@ -311,10 +382,10 @@ Defined at `vmmigration_types.go:460-477`.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `url` | string | `pvc://<pvc-name>/<file>` URL the libvirt provider decodes (`internal/providers/libvirt/server.go:485-489`). |
-| `size` | `resource.Quantity` | Bytes written to the intermediate PVC. |
+| `url` | string | Reference to the staged object. Format depends on backend: `s3://<bucket>/<key>` for S3; a path-style NFS reference for NFS; `pvc://<pvc-name>/<file>` for PVC compat mode. |
+| `size` | `resource.Quantity` | Bytes written to the staging backend. |
 | `uploadedAt` | `metav1.Time` | When the export finished writing. |
-| `cleanedUp` | bool | Whether the intermediate file (and PVC, if owned) was deleted. |
+| `cleanedUp` | bool | Whether the intermediate staged object (and PVC if owned) was deleted. |
 
 ### `status.validationResults` (`ValidationResults`)
 
@@ -323,7 +394,7 @@ Defined at `vmmigration_types.go:479-500`.
 | Field | Type | Notes |
 |-------|------|-------|
 | `diskSizeMatch` | *bool | Result of `validationChecks.checkDiskSize`. |
-| `checksumMatch` | *bool | Result of `validationChecks.checkChecksum`. |
+| `checksumMatch` | *bool | SHA256 match (S3) or target-side integrity check (NFS). |
 | `bootSuccess` | *bool | Result of `validationChecks.checkBoot` (only set if opted in). |
 | `connectivitySuccess` | *bool | Result of `validationChecks.checkConnectivity` (only set if opted in). |
 | `validationErrors` | []string | Free-form error strings from validation. |
@@ -368,15 +439,15 @@ Ready
 | Phase | Constant | What's happening |
 |-------|----------|------------------|
 | `Pending` | `MigrationPhasePending` | Just created, awaiting first reconcile. |
-| `Validating` | `MigrationPhaseValidating` | Source VM, target provider, storage config, and PVC mount validated. Provider pods are restarted with the new PVC mount before this phase exits. |
+| `Validating` | `MigrationPhaseValidating` | Source VM, target provider, and storage config validated. For S3/NFS: staging backend reachability checked and SSRF-gated. For PVC mode: PVC created/reused; provider pods restarted with the PVC mount. |
 | `Snapshotting` | `MigrationPhaseSnapshotting` | Source VM snapshot is being created (unless `snapshotRef` was supplied). |
-| `Exporting` | `MigrationPhaseExporting` | Source provider writes the disk to the intermediate PVC. |
-| `Transferring` | `MigrationPhaseTransferring` | Data is being copied to the PVC (in PVC mode, this is part of `Exporting`; the controller may not always set this phase explicitly). |
-| `Converting` | `MigrationPhaseConverting` | `qemu-img` converts between formats (`vmdk` → `qcow2`, etc.). Skipped if formats match. |
-| `Importing` | `MigrationPhaseImporting` | Target provider reads the disk from the PVC and registers it. |
-| `Creating` | `MigrationPhaseCreating` | Target `VirtualMachine` resource is created and the target provider creates the VM. |
+| `Exporting` | `MigrationPhaseExporting` | Source provider writes the disk to the staging backend. |
+| `Transferring` | `MigrationPhaseTransferring` | Data is being staged. For S3/NFS this is part of `Exporting`; the controller may not always set this phase explicitly. |
+| `Converting` | `MigrationPhaseConverting` | Target provider converts between formats (`vmdk` → `qcow2`, etc.). Skipped if formats match. |
+| `Importing` | `MigrationPhaseImporting` | Target provider reads the staged disk and registers it. |
+| `Creating` | `MigrationPhaseCreating` | Target `VirtualMachine` resource is created. |
 | `Validating-Target` | `MigrationPhaseValidatingTarget` | Post-create validation per `validationChecks`. |
-| `Ready` | `MigrationPhaseReady` | Migration successful. The target VM exists and is independent of the `VMMigration` CR. |
+| `Ready` | `MigrationPhaseReady` | Migration successful. Target VM exists and is independent of the `VMMigration` CR. |
 | `Failed` | `MigrationPhaseFailed` | Terminal failure. Retries (per `options.retryPolicy`) recycle the phase machine from `Pending`. |
 
 ### Important behavior
@@ -385,17 +456,14 @@ Ready
   the `VMMigration` CR does **not** delete the target VM. The controller
   marks the target VM with annotations
   `virtrigaud.io/migration-completed="true"` and
-  `virtrigaud.io/migration-completed-at=<RFC3339>` to make this property
-  observable.
+  `virtrigaud.io/migration-completed-at=<RFC3339>`.
 - **Failed migrations clean up their partial target VM** during finalizer
   processing. The check at `vmmigration_controller.go:1257` only deletes the
-  target VM if `phase=Failed` (and the optional `phase=Creating` window where
-  the target VM may exist but the migration has not yet declared itself
-  ready).
-- **The intermediate PVC is owned by the VMMigration CR**, so by default it
-  is garbage-collected on migration deletion. The controller also explicitly
-  deletes it at `vmmigration_controller.go:1222-1240` as a belt-and-braces
-  cleanup.
+  target VM if `phase=Failed`.
+- **Staged objects (S3/NFS) are cleaned up per `options.cleanupPolicy`.** The
+  controller's cleanup pass runs at the end of a successful or failed migration.
+  The finalizer (`vmmigration.infra.virtrigaud.io/cleanup`) also runs cleanup on
+  CR deletion.
 
 ### G3 + K5 double-count fix (v0.3.6)
 
@@ -420,17 +488,17 @@ via `metav1.Condition`.
 | `Validating` | `Validating`, `ValidationComplete`, `ValidationFailed` | Phase 1. |
 | `Snapshotting` | `SnapshotSelected`, `SnapshotComplete` | Phase 2. |
 | `Exporting` | `Exporting` | Phase 3. |
-| `Transferring` | `Transferring` | Disk upload to the PVC. |
+| `Transferring` | `Transferring` | Disk being staged on the backend. |
 | `Importing` | `Importing` | Phase 5. |
 | `Failed` | `SourceNotFound`, `ProviderError`, `StorageError`, `ValidationFailed`, `Timeout` | Terminal failure. |
 
-## Complete example
+## Complete example (NFS)
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMMigration
 metadata:
-  name: app-vm-vsphere-to-libvirt
+  name: app-libvirt-to-vsphere-nfs
   namespace: applications
   labels:
     app: my-app
@@ -438,28 +506,28 @@ metadata:
 spec:
   source:
     vmRef:
-      name: app-vm-vsphere
-    createSnapshot: true
+      name: app-on-libvirt
+    createSnapshot: false
     powerOffBeforeMigration: true
-    deleteAfterMigration: false      # keep source for rollback
+    deleteAfterMigration: false
 
   target:
-    name: app-vm-libvirt
+    name: app-on-vsphere
     namespace: applications
     providerRef:
-      name: libvirt-prod
+      name: vsphere-prod
       namespace: virtrigaud-system
     classRef:
-      name: medium-vm
+      name: standard-2cpu-4gb
     networks:
-      - name: corp-bridge
-    powerOn: false                   # start cold so an operator can verify
+      - name: primary
+        networkRef:
+          name: vm-network
+    powerOn: false
 
   options:
-    diskFormat: qcow2
-    compress: false
     verifyChecksums: true
-    timeout: 4h
+    timeout: 1h
     retryPolicy:
       maxRetries: 3
       retryDelay: 5m
@@ -472,11 +540,13 @@ spec:
       checkConnectivity: false
 
   storage:
-    type: pvc
-    pvc:
-      storageClassName: nfs-client
-      size: 100Gi
-      accessMode: ReadWriteMany
+    type: nfs
+    nfs:
+      server: 172.16.56.13
+      export: /export/virtrigaud
+      uid: 1000
+      gid: 1000
+    transferMode: auto
 
   metadata:
     purpose: provider-change
@@ -489,35 +559,28 @@ spec:
 status:
   phase: Ready
   observedGeneration: 1
-  startTime: "2026-05-23T10:00:00Z"
-  completionTime: "2026-05-23T11:14:35Z"
-  storagePVCName: app-vm-vsphere-to-libvirt-storage
-  snapshotRef: app-vm-vsphere-migration-abc12345
-  snapshotID: snap-xyz
-  exportID: task-export-098
-  importID: task-import-765
+  startTime: "2026-06-21T10:00:00Z"
+  completionTime: "2026-06-21T10:43:12Z"
+  storageInfo:
+    url: nfs://172.16.56.13/export/virtrigaud/vmmigrations-applications-app-libvirt-to-vsphere-nfs-export.qcow2
+    size: 50Gi
+    uploadedAt: "2026-06-21T10:38:44Z"
+    cleanedUp: true
   targetVMRef:
-    name: app-vm-libvirt
-  targetVMID: lvm-domain-uuid-…
+    name: app-on-vsphere
   progress:
     currentPhase: Ready
     percentage: 100
     totalBytes: 53687091200
     transferredBytes: 53687091200
   diskInfo:
-    sourceDiskID: vsphere-disk-1
-    sourceFormat: vmdk
+    sourceDiskID: libvirt-vol-app-on-libvirt-disk
+    sourceFormat: qcow2
     sourceSize: 50Gi
-    targetDiskID: lvm-vol-app-vm-libvirt-disk
-    targetFormat: qcow2
+    targetDiskID: vsphere-disk-1
+    targetFormat: vmdk
     targetSize: 50Gi
-    sourceChecksum: sha256:abc...
     targetChecksum: sha256:abc...
-  storageInfo:
-    url: pvc://app-vm-vsphere-to-libvirt-storage/disk.qcow2
-    size: 50Gi
-    uploadedAt: "2026-05-23T10:45:12Z"
-    cleanedUp: true
   validationResults:
     diskSizeMatch: true
     checksumMatch: true
@@ -526,7 +589,60 @@ status:
       status: "True"
       reason: Completed
       message: Migration completed successfully
-      lastTransitionTime: "2026-05-23T11:14:35Z"
+      lastTransitionTime: "2026-06-21T10:43:12Z"
+```
+
+## Complete example (S3)
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMMigration
+metadata:
+  name: app-vm-vsphere-to-libvirt
+  namespace: applications
+spec:
+  source:
+    vmRef:
+      name: app-vm-vsphere
+    createSnapshot: true
+    powerOffBeforeMigration: true
+    deleteAfterMigration: false
+
+  target:
+    name: app-vm-libvirt
+    namespace: applications
+    providerRef:
+      name: libvirt-prod
+      namespace: virtrigaud-system
+    classRef:
+      name: medium-vm
+    networks:
+      - name: corp-bridge
+    powerOn: false
+
+  options:
+    diskFormat: qcow2
+    verifyChecksums: true
+    timeout: 4h
+    cleanupPolicy: OnSuccess
+
+  storage:
+    type: s3
+    transferMode: relay
+    s3:
+      bucket: virtrigaud
+      endpoint: http://minio.example:9000
+      region: us-east-1
+      usePathStyle: true
+      credentialsSecretRef:
+        name: s3-migration-credentials
+
+status:
+  phase: Ready
+  storageInfo:
+    url: s3://virtrigaud/vmmigrations-applications-app-vm-vsphere-to-libvirt/disk.qcow2
+    size: 50Gi
+    cleanedUp: true
 ```
 
 ## Finalizer
@@ -535,8 +651,8 @@ The controller owns the finalizer
 `vmmigration.infra.virtrigaud.io/cleanup` (visible in
 `metadata.finalizers`). On delete it:
 
-1. Cleans up the intermediate PVC if not already gone
-   (`vmmigration_controller.go:1222-1240`).
+1. Cleans up the staged object on S3 or NFS (or intermediate PVC for compat
+   mode) if not already gone (`vmmigration_controller.go:1222-1240`).
 2. Deletes the source VM snapshot if `cleanupPolicy=Always` or the migration
    reached `Ready` and `cleanupPolicy=OnSuccess`.
 3. Deletes a partial target VM **only** if the migration ended in `Failed`
@@ -563,11 +679,14 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["create", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]                        # required to read S3 credentialsSecretRef
 ```
 
 The controller itself (`virtrigaud-manager`) needs **broader** RBAC to
-mutate Provider CR annotations and create PVCs; that is part of the manager
-ServiceAccount baked into the Helm chart.
+mutate Provider CR annotations (PVC mode) and create PVCs; that is part of
+the manager ServiceAccount baked into the Helm chart.
 
 ## See also
 
@@ -577,3 +696,5 @@ ServiceAccount baked into the Helm chart.
   generated CRD field reference.
 - [Resilience](../operations/resilience.md) — how the CircuitBreaker
   interacts with the many provider RPCs a migration issues.
+- [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) —
+  design rationale for storage-backend-agnostic migration.

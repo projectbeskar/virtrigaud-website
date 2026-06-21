@@ -130,10 +130,15 @@ The manager also runs a `VMAdoption` reconciler (not a CRD — it reconciles `Pr
 
 ## Version Information
 
-This documentation covers **VirtRigaud v0.3.9**.
+This documentation covers **VirtRigaud v0.3.11**.
 
 ### Recent Releases
 
+- **v0.3.11** — *NFS cross-hypervisor migration staging backend (ADR-0006 Slice 4).*
+    - **Second storage-agnostic `VMMigration` backend: NFS (#236).** Alongside the S3 backend, the disk can now be staged on an **NFS export** and moved with `qemu-img`'s native transport — no PVC, no relay, no S3 credentials. Lab-validated across all three providers (vSphere, libvirt, Proxmox VE) in **both directions** against a real OpenMediaVault server.
+    - **Per-provider NFS transport.** libvirt (host-side) and vSphere (pod-side) use qemu-img's `nfs://` libnfs driver; **Proxmox kernel-mounts** the export because `pve-qemu-kvm` ships no libnfs driver.
+    - **`nfs.uid` / `nfs.gid` are effectively mandatory for cross-provider migrations** (AUTH_SYS authorizes by the numeric uid/gid each leg presents); set them to the export owner. The staged object is a single flat file in the export root.
+    - **Proxmox now advertises `s3` *and* `nfs`** (not PVC: its disks live on the node, unreachable by a pod-mounted PVC). The full 3-hypervisor matrix is now validated in both directions over **both** staging backends. See the [VM Migration User Guide](migration/user-guide.md).
 - **v0.3.9** — *Libvirt online operations + clone + image-prepare + memory snapshots on all three providers.*
     - **Libvirt online CPU/memory reconfigure (#203).** `virsh setvcpus/setmem --live` with no power-cycle for VMs created with `cpuHotAddEnabled`/`memoryHotAddEnabled` on the VMClass (4× headroom, 64-vCPU cap). Lab-proven.
     - **Libvirt online disk expansion (#201).** `virsh blockresize` + best-effort in-guest FS grow. Grow-only; no power-cycle. Lab-proven.

@@ -27,7 +27,7 @@ helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
 helm repo update virtrigaud
 
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.8 \
+  --version 0.3.11 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
@@ -44,7 +44,7 @@ To enable specific providers at install time:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.8 \
+  --version 0.3.11 \
   --namespace virtrigaud-system \
   --create-namespace \
   --set providers.vsphere.enabled=true \
@@ -55,7 +55,7 @@ To skip CRDs if you manage them separately:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.8 \
+  --version 0.3.11 \
   --namespace virtrigaud-system \
   --create-namespace \
   --skip-crds
@@ -119,7 +119,7 @@ spec:
     namespace: default
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.11"
     service:
       port: 9090
       tls:
@@ -159,7 +159,7 @@ spec:
     namespace: default
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.8"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.11"
     service:
       port: 9090
       tls:

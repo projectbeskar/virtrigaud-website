@@ -11,7 +11,7 @@ It is aligned to **VirtRigaud v0.3.8** (the current latest).
 
 ## TL;DR
 
-- **Current latest**: `v0.3.8`. Helm chart `--version 0.3.8`. Provider images tagged `v0.3.8`.
+- **Current latest**: `v0.3.8`. Helm chart `--version 0.3.11`. Provider images tagged `v0.3.11`.
 - **CRD API version**: `infra.virtrigaud.io/v1beta1` is the **stable** API. Breaking changes need an ADR.
 - **Release pattern**: `rc1 → smoke → final` is the established cadence. Used successfully for v0.3.3, v0.3.5, v0.3.6, and onward.
 - **Support**: best-effort on the latest minor. The project does not maintain LTS branches. Upgrade to the latest patch within the current minor to get fixes.
@@ -82,14 +82,14 @@ The chart version is identical to the project version. Always pin in production:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.8 \
+  --version 0.3.11 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
 
 ```bash
 helm upgrade virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.8 \
+  --version 0.3.11 \
   --namespace virtrigaud-system
 ```
 
@@ -102,7 +102,7 @@ Provider pods run separate images, each tagged to the same version as the manage
 ```yaml
 spec:
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.11"
 ```
 
 A provider image must be compatible with the manager that drives it. The recommendation is to keep the provider images on the same `v0.3.x` minor as the manager.

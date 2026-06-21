@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The Proxmox provider manages VMs on Proxmox Virtual Environment (PVE) via the native PVE REST API. It is the newest production-grade provider in the VirtRigaud tree and is currently maturing toward general availability.
 
-This page is aligned to **VirtRigaud v0.3.8**. Capability claims trace back to the provider's `GetCapabilities` builder in `internal/providers/proxmox/capabilities.go` and the REST client in `internal/providers/proxmox/pveapi/`.
+This page is aligned to **VirtRigaud v0.3.11**. Capability claims trace back to the provider's `GetCapabilities` builder in `internal/providers/proxmox/capabilities.go` and the REST client in `internal/providers/proxmox/pveapi/`.
 
 ## Status
 
@@ -112,7 +112,7 @@ spec:
   insecureSkipVerify: false
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.11"
     service:
       port: 9443
       tls:
@@ -385,6 +385,36 @@ spec:
 ```
 
 Linked clones share the parent's disk on copy-on-write storage (ZFS / Ceph / qcow2 with backing); the parent must remain available.
+
+## Cross-hypervisor migration
+
+Proxmox participates **fully** in VirtRigaud's storage-backend-agnostic, any-direction cross-hypervisor migration (ADR-0006, [#236](https://github.com/projectbeskar/virtrigaud/issues/236)). It is validated end-to-end as both a **source** and a **target**, in **both directions**, against vSphere and libvirt, over **both** staging backends — **S3** (ADR-0006 Slice 3) and **NFS** (Slice 4). The disk is staged on the backend and moved with `qemu-img`; it **never traverses a CSI PVC**.
+
+!!! info "Proxmox advertises `s3` and `nfs` — never `pvc`"
+    A Proxmox VM's disk lives on **PVE node storage**, which a Kubernetes pod-mounted PVC can never reach. The provider therefore advertises the `s3` and `nfs` migration staging backends and **rejects** a `storage.type: pvc` migration (with a Proxmox source or target) at capability validation. The legacy PVC staging model is compat-only for the vSphere/libvirt directions.
+
+### The SSH data plane (required for migration)
+
+The Proxmox provider is a **hybrid**: an API-token control plane (the REST API) **plus an SSH data plane to the PVE node**. The disk is read/written on the node with node-side tools (`qemu-img`, `qm`, `pvesm`), so migration requires the provider pod to reach the PVE node over SSH. The pod reaches the node **by IP** (`PROVIDER_ENDPOINT` = the PVE node IP), with `known_hosts` pinned to that IP, because in-cluster DNS typically does not resolve the PVE hostname.
+
+This means the Proxmox **Provider Secret must carry SSH credentials in addition to the API token** when you intend to migrate. Add to the Secret described in [Authentication](#authentication):
+
+| Secret key | Purpose |
+|------------|---------|
+| `ssh_user` | SSH username on the PVE node (e.g. `root`). |
+| `ssh_password` *and/or* `ssh_privatekey` | SSH password and/or private key for the data-plane connection. |
+| `known_hosts` | Pinned SSH host key for the node IP (host-key verification is on by default; #149). |
+
+Without these, control-plane operations (Create/Power/Snapshot/…) still work, but a migration with a Proxmox endpoint fails when it tries to open the SSH data plane.
+
+### How each backend moves the disk
+
+- **S3** — the node-side `qemu-img convert -U -O qcow2` streams the disk over SSH into the **provider pod**, which is the S3 client (the universal `relay` mode; the disk bytes flow node → pod → S3 → pod → node). `-U` lets the export read a disk whose VM may still be running. On import, the provider streams the S3 object to a node temp file, runs `qemu-img check`, creates a diskless shell VM, and attaches the disk with `qm importdisk` + `qm set`. The import target storage is operator-configurable (`PROVIDER_DEFAULT_STORAGE` / `PVE_DEFAULT_STORAGE`), not hardcoded `local-lvm` — a directory store is a valid target.
+
+- **NFS** — uses a **kernel NFS mount on the node**, not libnfs. `pve-qemu-kvm` is built **without** the libnfs block driver, so `qemu-img` rejects an `nfs://` URL with `Unknown protocol 'nfs'`. The Proxmox provider therefore mounts the export with the node's kernel NFS client (exactly how PVE's first-class NFS storage mounts) and runs `qemu-img` against the mount. Because the export must be written as the migration's `nfs.uid`/`nfs.gid` — but `qemu-img` must run as root to read the root-owned source — the export is two-stage: `qemu-img` (as root) flattens the source to a local temp, then the temp is copied onto the export as `nfs.uid`/`nfs.gid` via `setpriv`.
+
+!!! warning "Set `nfs.uid` / `nfs.gid` to the export owner"
+    NFS AUTH_SYS authorizes by the numeric uid/gid the client presents, and the Proxmox node presents the migration's `nfs.uid`/`nfs.gid`. Set them to the uid/gid that **owns the export's files**, or the staged-object read/write fails with `NFS3ERR_ACCES`. The staged disk is a single **flat** file in the export root (`vmmigrations-<ns>-<name>-<stage>.qcow2`) — NFS cannot auto-create directories, so use one export per tenant. AUTH_SYS over NFSv3 is cleartext with no Kerberos; run the export on a trusted network with `root_squash` on. See the [VM Migration User Guide](../migration/user-guide.md#nfs-staging-new-in-slice-4) for the full guide and the [`vmmigration-nfs.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmmigration-nfs.yaml) example.
 
 ## Async task tracking
 

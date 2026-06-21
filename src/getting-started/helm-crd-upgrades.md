@@ -11,7 +11,7 @@ VirtRigaud Helm chart now supports **automatic CRD upgrades** during `helm upgra
 
 ## What changes on upgrade to v0.3.8
 
-The CRD-upgrade hook automatically applies the following additive changes when you run `helm upgrade ... --version 0.3.8`:
+The CRD-upgrade hook automatically applies the following additive changes when you run `helm upgrade ... --version 0.3.11`:
 
 - **`vmclones.infra.virtrigaud.io`** — new CRD (VMClone MVP). Adds `status.targetVMID` field.
 - **`vmsets.infra.virtrigaud.io`** — new CRD (VMSet stub). The controller emits `Ready=False / Reason=ControllerNotImplemented`; no existing resources are affected.
@@ -249,7 +249,7 @@ kubectl describe job -n virtrigaud-system -l app.kubernetes.io/component=crd-upg
     helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
     helm repo update
     helm install virtrigaud virtrigaud/virtrigaud \
-      --version 0.3.8 \
+      --version 0.3.11 \
       --namespace virtrigaud-system \
       --create-namespace
     ```

@@ -100,7 +100,7 @@ The chart no longer renders templated provider Deployments by default. This is a
 ```bash
 helm repo update
 helm upgrade -i virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.8 \
+  --version 0.3.11 \
   --reset-values \
   -f your-values.yaml
 ```
