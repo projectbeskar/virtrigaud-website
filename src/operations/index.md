@@ -63,7 +63,7 @@ SDK. They are kept **honest about what is and is not wired**:
 Use this before promoting a VirtRigaud deployment to production. Each item links
 to the page that actually covers it.
 
-- [ ] **CRDs installed at the v0.3.8 schema** — `helm pull virtrigaud/virtrigaud --version 0.3.8 --untar && kubectl apply -f virtrigaud/crds/`. See [Upgrade Guide](upgrade.md).
+- [ ] **CRDs installed at the v0.3.8 schema** — `helm pull virtrigaud/virtrigaud --version 0.3.11 --untar && kubectl apply -f virtrigaud/crds/`. See [Upgrade Guide](upgrade.md).
 - [ ] **Manager + provider images pinned to v0.3.8** — release artifacts are tagged in lockstep; do not mix versions across the manager/providers/CRDs trio.
 - [ ] **Metrics scrape configured** — a `ServiceMonitor` (or equivalent) against the manager's `/metrics`. Expect the families documented in [Observability](observability.md), including the v0.3.8 `kind="VMClone"`/`kind="VMSet"` reconcile series.
 - [ ] **mTLS configured on every Provider CR** — enforced since v0.3.7 (#147).

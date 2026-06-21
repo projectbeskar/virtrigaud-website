@@ -147,7 +147,7 @@ Demonstrates dynamic reconfiguration:
 1. **VirtRigaud Installed**:
    ```bash
    helm install virtrigaud virtrigaud/virtrigaud \
-     --version 0.3.8 -n virtrigaud-system --create-namespace
+     --version 0.3.11 -n virtrigaud-system --create-namespace
    ```
 
 2. **Provider Configured**:

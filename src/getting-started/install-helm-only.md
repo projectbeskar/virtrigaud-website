@@ -26,7 +26,7 @@ helm repo update virtrigaud
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.8 \
+  --version 0.3.11 \
   --namespace virtrigaud-system \
   --create-namespace \
   --wait \
@@ -41,7 +41,7 @@ helm install virtrigaud virtrigaud/virtrigaud \
 
     ```bash
     helm install virtrigaud virtrigaud/virtrigaud \
-      --version 0.3.8 \
+      --version 0.3.11 \
       --namespace virtrigaud-system \
       --create-namespace \
       --set providers.vsphere.enabled=true
@@ -71,7 +71,7 @@ helm install virtrigaud virtrigaud/virtrigaud \
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.8 \
+  --version 0.3.11 \
   --namespace virtrigaud-system \
   --create-namespace \
   --skip-crds \
@@ -255,7 +255,7 @@ spec:
 
    ```bash
    helm install virtrigaud virtrigaud/virtrigaud \
-     --version 0.3.8 \
+     --version 0.3.11 \
      --namespace virtrigaud-system \
      --create-namespace
    ```

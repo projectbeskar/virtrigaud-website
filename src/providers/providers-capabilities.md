@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Capabilities Matrix
 
-This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.3.9**.
+This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.3.11**.
 
 Cells marked ✅ / ❌ in this matrix are cross-referenced against each provider's `GetCapabilities` gRPC response (`internal/providers/{vsphere,libvirt,proxmox}/server.go`) and the capability builder registrations in `internal/providers/{proxmox}/capabilities.go` / `sdk/provider/capabilities/`. Where a feature is implemented in code but not yet exposed through the capability flag (or vice versa), the cell carries a footnote rather than being silently changed.
 
@@ -129,7 +129,7 @@ All providers implement these core operations:
 
 [^imageimport]: As of v0.3.9 (#154), libvirt's `ImagePrepare` RPC is fully implemented and `GetCapabilities` reports `SupportsImageImport=true`. `VMImage.spec.prepare` drives lazy, VM-create-time image import into a libvirt storage pool. A `VMImage` with an **import-style** source (a download `url`/OVA) and `prepare.onMissing: Fail` whose image is not yet imported will hold new VM creation with a `WaitingForDependencies` condition ("image not prepared on provider") until preparation completes. Images that reference an **already-present** artifact (a libvirt pool-file `path`, an existing template) — or that have no `prepare` block — create normally. Earlier v0.3.8 documentation stated `ImagePrepare` was `Unimplemented` — that is reversed in v0.3.9.
 
-### Disk Export / Import
+### Disk Export / Import & Cross-Provider Migration
 
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
@@ -137,12 +137,29 @@ All providers implement these core operations:
 | **Disk Import** | ✅[^7] | ✅[^8] | ✅ | ✅ | `ImportDisk`; libvirt: `pvc://` / `file://` sources |
 | **Export Compression** | ✅ | ✅ | ✅[^proxmoxcomp] | simulated | vSphere and libvirt honor `req.Compress`; Proxmox (#219) |
 | **Export Formats** | `vmdk`, `qcow2`, `raw` | per `GetDiskInfo` | `qcow2`, `raw`, `vmdk` | simulated | vSphere & Proxmox `GetCapabilities` advertise all three (#178 / #198) |
+| **Cross-Provider Migration — S3 backend** | ✅[^migrate] | ✅[^migrate] | ✅[^migrate] | n/a | `VMMigration` over S3-compatible object storage (`relay`). Validated as source **and** target, both directions, all pairs (ADR-0006 Slices 1–3, #236). |
+| **Cross-Provider Migration — NFS backend** | ✅[^migratenfs] | ✅[^migratenfs] | ✅[^migratenfs] | n/a | `VMMigration` over an NFS export via `qemu-img` (ADR-0006 Slice 4, #236). vSphere pod-side libnfs, libvirt host-side libnfs, **Proxmox kernel-mount**. Validated both directions across all three. |
+
+This is VirtRigaud's **storage-backend-agnostic, any-direction** cross-hypervisor
+migration (ADR-0006): the disk is staged on a pluggable backend (S3 or NFS) and
+moved with `qemu-img` — it **never traverses a CSI PVC**. The whole 3-hypervisor
+matrix (vSphere ⇄ Libvirt/KVM ⇄ Proxmox VE) is lab-validated in both directions
+over **both** backends. A legacy `pvc` staging mode remains for the vSphere/libvirt
+directions but is **compat-only** — it cannot reach host-resident libvirt disks or
+Proxmox node storage. Do not confuse this with the **vMotion/Migration** row in
+[Advanced Features](#advanced-features) below, which is *intra-hypervisor live*
+migration (vSphere vMotion, PVE live migrate), a separate hypervisor-native feature.
+See the [VM Migration docs](../migration/user-guide.md) for the full guide.
 
 [^7]: As of v0.3.8 (#178), vSphere's `GetCapabilities` advertises disk **export and import** plus the `vmdk`, `qcow2`, and `raw` formats and export compression. Prior releases understated these flags (export/import reported as unsupported/zero); the cells above match the actual v0.3.8 response in `internal/providers/vsphere/server.go`.
 
 [^8]: libvirt implements both `ExportDisk` / `GetDiskInfo` (#177, v0.3.8) and `ImportDisk` (accepting `pvc://` and `file://` sources), and `GetCapabilities` reports `SupportsDiskExport=true` **and** `SupportsDiskImport=true`. These feed the cross-provider migration pipeline (vSphere → libvirt export/convert/import). Proxmox likewise advertises both export and import for `qcow2`/`raw`/`vmdk` (#198).
 
 [^proxmoxcomp]: As of v0.3.9 (#219), Proxmox's `ExportDisk` honors the `Compress` field for qcow2 targets and advertises `SupportsExportCompression=true` in `GetCapabilities`.
+
+[^migrate]: Cross-provider migration over the **S3** staging backend is validated end-to-end for every provider as both source and target, in both directions, across all pairs — vSphere ⇄ libvirt (ADR-0006 Slices 1–2) and Proxmox ⇄ libvirt / Proxmox ⇄ vSphere (Slice 3, #236). The provider **pod** is the S3 client (the universal `relay` transfer mode; `auto` resolves to `relay`, `direct` is a roadmap item), so the disk bytes flow host → pod → S3 → pod → host and never traverse a CSI PVC. The source exports its native format; the **target** owns format conversion (vmdk ↔ qcow2). For Proxmox and libvirt the bytes are read/written on the hypervisor node/host and streamed over SSH into the provider pod, so the Proxmox/libvirt **Provider** Secret must also carry SSH credentials and a pinned `known_hosts`.
+
+[^migratenfs]: As of v0.3.11 (ADR-0006 Slice 4, #236), the same any-direction matrix is also validated over an **NFS** staging backend, against a real OpenMediaVault server. Instead of an object store, the disk is staged on an NFS export and moved with `qemu-img`'s native transport (no PVC, no pod relay, no S3 credentials). **libvirt** (host-side) and **vSphere** (pod-side) use qemu-img's `nfs://` libnfs driver directly; the vSphere image bakes in the Debian `qemu-block-extra` package. **Proxmox uses a kernel NFS mount** — `pve-qemu-kvm` ships no libnfs driver (qemu-img rejects `nfs://` with `Unknown protocol 'nfs'`), so the node mounts the export the way PVE's native NFS storage does and runs qemu-img against the mount. `nfs.uid`/`nfs.gid` are effectively mandatory for cross-provider migrations (AUTH_SYS authorizes by the numeric uid/gid presented, and each leg runs as a different identity) — set them to the export owner. See the [VM Migration User Guide](../migration/user-guide.md#nfs-staging-new-in-slice-4).
 
 ### Guest Operating System
 
@@ -237,6 +254,7 @@ The capability builder lives at `sdk/provider/capabilities/` in the main repo an
 - **TaskStatus Tracking**: Real-time async operation monitoring via govmomi
 - **Clone Operations**: Full and linked clones with automatic snapshot handling
 - **Disk Export/Import**: `ExportDisk` / `ImportDisk` advertising `vmdk` / `qcow2` / `raw` + export compression (#178)
+- **Cross-Provider Migration**: full source and target over **S3 and NFS**, both directions (ADR-0006). Disk I/O streams through the provider **pod** (vCenter API for S3; qemu-img `nfs://` libnfs in-pod for NFS); the image bundles `qemu-img` + the `qemu-block-extra` libnfs driver.
 - **Web Console URLs**: Direct vSphere web client console access
 
 ### Libvirt/KVM Exclusive
@@ -254,6 +272,7 @@ The capability builder lives at `sdk/provider/capabilities/` in the main repo an
 - **Memory Snapshots** (#202): RAM-inclusive checkpoints on running VMs; disk-only downgrade with WARN for stopped VMs.
 - **VNC Console Access**: Direct VNC console URL generation for remote viewers
 - **Disk Export / Import**: `ExportDisk` / `GetDiskInfo` (#177) + `ImportDisk` (`pvc://` / `file://` sources) — feeds the cross-provider migration pipeline
+- **Cross-Provider Migration**: full source and target over **S3 and NFS**, both directions (ADR-0006). Disk I/O runs **host-side**: S3 streams over SSH into the pod (the S3 client); NFS uses the host's qemu-img `nfs://` libnfs driver directly against the export.
 
 ### Proxmox VE Exclusive
 
@@ -266,6 +285,7 @@ The capability builder lives at `sdk/provider/capabilities/` in the main repo an
 - **Guest Agent IP Detection**: Accurate IP address extraction via QEMU guest agent
 - **Hot-plug Reconfiguration**: Online CPU/memory/disk modifications
 - **Memory snapshots**: PVE-style snapshots that include RAM state
+- **Cross-Provider Migration**: full source and target over **S3 and NFS**, both directions (ADR-0006). Disk I/O runs **node-side** over the provider's SSH data plane: S3 streams the node-side `qemu-img` over SSH into the pod (the S3 client); NFS **kernel-mounts** the export on the node (PVE's `qemu-img` has no libnfs) and runs qemu-img against the mount. Requires the Provider Secret to carry SSH credentials + a pinned `known_hosts` in addition to the API token.
 
 ### Mock Provider Features
 
@@ -300,9 +320,9 @@ Reflects each provider's `GetCapabilities.SupportedNetworkTypes` response.
 
 All provider images are available from the GitHub Container Registry:
 
-- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.9`
-- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.9`
-- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.9`
+- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.11`
+- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.11`
+- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.11`
 
 The mock provider (`provider-mock`) is a development/conformance-testing image only.
 It is **not** published under release tags and is **not** part of the multi-arch
@@ -404,6 +424,7 @@ the container runtime selects the correct layer automatically.
 
 ## Version History
 
+- **v0.3.11**: **NFS cross-hypervisor migration staging backend (ADR-0006 Slice 4, #236)** — a second storage-agnostic `VMMigration` backend alongside S3, lab-validated across all three providers (vSphere, libvirt, Proxmox VE) in both directions against a real OpenMediaVault server. The disk is staged on an NFS export and moved with `qemu-img`'s native transport (no PVC, no relay, no S3 credentials): libvirt (host-side) and vSphere (pod-side) use the `nfs://` libnfs driver; **Proxmox kernel-mounts** the export (`pve-qemu-kvm` ships no libnfs). `nfs.uid`/`nfs.gid` are effectively mandatory for cross-provider migrations (AUTH_SYS identity). With the S3 matrix (Slices 1–3) this completes #236's backend-agnostic, any-direction goal. Proxmox now advertises **s3 and nfs** (not PVC).
 - **v0.3.9**: Libvirt online CPU/memory reconfigure (#203) — `SupportsReconfigureOnline=true`; hot-add headroom provisioned at create via VMClass flags; lab-verified live. Libvirt online disk expansion (#201) — `SupportsDiskExpansionOnline=true`; `virsh blockresize` + best-effort in-guest FS grow; lab-verified. Libvirt memory snapshots (#202) — `SupportsMemorySnapshots=true`; RAM-inclusive checkpoints on running VMs. Libvirt Clone (#153) — `SupportsLinkedClones=true`; qcow2 overlay (linked) + full copy, same-provider. Libvirt clone hardening (#208/#221) — UEFI nvram re-pointed per clone; hot-add headroom preserved across class-override clones. End-to-end image preparation (#154) — `SupportsImageImport=true`; `VMImage.spec.prepare` drives lazy import on libvirt/vSphere/Proxmox. Proxmox export compression (#219) — honors `Compress` for qcow2 targets. vSphere memory snapshots (#200) — `SupportsMemorySnapshots=true`; `CreateSnapshot(memory=true)`.
 - **v0.3.8**: Capability negotiation surfaced on `Provider.status.reportedCapabilities` + `CapabilitiesReported` condition, with opt-in `--enforce-provider-capabilities` (default off, fail-open) (#176); vSphere `GetCapabilities` now advertises disk export **and** import + `vmdk`/`qcow2`/`raw` formats + export compression (#178); libvirt implements `ExportDisk`/`GetDiskInfo` (#177); VMClone controller MVP (same-provider full/linked, vSphere+Proxmox) (#179); vSphere vCenter session keepalive + live-probe reconnect (#190); libvirt transient-SSH retry with bounded backoff (#191); Helm templated providers disabled by default (#173).
 - **v0.3.7**: mTLS enforced on all Provider CRs (`TLSConfigured` condition); libvirt SSH host-key verification on by default; multi-arch images (amd64+arm64); manager RBAC tightened.
@@ -418,4 +439,4 @@ the container runtime selects the correct layer automatically.
 
 ---
 
-*This document reflects VirtRigaud v0.3.9 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*
+*This document reflects VirtRigaud v0.3.11 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*

@@ -23,7 +23,7 @@ helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
 helm repo update
 
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.3.8 \
+  --version 0.3.11 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
@@ -121,7 +121,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
       insecureSkipVerify: false       # set true ONLY in dev
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.11"
         service:
           port: 9443
     ```
@@ -141,7 +141,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
         name: libvirt-credentials
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.8"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.11"
         service:
           port: 9090
     ```
@@ -162,7 +162,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
       insecureSkipVerify: false
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.11"
         service:
           port: 9443
     ```
