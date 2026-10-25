@@ -15,7 +15,7 @@ VirtRigaud is a Kubernetes operator for managing virtual machines across multipl
 
 - Python 3.9 or higher
 - [Poetry](https://python-poetry.org/) (Python dependency manager)
-- [Go](https://go.dev/) 1.26 or higher (required for the CRD and gRPC reference generation)
+- [Go](https://go.dev/) 1.26.10 or newer, the version the documented release's `go.mod` requires (required for the CRD and gRPC reference generation; with the default `GOTOOLCHAIN=auto`, an older `go` downloads it)
 
 Install Poetry:
 

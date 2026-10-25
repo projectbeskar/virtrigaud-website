@@ -60,13 +60,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          # 1.26+ required: virtrigaud's go.mod was bumped to `go 1.26.0`
-          # in PR projectbeskar/virtrigaud#125 (v0.3.6). The crd-ref-docs
-          # step below clones that repo and runs `go` against it, so the
-          # toolchain here must satisfy the require directive. setup-go@v6
-          # defaults GOTOOLCHAIN=local, so we cannot rely on auto-download
-          # of a newer toolchain — pin to a version that meets the floor.
-          go-version: '1.26'
+          # The crd-ref-docs step below runs `go` against the VirtRigaud
+          # checkout, so the toolchain must satisfy its go.mod `go` directive
+          # exactly (setup-go@v6 sets GOTOOLCHAIN=local: no auto-download of a
+          # newer toolchain). Read the version from the release being
+          # documented, as the VirtRigaud CI does, so a patch-level bump there
+          # (v0.4.0 requires go 1.26.10) never breaks this build.
+          go-version-file: virtrigaud/go.mod
 
       - name: Install Go documentation tools
         run: |
