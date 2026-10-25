@@ -262,7 +262,7 @@ vcts validate
 vcts validate path/to/specs/
 ```
 
-It takes an optional directory argument (default `test/conformance/specs`), prints each valid test and exits non-zero if any spec is invalid or no spec file is found.
+It takes an optional directory argument (default `test/conformance/specs`) and prints each valid test. It exits non-zero only when no spec file is found. A file that fails to parse or validate is reported as `ERROR: ...` but is then skipped, and the command still ends with `All tests are valid!` and exit status 0, so read its output rather than relying on the exit code.
 
 ### Shipped specs
 
@@ -636,7 +636,10 @@ jobs:
           chmod +x vcts
 
       - name: Validate specs
-        run: ./vcts validate path/to/specs/
+        run: |
+          # vcts validate exits 0 even when a spec is invalid; fail on its ERROR lines
+          ./vcts validate path/to/specs/ | tee validate.out
+          ! grep -q 'ERROR' validate.out
 ```
 
 ### Troubleshooting

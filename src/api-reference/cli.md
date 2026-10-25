@@ -134,7 +134,7 @@ Print the tests defined in `test/conformance/specs/` (relative to the current di
 
 #### validate
 
-Validate the YAML test specifications. Takes an optional directory argument (default `test/conformance/specs`).
+Validate the YAML test specifications. Takes an optional directory argument (default `test/conformance/specs`). It exits non-zero only when no spec file is found; an invalid file is printed as `ERROR: ...` but does not change the exit status (v0.4.0).
 
 ```bash
 vcts validate test/conformance/specs/
