@@ -14,6 +14,10 @@ SPDX-License-Identifier: Apache-2.0
 Package v1beta1 contains API Schema definitions for the infra.virtrigaud.io v1beta1 API group
 
 ### Resource Types
+- [Host](#host)
+- [HostList](#hostlist)
+- [HostPool](#hostpool)
+- [HostPoolList](#hostpoollist)
 - [Provider](#provider)
 - [ProviderList](#providerlist)
 - [VMClass](#vmclass)
@@ -150,6 +154,26 @@ _Appears in:_
 | `tokenKey` _string_ | TokenKey is the key in the secret containing the token (default: token) | token | Optional: \{\} <br /> |
 
 
+#### BoundProviderRef
+
+
+
+BoundProviderRef identifies the Provider object a VirtualMachine is bound
+through (status.boundProvider). It is written only by the operator.
+
+
+
+_Appears in:_
+- [VMSnapshotStatus](#vmsnapshotstatus)
+- [VirtualMachineStatus](#virtualmachinestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `namespace` _string_ | Namespace of the Provider. |  | MaxLength: 63 <br /> |
+| `name` _string_ | Name of the Provider. |  | MaxLength: 253 <br /> |
+| `uid` _string_ | UID of the Provider object at bind time. Empty when it was not known<br />(never for a VM bound by this operator version). A Provider deleted and<br />re-created under the same name has a new UID and is not accepted in its<br />place. |  | MaxLength: 128 <br />Optional: \{\} <br /> |
+
+
 #### BridgeConfig
 
 
@@ -163,7 +187,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name is the bridge name |  | MaxLength: 15 <br /> |
+| `name` _string_ | Name is the bridge name |  | MaxLength: 15 <br />Pattern: `^[^<>&'"/\x00-\x1f]+$` <br /> |
 | `stp` _boolean_ | STP enables Spanning Tree Protocol | false | Optional: \{\} <br /> |
 | `delay` _integer_ | Delay is the STP forwarding delay |  | Maximum: 30 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 
@@ -662,9 +686,11 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `type` _[DiskType](#disktype)_ | Type specifies the default disk type | thin | Enum: [thin thick eagerzeroedthick ssd hdd nvme] <br />Optional: \{\} <br /> |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size specifies the default root disk size | 40Gi | Optional: \{\} <br /> |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size specifies the default root disk size. It must be non-negative and<br />below 1Pi: every value below 900Ti written in bytes, k/Ki, M/Mi, G/Gi or<br />T/Ti is accepted, and nothing at or above 1Pi is. That is more than ten<br />times the largest single virtual disk vSphere supports (62 TB), and keeps<br />the GiB value the provider contract carries far inside its int32 range.<br />The rules bound the number of integer digits per unit suffix with core<br />CEL only (no quantity library, which Kubernetes < 1.29 lacks), so they are<br />enforced on every supported Kubernetes version. | 40Gi | Optional: \{\} <br /> |
 | `iops` _integer_ | IOPS specifies the default IOPS limit |  | Maximum: 100000 <br />Minimum: 100 <br />Optional: \{\} <br /> |
 | `storageClass` _string_ | StorageClass specifies the default storage class |  | MaxLength: 253 <br />Optional: \{\} <br /> |
+
+
 
 
 #### DiskSpec
@@ -961,6 +987,29 @@ _Appears in:_
 | `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout specifies the download timeout | 30m | Optional: \{\} <br /> |
 
 
+#### Host
+
+
+
+Host is the Schema for the hosts API: one bare hypervisor host registered into
+a clustered Provider's HostPool (ADR-0007 P1 inventory foundation). It is
+additive and does not affect single-host (spec.topology=single) providers
+(ADR-0007 D9).
+
+
+
+_Appears in:_
+- [HostList](#hostlist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `infra.virtrigaud.io/v1beta1` | | |
+| `kind` _string_ | `Host` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[HostSpec](#hostspec)_ |  |  |  |
+| `status` _[HostStatus](#hoststatus)_ |  |  |  |
+
+
 #### HostAffinityRule
 
 
@@ -995,6 +1044,204 @@ _Appears in:_
 | `enabled` _boolean_ | Enabled indicates if host anti-affinity is enabled |  |  |
 | `maxVMsPerHost` _integer_ | MaxVMsPerHost limits the number of VMs per host |  | Maximum: 1000 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 | `scope` _string_ | Scope defines the scope of the anti-affinity rule |  | Enum: [strict preferred] <br />Optional: \{\} <br /> |
+
+
+#### HostHealth
+
+_Underlying type:_ _string_
+
+HostHealth is the live health of a Host, observed by the operator's inventory
+sync from the clustered provider (ListHosts/GetHostInfo, ADR-0007 D1/D3).
+
+_Validation:_
+- Enum: [Ready NotReady Unknown]
+
+_Appears in:_
+- [HostStatus](#hoststatus)
+
+| Field | Description |
+| --- | --- |
+| `Ready` | HostHealthReady indicates the host's hypervisor is reachable and runnable<br />(libvirtd reachable / agent reachable + CH runnable).<br /> |
+| `NotReady` | HostHealthNotReady indicates the host was probed but is not currently<br />usable for placement or migration.<br /> |
+| `Unknown` | HostHealthUnknown indicates the host's health has not yet been determined<br />(e.g. before the first successful heartbeat).<br /> |
+
+
+#### HostList
+
+
+
+HostList contains a list of Host.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `infra.virtrigaud.io/v1beta1` | | |
+| `kind` _string_ | `HostList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[Host](#host) array_ |  |  |  |
+
+
+#### HostPool
+
+
+
+HostPool is the Schema for the hostpools API: a named group of Hosts under one
+clustered Provider, carrying cluster scheduling and migration policy (ADR-0007
+P1 inventory foundation). It is additive and does not affect single-host
+(spec.topology=single) providers (ADR-0007 D9).
+
+
+
+_Appears in:_
+- [HostPoolList](#hostpoollist)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `infra.virtrigaud.io/v1beta1` | | |
+| `kind` _string_ | `HostPool` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[HostPoolSpec](#hostpoolspec)_ |  |  |  |
+| `status` _[HostPoolStatus](#hostpoolstatus)_ |  |  |  |
+
+
+#### HostPoolList
+
+
+
+HostPoolList contains a list of HostPool.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `infra.virtrigaud.io/v1beta1` | | |
+| `kind` _string_ | `HostPoolList` | | |
+| `metadata` _[ListMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#listmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `items` _[HostPool](#hostpool) array_ |  |  |  |
+
+
+#### HostPoolSpec
+
+
+
+HostPoolSpec is admin-authored cluster policy for a named group of Hosts under
+one clustered Provider (ADR-0007 D3): scheduling strategy, overcommit,
+storage/network references, and the default migration policy.
+
+Same-namespace model (security): a HostPool lives in its clustered Provider's
+namespace, alongside that Provider's Hosts, so ProviderRef is a
+LocalObjectReference (see HostSpec).
+
+
+
+_Appears in:_
+- [HostPool](#hostpool)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `providerRef` _[LocalObjectReference](#localobjectreference)_ | ProviderRef is the clustered Provider that owns this pool. It must be in<br />the HostPool's own namespace (no cross-namespace pool injection). |  |  |
+| `strategy` _string_ | Strategy is the default scheduling strategy for VMs placed in this pool.<br />Defaults to Spread. | Spread | Enum: [Spread BinPack] <br />Optional: \{\} <br /> |
+| `overcommit` _[OvercommitRatios](#overcommitratios)_ | Overcommit ratios applied when computing allocatable capacity. |  | Optional: \{\} <br /> |
+| `storagePools` _[StoragePoolRef](#storagepoolref) array_ | StoragePools are the named shared/local storage pools available in this<br />pool. Per-host visibility is asserted via Host.spec.labels (ADR-0007 D6).<br />Consumed, not deployed, by VirtRigaud. |  | Optional: \{\} <br /> |
+| `networks` _[PoolNetworkRef](#poolnetworkref) array_ | Networks are the named networks (bridge/VLAN/overlay) available in this<br />pool; per-host presence is asserted via Host.spec.labels (ADR-0007 D6). |  | Optional: \{\} <br /> |
+| `migration` _[PoolMigrationPolicy](#poolmigrationpolicy)_ | Migration is the default migration policy for VMs in this pool. |  | Optional: \{\} <br /> |
+
+
+#### HostPoolStatus
+
+
+
+HostPoolStatus aggregates member-host counts and readiness for the pool. The
+HostPool controller writes it whenever a member Host joins, leaves, or
+changes health, schedulability, providerRef or deletion state. Its Ready
+condition is True when SchedulableHosts > 0.
+
+A count of 0 (an empty pool, or no schedulable host) is written as 0 rather
+than omitted, so it shows in the status and in the kubectl get columns.
+
+ADR-0007 specifies HostPool.status only in prose ("aggregates host counts +
+readiness"). These fields are the smallest additive shape consistent with that
+description and with the other kinds' status conventions (ObservedGeneration +
+Conditions).
+
+
+
+_Appears in:_
+- [HostPool](#hostpool)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `totalHosts` _integer_ | TotalHosts is the number of Hosts whose spec.poolRef points at this pool.<br />Only Hosts in the pool's own namespace are members (the same-namespace<br />model); a Host being deleted is counted until it is gone. |  | Optional: \{\} <br /> |
+| `readyHosts` _integer_ | ReadyHosts is the number of member Hosts reporting Health=Ready. |  | Optional: \{\} <br /> |
+| `schedulableHosts` _integer_ | SchedulableHosts is the number of member Hosts that are both Health=Ready<br />and spec.schedulable=true, and that the scheduler can therefore place a<br />new VM on: a Host being deleted, or one whose spec.providerRef is not the<br />pool's Provider, is never a placement target and is not counted. |  | Optional: \{\} <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration reflects the generation of the HostPool spec observed by<br />the controller. |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations of the pool's state. |  | Optional: \{\} <br /> |
+
+
+#### HostSpec
+
+
+
+HostSpec is admin-authored desired inventory: one bare hypervisor host that a
+clustered Provider (spec.topology=cluster, ADR-0007) executes on. The admin
+declares which hosts exist; the provider reports what they can do right now
+(see HostStatus).
+
+Same-namespace model (security): a Host, its HostPool, its optional credential
+Secret, and the clustered Provider it names all live in ONE namespace — the
+Provider's. Every reference on this spec is therefore a LocalObjectReference
+(no namespace field). A Host in another namespace can neither enrol itself
+into a Provider's inventory nor point the operator at a credential Secret in
+a namespace its author does not control: the inventory render lists Hosts and
+resolves credential Secrets in the Provider's namespace only.
+
+
+
+_Appears in:_
+- [Host](#host)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `providerRef` _[LocalObjectReference](#localobjectreference)_ | ProviderRef is the clustered Provider that executes on this host. It must<br />be in the Host's own namespace: a Host can only be fronted by a Provider in<br />the same namespace (no cross-namespace inventory injection). |  |  |
+| `poolRef` _[LocalObjectReference](#localobjectreference)_ | PoolRef is the HostPool this host belongs to. Membership is declared by the<br />host itself (Host.spec.poolRef -> HostPool), per ADR-0007 D3. |  |  |
+| `endpoint` _string_ | Endpoint is the host connection URI. Only these shapes are accepted:<br />qemu+ssh://[user@]host[:port]/system, qemu+ssh://[user@]host[:port]/session<br />(libvirt), and grpc://host:port (a future cloud-hypervisor host agent). The<br />host is a DNS name, an IPv4 address, or a bracketed IPv6 address. No query<br />string, fragment, percent-encoding, or other path is allowed. |  | MaxLength: 512 <br />MinLength: 1 <br />Pattern: `^(qemu\+ssh://([A-Za-z0-9._-]+@)?([A-Za-z0-9]([A-Za-z0-9-]\{0,61\}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]\{0,61\}[A-Za-z0-9])?)*\|\[[0-9A-Fa-f:.]+\])(:[0-9]\{1,5\})?/(system\|session)\|grpc://([A-Za-z0-9]([A-Za-z0-9-]\{0,61\}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]\{0,61\}[A-Za-z0-9])?)*\|\[[0-9A-Fa-f:.]+\]):[0-9]\{1,5\})$` <br /> |
+| `credentialSecretRef` _[LocalObjectReference](#localobjectreference)_ | CredentialSecretRef optionally overrides the Provider's credentials for<br />this host (SSH key / known_hosts material). Defaults to the Provider's.<br />The Secret must be in the Host's (= the Provider's) namespace: the operator<br />never reads a credential Secret from another namespace on a Host's behalf,<br />so a Host author cannot exfiltrate a Secret they cannot already read. |  | Optional: \{\} <br /> |
+| `labels` _object (keys:string, values:string)_ | Labels are placement facts: storage-pool visibility, network/bridge<br />visibility, zone/rack. They are consumed as hard scheduling constraints<br />(ADR-0007 D6), e.g. \{"storage.virtrigaud.io/pool-nfs01":"true",<br />"net.virtrigaud.io/br-vlan100":"true","topology.virtrigaud.io/rack":"r7"\}. |  | Optional: \{\} <br /> |
+| `schedulable` _boolean_ | Schedulable, when false, cordons the host: no new placement, existing VMs<br />stay. Set true->false to drain-then-evacuate (ADR-0007 D8). Defaults true.<br />This is a defaulted bool and deliberately carries NO omitempty: with<br />omitempty an explicit false would be dropped on marshal, the apiserver<br />would re-apply the true default, and the field would silently flip<br />false->true (the defaulted-bool footgun, ADR-0006/PR#235). | true | Optional: \{\} <br /> |
+
+
+#### HostStatus
+
+
+
+HostStatus is operator-synced observed state from ListHosts/GetHostInfo. It
+carries capacity and health only, never connection secrets (ADR-0007
+Security).
+
+
+
+_Appears in:_
+- [Host](#host)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `health` _[HostHealth](#hosthealth)_ | Health is the live host health (libvirtd reachable / agent reachable + CH<br />runnable). |  | Enum: [Ready NotReady Unknown] <br />Optional: \{\} <br /> |
+| `allocatableCPU` _integer_ | AllocatableCPU is the schedulable vCPU capacity the provider reports live. |  | Optional: \{\} <br /> |
+| `allocatableMemoryMiB` _integer_ | AllocatableMemoryMiB is the schedulable memory in MiB the provider reports<br />live. |  | Optional: \{\} <br /> |
+| `allocatableStorageBytes` _integer_ | AllocatableStorageBytes is the free storage in bytes the provider reports<br />live for new VM disks: for libvirt, the space available to non-root users<br />in the default storage pool's directory (statvfs, measured on every<br />sync), and 0 when it cannot be measured. |  | Optional: \{\} <br /> |
+| `cpuModel` _string_ | CPUModel is the host CPU baseline model, driving the migration<br />CPU-compatibility pre-check (virsh cpu-baseline / cpu-compare). |  | Optional: \{\} <br /> |
+| `cpuFeatures` _string array_ | CPUFeatures are the host CPU features, driving the migration<br />CPU-compatibility pre-check. |  | Optional: \{\} <br /> |
+| `machineTypes` _string array_ | MachineTypes are the machine types the host supports, gating the<br />machine-type match required for live migration. |  | Optional: \{\} <br /> |
+| `emulatorVersion` _string_ | EmulatorVersion is the host emulator version, gating the emulator match<br />required for live migration. |  | Optional: \{\} <br /> |
+| `boundVMs` _integer_ | BoundVMs is the count of VMs the operator has bound to this host. It is<br />derived from VirtualMachine status, not from the provider — the operator<br />owns the binding (ADR-0007 D1). |  | Optional: \{\} <br /> |
+| `lastHeartbeatTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastHeartbeatTime is when the operator last successfully synced this host. |  | Optional: \{\} <br /> |
+| `observedGeneration` _integer_ | ObservedGeneration reflects the generation of the Host spec observed by the<br />controller. |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations of the host's state. |  | Optional: \{\} <br /> |
 
 
 #### IPAllocation
@@ -1272,6 +1519,12 @@ _Appears in:_
 ImportedDiskRef references a disk that was imported via migration or other means.
 This allows VMs to be created from pre-existing disk images rather than templates.
 
+DiskID may be empty only while MigrationRef is set: the target
+VirtualMachine a VMMigration into a clustered Provider creates BEFORE its
+import (ADR-0007 Addendum B, B1/B7.1). Such a VM is placed but never
+created ("waiting for import") until the migration records the landed disk
+in DiskID, Path and Format.
+
 
 
 _Appears in:_
@@ -1279,7 +1532,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `diskID` _string_ | DiskID is the provider-specific disk identifier.<br />For libvirt, this is typically the volume name. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `diskID` _string_ | DiskID is the provider-specific disk identifier.<br />For libvirt, this is typically the volume name. Empty only on a<br />migration's target VirtualMachine that waits for its import<br />(MigrationRef set, ADR-0007 Addendum B). |  | MaxLength: 253 <br />Required: \{\} <br /> |
 | `path` _string_ | Path is the optional disk path on the provider (e.g., /var/lib/libvirt/images/disk.qcow2).<br />If not specified, the provider will determine the path based on DiskID. |  | Optional: \{\} <br /> |
 | `format` _string_ | Format specifies the disk format (qcow2, vmdk, raw, etc.). | qcow2 | Enum: [qcow2 vmdk raw vdi vhdx] <br />Optional: \{\} <br /> |
 | `source` _string_ | Source indicates where the disk came from. |  | Enum: [migration clone import snapshot manual] <br />Optional: \{\} <br /> |
@@ -1317,7 +1570,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `path` _string_ | Path specifies the path to the image file on the host |  | Optional: \{\} <br /> |
+| `path` _string_ | Path is the absolute path of an existing base image file on the libvirt<br />host. The provider copies it into the VM's own disk; it is never attached<br />in place. For security the provider resolves the path on the host<br />(following symlinks) and accepts it only if the result is a regular file<br />directly inside one of the provider's allowed image directories<br />(VIRTRIGAUD_LIBVIRT_IMAGE_DIRS, default /var/lib/libvirt/images), is not<br />a disk of any existing VM, does not use a VirtRigaud-reserved name<br />(*-disk.qcow2, *-migrated.qcow2, dotfiles), and has no backing file or<br />external data file. |  | MaxLength: 4096 <br />Pattern: `^(/+([^/.\x00-\x1f\x7f-\x9f-][^/\x00-\x1f\x7f-\x9f]*\|\.([^/.\x00-\x1f\x7f-\x9f][^/\x00-\x1f\x7f-\x9f]*)?\|\.\.[^/\x00-\x1f\x7f-\x9f]+))+$` <br />Optional: \{\} <br /> |
 | `url` _string_ | URL provides a URL to download the image |  | Pattern: `^(https?\|ftp)://.*` <br />Optional: \{\} <br /> |
 | `format` _[ImageFormat](#imageformat)_ | Format specifies the image format | qcow2 | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br />Optional: \{\} <br /> |
 | `checksum` _string_ | Checksum provides expected checksum for verification |  | Optional: \{\} <br /> |
@@ -1338,7 +1591,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `networkName` _string_ | NetworkName specifies the Libvirt network name |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `networkName` _string_ | NetworkName specifies the Libvirt network name |  | MaxLength: 255 <br />Pattern: `^[^<>&'"/\x00-\x1f]+$` <br />Optional: \{\} <br /> |
 | `bridge` _[BridgeConfig](#bridgeconfig)_ | Bridge specifies the bridge configuration |  | Optional: \{\} <br /> |
 | `model` _string_ | Model specifies the network device model | virtio | Enum: [virtio e1000 e1000e rtl8139 pcnet ne2k_pci] <br />Optional: \{\} <br /> |
 | `driver` _[NetworkDriverConfig](#networkdriverconfig)_ | Driver specifies the network driver configuration |  | Optional: \{\} <br /> |
@@ -1397,6 +1650,8 @@ _Appears in:_
 - [CloneSource](#clonesource)
 - [CloudInit](#cloudinit)
 - [CloudInitMetaData](#cloudinitmetadata)
+- [HostPoolSpec](#hostpoolspec)
+- [HostSpec](#hostspec)
 - [IPPoolConfig](#ippoolconfig)
 - [Ignition](#ignition)
 - [ImportedDiskRef](#importeddiskref)
@@ -1454,10 +1709,31 @@ _Appears in:_
 | `sourceSize` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | SourceSize is the source disk size in bytes |  |  |
 | `targetDiskID` _string_ | TargetDiskID is the target disk identifier |  | Optional: \{\} <br /> |
 | `targetFormat` _string_ | TargetFormat is the target disk format |  | Optional: \{\} <br /> |
+| `targetPath` _string_ | TargetPath is the provider-native path of the imported disk as returned by<br />the target provider's ImportDisk (e.g. "[datastore1] disk-id/disk-id.vmdk"<br />for vSphere, "/var/lib/libvirt/images/disk-id.qcow2" for libvirt). It is<br />the authoritative location the created target VirtualMachine attaches; the<br />controller copies it into Spec.ImportedDisk.Path. Empty until the import<br />completes (ADR-0006 Slice 2). |  | Optional: \{\} <br /> |
 | `targetSize` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | TargetSize is the target disk size in bytes |  | Optional: \{\} <br /> |
 | `checksum` _string_ | Checksum is the SHA256 checksum of the disk |  | Optional: \{\} <br /> |
 | `sourceChecksum` _string_ | SourceChecksum is the SHA256 checksum of the source disk |  | Optional: \{\} <br /> |
 | `targetChecksum` _string_ | TargetChecksum is the SHA256 checksum of the target disk |  | Optional: \{\} <br /> |
+
+
+#### MigrationImportTarget
+
+
+
+MigrationImportTarget is the namespace and name of the VirtualMachine a
+migration's import was sent for, and the Provider it was sent to.
+
+
+
+_Appears in:_
+- [MigrationStorageInfo](#migrationstorageinfo)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `namespace` _string_ | Namespace is the target VirtualMachine's namespace. |  | MaxLength: 63 <br /> |
+| `name` _string_ | Name is the target VirtualMachine's name. |  | MaxLength: 253 <br /> |
+| `providerUID` _string_ | ProviderUID is the UID of the target Provider the import was sent to<br />(rc2 R7). The landed-disk delete is sent only to that Provider: after<br />spec.target.providerRef changed, or the Provider was replaced, the<br />landed disk is recorded as left behind instead. Empty for an import<br />recorded by an older manager. |  | MaxLength: 36 <br />Optional: \{\} <br /> |
+| `host` _string_ | Host is the Host of a clustered target Provider the import was routed<br />to: the target VirtualMachine's pending host, recorded with ProviderUID<br />before the import is sent (ADR-0007 Addendum B, B4). A re-sent import<br />and the landed-disk and nfs staged-disk deletes go to this host only.<br />Empty for a single-host or thin-client target. Written by the<br />controller only. |  | MaxLength: 253 <br />Optional: \{\} <br /> |
 
 
 #### MigrationMetadata
@@ -1584,9 +1860,9 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `vmRef` _[LocalObjectReference](#localobjectreference)_ | VMRef references the source virtual machine |  |  |
-| `providerRef` _[ObjectRef](#objectref)_ | ProviderRef explicitly specifies the source provider (optional, auto-detected from VM) |  | Optional: \{\} <br /> |
+| `providerRef` _[ObjectRef](#objectref)_ | ProviderRef optionally names the source provider. It must be the Provider<br />the source VM runs on (the VM's spec.providerRef, with an empty namespace<br />meaning the VM's namespace); a migration naming any other Provider fails,<br />because that Provider would export an unrelated VM that happens to share<br />the source VM's provider ID. Leave it empty to use the source VM's<br />Provider. |  | Optional: \{\} <br /> |
 | `snapshotRef` _[LocalObjectReference](#localobjectreference)_ | SnapshotRef references a specific snapshot to migrate from |  | Optional: \{\} <br /> |
-| `createSnapshot` _boolean_ | CreateSnapshot indicates whether to create a snapshot before migration | true | Optional: \{\} <br /> |
+| `createSnapshot` _boolean_ | CreateSnapshot indicates whether to create a snapshot before migration.<br />NOTE: no `omitempty` — a defaulted (+kubebuilder:default=true) non-pointer<br />bool with omitempty silently flips an explicit `false` back to `true` on any<br />controller round-trip (omitempty drops false, the apiserver re-defaults), so<br />`createSnapshot: false` would be impossible to set (same footgun as #235). | true | Optional: \{\} <br /> |
 | `powerOffBeforeMigration` _boolean_ | PowerOffBeforeMigration ensures VM is powered off before migration | false | Optional: \{\} <br /> |
 | `deleteAfterMigration` _boolean_ | DeleteAfterMigration deletes source VM after successful migration | false | Optional: \{\} <br /> |
 
@@ -1604,8 +1880,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _string_ | Type specifies the storage backend type | pvc | Enum: [pvc] <br /> |
+| `type` _string_ | Type specifies the storage backend type used to stage the transferred<br />disk between the source and target providers. "pvc" is the only backend<br />with transfer logic today; "nfs" and "s3" are surface-only scaffolding<br />(ADR-0006 Slice 0) and are rejected at the Validating phase until the<br />corresponding transfer slices land. | pvc | Enum: [pvc nfs s3] <br /> |
+| `transferMode` _string_ | TransferMode selects how disk bytes travel to/from the staging backend.<br />"relay" routes bytes host→provider-pod→backend (today's pod-side path);<br />"direct" routes bytes host→backend without a provider-pod hop; "auto"<br />lets the controller pick based on what both providers advertise. Only<br />"relay" is implemented today (ADR-0006 Slice 0). | auto | Enum: [auto relay direct] <br />Optional: \{\} <br /> |
 | `pvc` _[PVCStorageConfig](#pvcstorageconfig)_ | PVC specifies PVC-based storage configuration |  | Optional: \{\} <br /> |
+| `nfs` _[NFSStorageConfig](#nfsstorageconfig)_ | NFS specifies NFS-based staging configuration. Surface-only in ADR-0006<br />Slice 0 (no transfer logic yet). |  | Optional: \{\} <br /> |
+| `s3` _[S3StorageConfig](#s3storageconfig)_ | S3 specifies S3-compatible object-storage staging configuration.<br />Surface-only in ADR-0006 Slice 0 (no transfer logic yet). |  | Optional: \{\} <br /> |
 
 
 #### MigrationStorageInfo
@@ -1625,6 +1904,9 @@ _Appears in:_
 | `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the size of data in intermediate storage |  | Optional: \{\} <br /> |
 | `uploadedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | UploadedAt is when the data was uploaded |  | Optional: \{\} <br /> |
 | `cleanedUp` _boolean_ | CleanedUp indicates if intermediate storage was cleaned up |  | Optional: \{\} <br /> |
+| `stagingLayout` _string_ | StagingLayout is the naming layout of the migration's nfs / s3 staged<br />object, recorded by the controller when the export is sent (ADR-0011<br />D5). The import and the staged-disk delete use it, so a migration keeps<br />the name it was exported under. "v2" (new migrations): nfs file<br />"vmmigrations_<namespace>_<name>_<stage>.qcow2". "v1" or empty (exported<br />before v2): "vmmigrations-<namespace>-<name>-<stage>.qcow2". The s3 key is<br />the same in both. Written by the controller only. |  | Enum: [v1 v2] <br />Optional: \{\} <br /> |
+| `stagingDigest` _string_ | StagingDigest is a digest of where the last export staged the object —<br />the staging backend and its non-secret options, and the target Provider<br />(namespace, name, UID) that will delete it — recorded by the controller<br />when the export is sent (ADR-0011 D5). The staged-disk delete is sent only<br />while the migration's current spec still yields this digest: after<br />spec.storage or spec.target.providerRef changed, the object is recorded<br />as left behind instead of being looked for somewhere else. It carries no<br />location. Written by the controller only. |  | MaxLength: 80 <br />Optional: \{\} <br /> |
+| `importTarget` _[MigrationImportTarget](#migrationimporttarget)_ | ImportTarget is the VirtualMachine a migration's ImportDisk was sent<br />for, recorded by the controller just before the import is sent (ADR-0011<br />D1; every backend since rc2 R7). The staged-disk delete and the<br />landed-disk delete name only this VM, never the current spec.target<br />(which may have been edited since), so a target provider removes only<br />the copy it landed for that VM. Written by the controller only. |  | Optional: \{\} <br /> |
 
 
 #### MigrationTarget
@@ -1641,7 +1923,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the name for the target VM |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
-| `namespace` _string_ | Namespace is the namespace for the target VM (defaults to source namespace) |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `namespace` _string_ | Namespace is the namespace for the target VM (defaults to the<br />VMMigration's namespace, which is also the source VM's). A different<br />namespace is allowed only when that Namespace object carries the<br />annotation infra.virtrigaud.io/allowed-source-namespaces and its<br />comma-separated value lists the VMMigration's namespace (exact names, no<br />wildcards). Whoever can update the target Namespace can grant this<br />(normally a cluster administrator, since Namespaces are cluster-scoped).<br />A granted migration's disk is not attached in place: the target VM<br />treats it as a base image. Without the grant the migration is held<br />before any side effect (Ready=False, reason TargetNamespaceNotAllowed);<br />the grant is re-checked before the disk import, the target VM creation<br />and the cleanup, so revoking it stops a migration in flight. Granting the<br />annotation or changing this field resumes it. |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 | `providerRef` _[ObjectRef](#objectref)_ | ProviderRef references the target provider |  |  |
 | `classRef` _[LocalObjectReference](#localobjectreference)_ | ClassRef references the VM class for resource allocation |  | Optional: \{\} <br /> |
 | `imageRef` _[LocalObjectReference](#localobjectreference)_ | ImageRef references the VM image (usually not needed for migration) |  | Optional: \{\} <br /> |
@@ -1650,7 +1932,29 @@ _Appears in:_
 | `placementRef` _[LocalObjectReference](#localobjectreference)_ | PlacementRef references placement policy for the target VM |  | Optional: \{\} <br /> |
 | `powerOn` _boolean_ | PowerOn indicates whether to power on the target VM after migration | false | Optional: \{\} <br /> |
 | `labels` _object (keys:string, values:string)_ | Labels defines labels to apply to the target VM |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
-| `annotations` _object (keys:string, values:string)_ | Annotations defines annotations to apply to the target VM |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
+| `annotations` _object (keys:string, values:string)_ | Annotations defines annotations to apply to the target VM. Keys in the<br />operator's reserved virtrigaud.io domain (virtrigaud.io/... and<br />*.virtrigaud.io/...), such as virtrigaud.io/orphan-on-delete or the<br />provenance annotations, are not copied; the controller sets its own<br />provenance annotations. |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
+
+
+#### NFSStorageConfig
+
+
+
+NFSStorageConfig defines NFS-based staging configuration used to stage a
+migration's transferred disk. Surface-only in ADR-0006 Slice 0.
+
+
+
+_Appears in:_
+- [MigrationStorage](#migrationstorage)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `server` _string_ | Server is the NFS server hostname or IP exporting the share. The host is<br />gated by the controller's SSRF allowlist before it is dialed (ADR-0006 C3). |  | MaxLength: 253 <br /> |
+| `export` _string_ | Export is the exported NFS path on the server (e.g. "/exports/migrations"). |  | MaxLength: 4096 <br /> |
+| `path` _string_ | Path is an optional sub-path within the export for this migration's data. |  | MaxLength: 4096 <br />Optional: \{\} <br /> |
+| `readOnly` _boolean_ | ReadOnly mounts the export read-only. No `omitempty` (defaulted bool footgun, PR #235). | false | Optional: \{\} <br /> |
+| `uid` _integer_ | UID is the AUTH_SYS user ID presented to the NFS server (ADR-0006 C5). The<br />export's squash policy is the real authorization boundary; this lets an<br />operator align the client identity with the export. Unset = the data-plane<br />process identity (the provider pod or SSH user). |  | Maximum: 4.294967295e+09 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `gid` _integer_ | GID is the AUTH_SYS group ID presented to the NFS server (ADR-0006 C5).<br />Unset = the data-plane process identity. |  | Maximum: 4.294967295e+09 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 
 
 #### NetworkAttachmentPhase
@@ -1917,6 +2221,7 @@ _Appears in:_
 - [MigrationSource](#migrationsource)
 - [MigrationTarget](#migrationtarget)
 - [ProviderSpec](#providerspec)
+- [S3StorageConfig](#s3storageconfig)
 - [VMCloneTarget](#vmclonetarget)
 - [VMNetworkRef](#vmnetworkref)
 - [VirtualMachineSpec](#virtualmachinespec)
@@ -1925,6 +2230,49 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | Name of the referenced object |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
 | `namespace` _string_ | Namespace of the referenced object (defaults to current namespace) |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+
+
+#### ObservedPowerState
+
+_Underlying type:_ _string_
+
+ObservedPowerState is a VM's power state as its provider reports it
+(status.powerState). It is a superset of PowerState: a desired state is only
+ever On, Off or OffGraceful, but an observed one can also be Suspended or
+Unknown. OffGraceful stays valid so a status written by an older manager
+still validates.
+
+_Validation:_
+- Enum: [On Off OffGraceful Suspended Unknown]
+
+_Appears in:_
+- [VirtualMachineStatus](#virtualmachinestatus)
+
+| Field | Description |
+| --- | --- |
+| `On` | ObservedPowerStateOn is a running VM.<br /> |
+| `Off` | ObservedPowerStateOff is a powered-off VM.<br /> |
+| `Suspended` | ObservedPowerStateSuspended is a VM that is paused or suspended to RAM:<br />still active on its host (it resumes at the size it has), not powered<br />off.<br /> |
+| `Unknown` | ObservedPowerStateUnknown is a VM whose provider reports a state it<br />cannot classify.<br /> |
+
+
+#### OvercommitRatios
+
+
+
+OvercommitRatios are the CPU and memory overcommit ratios applied when
+computing a pool's allocatable capacity. Ratios are expressed as decimal
+strings (e.g. "4.0") to keep floating-point values out of the API surface.
+
+
+
+_Appears in:_
+- [HostPoolSpec](#hostpoolspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `cpu` _string_ | CPU is the vCPU overcommit ratio (e.g. "4.0" = up to 4 vCPU per physical<br />core). Empty means no CPU overcommit ("1.0"). |  | Optional: \{\} <br /> |
+| `memory` _string_ | Memory is the memory overcommit ratio (e.g. "1.0" = no memory overcommit).<br />Empty means no memory overcommit ("1.0"). |  | Optional: \{\} <br /> |
 
 
 #### PVCStorageConfig
@@ -2073,6 +2421,24 @@ _Appears in:_
 | `excludedDatastores` _string array_ | ExcludedDatastores specifies datastores to exclude from placement |  | MaxItems: 100 <br />Optional: \{\} <br /> |
 
 
+#### PlacementResources
+
+
+
+PlacementResources is a CPU/memory size recorded by the clustered scheduler
+(status.placement.pendingResources).
+
+
+
+_Appears in:_
+- [PlacementStatus](#placementstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `cpu` _integer_ | CPU is the number of vCPUs (at most the VMClass maximum, 128). |  | Maximum: 128 <br />Minimum: 0 <br /> |
+| `memoryMiB` _integer_ | MemoryMiB is the memory in MiB (at most the VMClass maximum, 100 TiB). |  | Maximum: 1.048576e+08 <br />Minimum: 0 <br /> |
+
+
 #### PlacementStatistics
 
 
@@ -2093,6 +2459,34 @@ _Appears in:_
 | `constraintViolations` _integer_ | ConstraintViolations is the number of constraint violations |  | Optional: \{\} <br /> |
 | `lastPlacementTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastPlacementTime is when the last VM was placed using this policy |  | Optional: \{\} <br /> |
 | `placementDistribution` _object (keys:string, values:integer)_ | PlacementDistribution shows how VMs are distributed across hosts/clusters |  | Optional: \{\} <br /> |
+
+
+#### PlacementStatus
+
+
+
+PlacementStatus is the operator scheduler's binding for a VM on a clustered
+provider (ADR-0007 P1, D3/D4): the durable record of which HostPool host runs
+the VM, plus the decision trace. Host is written only after the provider
+confirms placement (create success / migration done), so it never claims a
+host the provider has not accepted the VM on; PendingHost records, separately,
+the host an unconfirmed Create is aimed at (ADR-0007 Addendum A, A2).
+
+
+
+_Appears in:_
+- [VirtualMachineStatus](#virtualmachinestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `host` _string_ | Host is the Host (CR name) this VM is bound to run on — the durable<br />placement source of truth (D3). Written only after the provider confirms.<br />Every per-VM provider call for the VM is routed to this host. |  | Optional: \{\} <br /> |
+| `pendingHost` _string_ | PendingHost is the Host (CR name) an in-flight, not yet confirmed Create is<br />aimed at (ADR-0007 Addendum A, A2). The operator writes it, with Pool,<br />through a resourceVersion-checked status update BEFORE calling Create, so<br />a retry after a lost write or a Create that ran past its deadline lands on<br />the SAME host instead of being scheduled onto another one (which could<br />leave a second domain of the same name behind). When Create succeeds it is<br />moved into Host and cleared. It is used only to route the Create retry and<br />the finalizer's owner-checked cleanup; it is never a binding. An<br />administrator may clear it to release a VM whose pending host is gone for<br />good (the operator never re-schedules such a VM on its own). |  | Optional: \{\} <br /> |
+| `excludedHosts` _string array_ | ExcludedHosts are Hosts (CR names) the scheduler must not choose for this<br />VM (ADR-0007 Addendum A, A2 amendment). A Host is added when a Create on<br />it was refused with a name conflict (ALREADY_EXISTS: a same-named domain<br />this VM does not own is there), which proves this VM has no domain on it<br />and that this attempt created nothing there (an earlier failed attempt<br />may have left disk or cloud-init files, which no owner-checked cleanup<br />could remove either); its pendingHost is then cleared and the VM is<br />re-scheduled onto another Host. The list is bounded (the oldest entry is<br />dropped when it is full) and is cleared when the VM is bound. If every<br />candidate Host is<br />excluded the VM stays unplaced (Placed=False/AllHostsExcluded) until an<br />administrator resolves the name conflicts and clears this list. |  | MaxItems: 16 <br />items:MaxLength: 253 <br />Optional: \{\} <br /> |
+| `pendingResources` _[PlacementResources](#placementresources)_ | PendingResources is the size the scheduler admitted a pending Create at<br />(ADR-0007 Addendum A, scheduler-accuracy amendment). The operator writes<br />it with PendingHost, in the same checked status update, and clears it when<br />the VM is bound or the pending host is released. While a create is<br />pending, the VM counts at this size against its host's capacity, and a<br />retry of the Create whose size has grown beyond it (its VMClass was<br />changed in the meantime) is not sent. |  | Optional: \{\} <br /> |
+| `memoryCeilingMiB` _integer_ | MemoryCeilingMiB is the memory the VM's domain may reach on its host<br />beyond its current allocation, recorded when its create was scheduled<br />(ADR-0007 Addendum A, scheduler-accuracy amendment): the balloon maximum<br />provisioned for a VMClass with memory hot-add (4× the initial memory), or<br />0 when none was provisioned. A guest can deflate its balloon up to it, so<br />the clustered accounting counts the VM's memory at the larger of this and<br />its current size. It is kept when the VM is bound. Unset means unknown (a<br />VM scheduled by an older manager): the VMClass's hot-add setting is used<br />until the VM's first Describe reports its domain's actual memory maximum,<br />which is then recorded once. A recorded value is raised when the<br />provider reports more, and lowered when it reports less (after a<br />confirmed memory shrink). At most the VMClass memory maximum (100 TiB). |  | Maximum: 1.048576e+08 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `pool` _string_ | Pool is the HostPool the VM was scheduled into. |  | Optional: \{\} <br /> |
+| `lastScheduledTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastScheduledTime is when the scheduler last (re)bound this VM to Host. |  | Optional: \{\} <br /> |
+| `reason` _string_ | Reason records why this host was chosen — the scheduler's decision trace<br />(e.g. the winning score or the constraint that narrowed the candidates). |  | Optional: \{\} <br /> |
 
 
 #### PolicyConflict
@@ -2135,6 +2529,44 @@ _Appears in:_
 | `supportedFeatures` _string array_ | SupportedFeatures lists features supported by the provider |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 | `unsupportedFeatures` _string array_ | UnsupportedFeatures lists features not supported by the provider |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 | `lastValidated` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastValidated is when this validation was last performed |  | Optional: \{\} <br /> |
+
+
+#### PoolMigrationPolicy
+
+
+
+PoolMigrationPolicy is the default migration policy for VMs in a HostPool
+(ADR-0007 D5). Individual migrations may override these defaults.
+
+
+
+_Appears in:_
+- [HostPoolSpec](#hostpoolspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `defaultLive` _boolean_ | DefaultLive requests live (RAM-transfer) migration by default. When false,<br />migrations tolerate downtime and may fall back to stage_copy. Defaults<br />true.<br />This is a defaulted bool and deliberately carries NO omitempty (the<br />defaulted-bool footgun, ADR-0006/PR#235): with omitempty an explicit false<br />would be dropped on marshal and the apiserver would re-apply the true<br />default. | true | Optional: \{\} <br /> |
+| `defaultStorageMode` _string_ | DefaultStorageMode selects the intra-cluster data path (ADR-0007 D5).<br />Defaults to shared. | shared | Enum: [shared block_all block_inc stage_copy] <br />Optional: \{\} <br /> |
+| `requireTLS` _boolean_ | RequireTLS forces QEMU-native --tls on the migration data path (required in<br />regulated/banking deployments). Defaults false. | false | Optional: \{\} <br /> |
+| `bandwidthMbps` _integer_ | BandwidthMbps optionally caps migration bandwidth in Mbps. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `maxDowntimeMs` _integer_ | MaxDowntimeMs optionally caps the tolerated switchover downtime in<br />milliseconds. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+
+
+#### PoolNetworkRef
+
+
+
+PoolNetworkRef names a network (bridge / VLAN / overlay) available in a
+HostPool. Per-host presence is asserted via Host.spec.labels (ADR-0007 D6).
+
+
+
+_Appears in:_
+- [HostPoolSpec](#hostpoolspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the network name (e.g. the bridge name shared across the pool). A<br />matching Host.spec.labels entry asserts per-host presence. |  | MaxLength: 253 <br />MinLength: 1 <br /> |
 
 
 #### PortRange
@@ -2183,7 +2615,6 @@ _Validation:_
 
 _Appears in:_
 - [VirtualMachineSpec](#virtualmachinespec)
-- [VirtualMachineStatus](#virtualmachinestatus)
 
 | Field | Description |
 | --- | --- |
@@ -2259,6 +2690,8 @@ _Appears in:_
 | `Templates` | ProviderCapabilityTemplates indicates template management support<br /> |
 
 
+
+
 #### ProviderDefaults
 
 
@@ -2293,7 +2726,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled indicates whether health checking is enabled | true | Optional: \{\} <br /> |
+| `enabled` _boolean_ | Enabled indicates whether health checking is enabled.<br />Defaults to true. Deliberately NOT `omitempty` — a defaulted bool with<br />omitempty has its explicit `false` dropped and re-defaulted to true on<br />the next write (see ProviderTLSSpec.Enabled for the full rationale). | true | Optional: \{\} <br /> |
 | `interval` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Interval defines how often to check provider health | 30s | Optional: \{\} <br /> |
 | `timeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | Timeout defines the timeout for health checks | 10s | Optional: \{\} <br /> |
 | `failureThreshold` _integer_ | FailureThreshold is the number of consecutive failures before marking unhealthy | 3 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
@@ -2304,7 +2737,8 @@ _Appears in:_
 
 
 
-ProviderImageStatus contains provider-specific image status
+ProviderImageStatus is the prepare state of an image on one Provider (an
+entry of VMImageStatus.ProviderStatus).
 
 
 
@@ -2314,6 +2748,9 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `available` _boolean_ | Available indicates if the image is available on this provider |  |  |
+| `providerUID` _string_ | ProviderUID is the UID of the Provider object this entry was recorded<br />through. A VirtualMachine uses the entry only when it equals its<br />Provider's current UID. An entry with another UID (the Provider was<br />deleted and re-created under the same namespace and name) or with none<br />(an entry from an earlier release) is re-validated: the idempotent<br />prepare is issued again through the current Provider, which confirms (or<br />re-creates) the prepared image, and its UID is recorded. When<br />spec.prepare.onMissing forbids preparing (Fail, Wait), an available<br />entry recorded through a previous object of the same Provider is<br />accepted as is, with a warning, and the current UID recorded; an entry<br />with no UID is never used and VM creates wait (reason<br />ProviderUIDMissing) until this field is set. The prepare runs only<br />before a VM is created, never for a VM that exists. |  | Optional: \{\} <br /> |
+| `taskRef` _string_ | TaskRef is the provider task of an in-flight asynchronous prepare on<br />this Provider. It is polled only through this Provider, and only while<br />ProviderUID is the Provider's current UID; it is cleared when the<br />prepare completes. |  | Optional: \{\} <br /> |
+| `sourceDigest` _string_ | SourceDigest is the digest of the spec.source this entry was prepared<br />for ("sha256:" and 64 lowercase hex digits), as confirmed by the<br />provider's stamp on the prepared artifact (ADR-0009). A VirtualMachine is<br />created from the entry only while it equals the digest of the current<br />spec.source; an entry without it (recorded by an earlier release) or with<br />another digest is not used, and the image is prepared again for the<br />current source when spec.prepare.onMissing allows it. |  | MaxLength: 71 <br />Pattern: `^sha256:[0-9a-f]\{64\}$` <br />Optional: \{\} <br /> |
 | `id` _string_ | ID is the provider-specific image identifier |  | Optional: \{\} <br /> |
 | `path` _string_ | Path is the provider-specific image path |  | Optional: \{\} <br /> |
 | `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the image size on this provider |  | Optional: \{\} <br /> |
@@ -2434,7 +2871,7 @@ _Appears in:_
 | `image` _string_ | Image is the container image for remote providers (required)<br />Supports formats: image:tag, image@digest, or image:tag@digest |  | Pattern: `^[a-zA-Z0-9._/-]+(:[a-zA-Z0-9._-]+)?(@[a-zA-Z0-9]+:[a-fA-F0-9]\{64\})?$` <br /> |
 | `imagePullPolicy` _[PullPolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#pullpolicy-v1-core)_ | ImagePullPolicy defines the image pull policy | IfNotPresent | Enum: [Always Never IfNotPresent] <br />Optional: \{\} <br /> |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#localobjectreference-v1-core) array_ | ImagePullSecrets are references to secrets for pulling images |  | MaxItems: 10 <br />Optional: \{\} <br /> |
-| `replicas` _integer_ | Replicas is the number of provider instances (default 1) | 1 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `replicas` _integer_ | Replicas is the number of provider instances (default 1). A clustered<br />Provider (topology: cluster) and a vSphere Provider always run one<br />replica, replaced with the Recreate strategy; for them a larger value is<br />ignored. | 1 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 | `service` _[ProviderServiceSpec](#providerservicespec)_ | Service defines the service configuration |  | Optional: \{\} <br /> |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcerequirements-v1-core)_ | Resources defines resource requirements for provider pods |  | Optional: \{\} <br /> |
 | `nodeSelector` _object (keys:string, values:string)_ | NodeSelector is a selector which must be true for the pod to fit on a node |  | Optional: \{\} <br /> |
@@ -2521,7 +2958,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _[ProviderType](#providertype)_ | Type specifies the provider type |  | Enum: [vsphere libvirt firecracker qemu proxmox] <br /> |
+| `type` _[ProviderType](#providertype)_ | Type specifies the provider type.<br />Type is IMMUTABLE once set: the controllers decide type-specific safety<br />rules from it (for example, a libvirt linked clone into another namespace<br />is refused), and the VMs a Provider manages were created by, and are<br />addressed with, the provider implementation of this type. To change it,<br />create a new Provider. |  | Enum: [vsphere libvirt firecracker qemu proxmox] <br /> |
+| `topology` _string_ | Topology selects the provider's deployment topology (ADR-0007 D9). It is a<br />string enum, not a bool, so a future third topology mode is a purely<br />additive enum value (settled 2026-09-21):<br />  - "single" (default): one gRPC process bound to one host. This is today's<br />    behavior and stays byte-for-byte unchanged — no scheduler, no host<br />    inventory, no projected host Secret.<br />  - "cluster": the provider fronts N bare hosts registered as Host CRs under<br />    a HostPool. The operator owns inventory/placement/migration and renders<br />    the pool's Host CRs into a versioned-schema Secret mounted into the<br />    provider pod (ADR-0007 D1/D3); the provider reads that mounted file,<br />    never the Kubernetes API (the #297 no-API-access invariant).<br />Only meaningful for hypervisors with no native cluster manager (libvirt<br />first); a validating webhook (a later ADR-0007 P1 PR) rejects "cluster" on<br />type: vsphere\|proxmox (ADR-0007 D2). Defaulting "" to "single" keeps every<br />existing single-host Provider byte-for-byte unchanged.<br />Topology is IMMUTABLE once set (ADR-0007 Addendum A): VMs record where they<br />run (status.placement) under one topology, and every per-VM call is routed<br />and owner-checked by it, so flipping it would send a placed VM's calls down<br />the wrong path. To change it, create a new Provider. The apiserver compares<br />the defaulted values, so an object created before this field existed (read<br />back as "single") keeps accepting ordinary updates. | single | Enum: [single cluster] <br />Optional: \{\} <br /> |
 | `endpoint` _string_ | Endpoint is the provider endpoint URI<br />Supports multiple protocols: HTTP(S), TCP, gRPC for general providers<br />and LibVirt-specific schemes: qemu://, qemu+ssh://, qemu+tcp://, qemu+tls:// |  | Pattern: `^((https?://[a-zA-Z0-9.-]+(:[0-9]+)?(/.*)?\|(tcp\|grpc)://[a-zA-Z0-9.-]+:[0-9]+(/.*)?)\|qemu(\+ssh\|\+tcp\|\+tls)?://([a-zA-Z0-9@.-]+(:[0-9]+)?)?(/.*))$` <br /> |
 | `credentialSecretRef` _[ObjectRef](#objectref)_ | CredentialSecretRef references the Secret containing credentials |  |  |
 | `insecureSkipVerify` _boolean_ | InsecureSkipVerify disables TLS verification (deprecated, use runtime.service.tls.insecureSkipVerify) | false | Optional: \{\} <br /> |
@@ -2530,6 +2968,7 @@ _Appears in:_
 | `runtime` _[ProviderRuntimeSpec](#providerruntimespec)_ | Runtime defines how the provider is executed (required) |  |  |
 | `healthCheck` _[ProviderHealthCheck](#providerhealthcheck)_ | HealthCheck defines health checking configuration |  | Optional: \{\} <br /> |
 | `connectionPooling` _[ConnectionPooling](#connectionpooling)_ | ConnectionPooling defines connection pooling settings |  | Optional: \{\} <br /> |
+| `consumerNamespaceSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#labelselector-v1-meta)_ | ConsumerNamespaceSelector selects the namespaces, other than this<br />Provider's own, that may use it: VirtualMachines there may name it in<br />spec.providerRef, and VMClones, VMMigrations and VMSnapshots there may act<br />on VMs through it. A reference from the Provider's own namespace is<br />always allowed.<br />  - unset (the default): only its own namespace may use it.<br />  - \{\} (an empty selector): every namespace may use it.<br />  - matchLabels / matchExpressions: the namespaces whose labels match. The<br />    kubernetes.io/metadata.name label names a namespace explicitly.<br />A reference from a namespace it does not select is refused with<br />Ready=False, reason ConsumerNotAllowed, and no provider call is made for<br />it. The selector is matched against Namespace labels, so whoever can label<br />a namespace can widen what that namespace may use (see<br />docs/cross-namespace-references.md). The selector is operator-side policy:<br />it is never sent to a provider. |  | Optional: \{\} <br /> |
 
 
 #### ProviderStatus
@@ -2571,7 +3010,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled determines if TLS is enabled for provider communication | true |  |
+| `enabled` _boolean_ | Enabled determines if TLS is enabled for provider communication.<br />Defaults to true. Deliberately NOT `omitempty`: this field has a default<br />of true, so omitempty drops an explicit `false` when the object is<br />re-serialized (e.g. by a controller Update), letting the apiserver<br />re-apply the default and silently flip tls.enabled false→true — which<br />then trips the TLS posture gate (enabled=true + no secretRef → runtime<br />Failed). Always serializing it keeps an explicit plaintext opt-out durable. | true | Optional: \{\} <br /> |
 | `secretRef` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#localobjectreference-v1-core)_ | SecretRef references a secret containing tls.crt, tls.key, and ca.crt |  | Optional: \{\} <br /> |
 | `insecureSkipVerify` _boolean_ | InsecureSkipVerify disables TLS certificate verification | false | Optional: \{\} <br /> |
 
@@ -2703,6 +3142,11 @@ _Appears in:_
 | `supportedExportFormats` _string array_ | SupportedExportFormats lists supported export formats. |  | Optional: \{\} <br /> |
 | `supportedImportFormats` _string array_ | SupportedImportFormats lists supported import formats. |  | Optional: \{\} <br /> |
 | `supportsExportCompression` _boolean_ | SupportsExportCompression reports export compression support. |  | Optional: \{\} <br /> |
+| `supportedExportBackends` _string array_ | SupportedExportBackends lists the storage backends the provider can export<br />disks to (e.g. "pvc", "nfs", "s3"). Empty/absent means pvc-only, the<br />pre-ADR-0006 default (ADR-0006 Slice 0). |  | Optional: \{\} <br /> |
+| `supportedImportBackends` _string array_ | SupportedImportBackends lists the storage backends the provider can import<br />disks from (e.g. "pvc", "nfs", "s3"). Empty/absent means pvc-only<br />(ADR-0006 Slice 0). |  | Optional: \{\} <br /> |
+| `supportedTransferModes` _string array_ | SupportedTransferModes lists the disk-transfer modes the provider supports<br />(e.g. "relay", "direct"). Empty/absent means relay-only, the pod-side path<br />that predates ADR-0006 (ADR-0006 Slice 0). |  | Optional: \{\} <br /> |
+| `supportsImageArtifactIdentity` _boolean_ | SupportsImageArtifactIdentity reports that the provider's image prepare<br />names, stamps and verifies each prepared-image artifact by the VMImage's<br />UID and source digest, and never reuses an artifact by bare name<br />(ADR-0009). Import-style images are not prepared through a provider that<br />supports image import but does not report this: VM creates wait until<br />the provider is upgraded. |  | Optional: \{\} <br /> |
+| `supportsHonestReconfigure` _boolean_ | SupportsHonestReconfigure reports that the provider's Reconfigure never<br />reports success for a change it did not apply: each change is applied<br />to the running VM and its persistent definition, or to the definition<br />only and reported as restart-required, or the call fails. A VM on a<br />clustered Provider that does not report this is not resized<br />(Reconfiguring=False/ProviderLacksHonestReconfigure): its<br />committed-capacity accounting trusts the result. |  | Optional: \{\} <br /> |
 
 
 #### ResourceConstraints
@@ -2764,6 +3208,28 @@ _Appears in:_
 | `maxSurge` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#intorstring-intstr-util)_ | MaxSurge is the maximum number of VMs that can be created above desired replica count | 25% | Optional: \{\} <br /> |
 | `partition` _integer_ | Partition indicates the ordinal at which the VMSet should be partitioned for updates |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `podManagementPolicy` _[VMSetPodManagementPolicyType](#vmsetpodmanagementpolicytype)_ | PodManagementPolicy controls how VMs are created during initial scale up,<br />when replacing VMs on nodes, or when scaling down | OrderedReady | Enum: [OrderedReady Parallel] <br />Optional: \{\} <br /> |
+
+
+#### S3StorageConfig
+
+
+
+S3StorageConfig defines S3-compatible object-storage configuration used to
+stage a migration's transferred disk. Surface-only in ADR-0006 Slice 0.
+
+
+
+_Appears in:_
+- [MigrationStorage](#migrationstorage)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `bucket` _string_ | Bucket is the S3 bucket for the transfer object. |  |  |
+| `endpoint` _string_ | Endpoint overrides the S3 endpoint (empty = AWS default; set for MinIO/Ceph RGW).<br />The host is gated by the controller's SSRF allowlist before it is dialed<br />(ADR-0006 C3). MaxLength bounds an apiserver-side payload. |  | MaxLength: 263 <br />Optional: \{\} <br /> |
+| `region` _string_ | Region is the S3 region for the bucket (empty = provider/SDK default). |  | Optional: \{\} <br /> |
+| `prefix` _string_ | Prefix is the key prefix for this migration's objects. |  | Optional: \{\} <br /> |
+| `credentialsSecretRef` _[ObjectRef](#objectref)_ | CredentialsSecretRef references a Secret holding the S3 credentials<br />(access key / secret / optional session token). Credentials are NEVER inline. |  |  |
+| `usePathStyle` _boolean_ | UsePathStyle selects path-style addressing (needed by most non-AWS S3).<br />No `omitempty`: defaulted bool footgun (see PR #235 / ProviderTLSSpec.Enabled) —<br />omitempty drops an explicit false and the apiserver re-defaults it. | false | Optional: \{\} <br /> |
 
 
 #### SCSIControllerSpec
@@ -2986,6 +3452,53 @@ _Appears in:_
 | `gracePeriod` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#duration-v1-meta)_ | GracePeriod is the grace period before deletion | 24h | Optional: \{\} <br /> |
 
 
+#### SnapshotRevertPhase
+
+_Underlying type:_ _string_
+
+SnapshotRevertPhase is the phase of the revert spec.snapshot.revertToRef
+requests (status.snapshotRevert.phase).
+
+_Validation:_
+- Enum: [Pending Reverting Succeeded Failed]
+
+_Appears in:_
+- [SnapshotRevertStatus](#snapshotrevertstatus)
+
+| Field | Description |
+| --- | --- |
+| `Pending` | SnapshotRevertPhasePending: the revert is requested but not sent; the<br />SnapshotReverted condition's reason says what it waits for.<br /> |
+| `Reverting` | SnapshotRevertPhaseReverting: the revert was sent (recorded before the<br />call) and its outcome is not known yet.<br /> |
+| `Succeeded` | SnapshotRevertPhaseSucceeded: the provider confirmed the revert.<br /> |
+| `Failed` | SnapshotRevertPhaseFailed: the revert failed; it is not retried until<br />spec.snapshot.revertToRef is removed and set again.<br /> |
+
+
+#### SnapshotRevertStatus
+
+
+
+SnapshotRevertStatus records the revert spec.snapshot.revertToRef requests
+(status.snapshotRevert). It is written only by the operator, and cleared
+when spec.snapshot.revertToRef is removed.
+
+
+
+_Appears in:_
+- [VirtualMachineStatus](#virtualmachinestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `snapshotName` _string_ | SnapshotName is the VMSnapshot the revert is for (spec.snapshot.<br />revertToRef.name when it was recorded). |  | MaxLength: 253 <br /> |
+| `snapshotUID` _string_ | SnapshotUID is the UID of that VMSnapshot. A VMSnapshot of the same<br />name with another UID is a new request. Empty while the VMSnapshot was<br />not found. |  | MaxLength: 128 <br />Optional: \{\} <br /> |
+| `phase` _[SnapshotRevertPhase](#snapshotrevertphase)_ | Phase is Pending, Reverting, Succeeded or Failed. |  | Enum: [Pending Reverting Succeeded Failed] <br /> |
+| `taskRef` _string_ | TaskRef is the provider task of a revert the provider runs<br />asynchronously, polled until it completes. |  | MaxLength: 512 <br />Optional: \{\} <br /> |
+| `attempts` _integer_ | Attempts counts the SnapshotRevert calls sent for this request: more<br />than one only when an earlier call's outcome was not known (a lost<br />answer, a deadline) and the call was sent again on the powered-off VM. |  | Minimum: 0 <br />Optional: \{\} <br /> |
+| `requestedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | RequestedAt is when the operator first recorded this request. |  | Optional: \{\} <br /> |
+| `attemptTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | AttemptTime is when the last SnapshotRevert call was recorded, just<br />before it was sent. |  | Optional: \{\} <br /> |
+| `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CompletionTime is when the revert succeeded or failed. |  | Optional: \{\} <br /> |
+| `message` _string_ | Message says what the revert waits for, or how it ended. |  | MaxLength: 1024 <br />Optional: \{\} <br /> |
+
+
 #### SnapshotSchedule
 
 
@@ -3061,6 +3574,24 @@ _Appears in:_
 | `destination` _string_ | Destination is the destination network (CIDR notation) |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)/([0-9]\|[1-2][0-9]\|3[0-2])$` <br /> |
 | `gateway` _string_ | Gateway is the route gateway |  | Pattern: `^((25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)\.)\{3\}(25[0-5]\|2[0-4][0-9]\|[01]?[0-9][0-9]?)$` <br /> |
 | `metric` _integer_ | Metric is the route metric |  | Maximum: 65535 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+
+
+#### StoragePoolRef
+
+
+
+StoragePoolRef names a shared or local storage pool available in a HostPool.
+Per-host visibility is asserted via Host.spec.labels (ADR-0007 D6). VirtRigaud
+consumes pre-set-up storage; it does not deploy it.
+
+
+
+_Appears in:_
+- [HostPoolSpec](#hostpoolspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the storage pool name (e.g. a libvirt pool name or an NFS export<br />identifier). A matching Host.spec.labels entry asserts per-host visibility. |  | MaxLength: 253 <br />MinLength: 1 <br /> |
 
 
 #### StoragePrepareOptions
@@ -3241,6 +3772,8 @@ _Appears in:_
 | `status` _[VMClassStatus](#vmclassstatus)_ |  |  |  |
 
 
+
+
 #### VMClassList
 
 
@@ -3273,7 +3806,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `cpu` _integer_ | CPU specifies the number of virtual CPUs |  | Maximum: 128 <br />Minimum: 1 <br /> |
-| `memory` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Memory specifies memory allocation using Kubernetes resource quantities |  |  |
+| `memory` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Memory specifies memory allocation using Kubernetes resource quantities.<br />It must be non-negative and below 100Ti: every value below 90Ti written<br />in bytes, k/Ki, M/Mi, G/Gi or T/Ti is accepted, and nothing at or above<br />100Ti is. That is more than three times the largest VM any supported<br />hypervisor runs (24 TB on vSphere 8), and keeps the MiB value the provider<br />contract carries far inside its int32 range. The rules bound the number<br />of integer digits per unit suffix with core CEL only (no quantity<br />library, which Kubernetes < 1.29 lacks), so they are enforced on every<br />supported Kubernetes version. |  |  |
 | `firmware` _[FirmwareType](#firmwaretype)_ | Firmware specifies the firmware type | BIOS | Enum: [BIOS UEFI EFI] <br />Optional: \{\} <br /> |
 | `diskDefaults` _[DiskDefaults](#diskdefaults)_ | DiskDefaults provides default disk settings |  | Optional: \{\} <br /> |
 | `guestToolsPolicy` _[GuestToolsPolicy](#guesttoolspolicy)_ | GuestToolsPolicy specifies guest tools installation policy | install | Enum: [install skip upgrade uninstall] <br />Optional: \{\} <br /> |
@@ -3281,6 +3814,7 @@ _Appears in:_
 | `resourceLimits` _[VMResourceLimits](#vmresourcelimits)_ | ResourceLimits defines resource limits and reservations |  | Optional: \{\} <br /> |
 | `performanceProfile` _[PerformanceProfile](#performanceprofile)_ | PerformanceProfile defines performance-related settings |  | Optional: \{\} <br /> |
 | `securityProfile` _[SecurityProfile](#securityprofile)_ | SecurityProfile defines security-related settings |  | Optional: \{\} <br /> |
+| `consumerNamespaceSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#labelselector-v1-meta)_ | ConsumerNamespaceSelector selects the namespaces, other than this<br />VMClass's own, that may use it: VirtualMachines there may name it in<br />spec.classRef. A reference from the VMClass's own namespace is always<br />allowed.<br />  - unset (the default): only its own namespace may use it.<br />  - \{\} (an empty selector): every namespace may use it.<br />  - matchLabels / matchExpressions: the namespaces whose labels match. The<br />    kubernetes.io/metadata.name label names a namespace explicitly.<br />A reference from a namespace it does not select is refused with<br />Ready=False, reason ConsumerNotAllowed, and no provider call is made for<br />it. The selector is matched against Namespace labels, so whoever can label<br />a namespace can widen what that namespace may use (see<br />docs/cross-namespace-references.md). The selector is operator-side policy:<br />it is never sent to a provider. |  | Optional: \{\} <br /> |
 
 
 #### VMClassStatus
@@ -3376,6 +3910,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `targetRef` _[LocalObjectReference](#localobjectreference)_ | TargetRef references the created target VM |  | Optional: \{\} <br /> |
 | `targetVMID` _string_ | TargetVMID is the provider-specific identifier of the cloned VM as<br />returned by the provider Clone operation. The controller persists it so<br />the produced VirtualMachine CR's Status.ID can be seeded after an<br />asynchronous clone task completes. |  | Optional: \{\} <br /> |
+| `targetUID` _string_ | TargetUID is the uid of the target VirtualMachine this clone created<br />(a clone on a clustered Provider creates its target before cloning).<br />Only that object is ever used as the clone's target or removed when the<br />clone fails: a VirtualMachine re-created later under the target name —<br />even one carrying a copied virtrigaud.io/clone-uid annotation — is<br />never touched. |  | MaxLength: 128 <br />Optional: \{\} <br /> |
 | `phase` _[ClonePhase](#clonephase)_ | Phase represents the current phase of the clone operation |  | Enum: [Pending Preparing Cloning Customizing Powering-On Ready Failed] <br />Optional: \{\} <br /> |
 | `message` _string_ | Message provides additional details about the current state |  | Optional: \{\} <br /> |
 | `taskRef` _string_ | TaskRef tracks any ongoing async operations |  | Optional: \{\} <br /> |
@@ -3404,14 +3939,14 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the name of the target VM |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
-| `namespace` _string_ | Namespace is the namespace for the target VM (defaults to source namespace) |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `namespace` _string_ | Namespace is the namespace for the target VM (defaults to the VMClone's<br />namespace, which is also the source VM's). A different namespace is<br />allowed only when that Namespace object carries the annotation<br />infra.virtrigaud.io/allowed-source-namespaces and its comma-separated<br />value lists the VMClone's namespace (exact names, no wildcards).<br />Whoever can update the target Namespace can grant this (normally a<br />cluster administrator, since Namespaces are cluster-scoped). Without it<br />the clone is refused (Ready=False, reason TargetNamespaceNotAllowed) and<br />nothing is created in, read from or bound in the target namespace;<br />granting the annotation or changing this field resumes it. |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 | `providerRef` _[ObjectRef](#objectref)_ | ProviderRef references the target provider (defaults to source provider) |  | Optional: \{\} <br /> |
 | `classRef` _[LocalObjectReference](#localobjectreference)_ | ClassRef references the VM class for resource allocation |  | Optional: \{\} <br /> |
 | `placementRef` _[LocalObjectReference](#localobjectreference)_ | PlacementRef references placement policy for the target VM |  | Optional: \{\} <br /> |
 | `networks` _[VMNetworkRef](#vmnetworkref) array_ | Networks defines network configuration overrides |  | MaxItems: 10 <br />Optional: \{\} <br /> |
 | `disks` _[DiskSpec](#diskspec) array_ | Disks defines disk configuration overrides |  | MaxItems: 20 <br />Optional: \{\} <br /> |
 | `labels` _object (keys:string, values:string)_ | Labels defines labels to apply to the target VM |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
-| `annotations` _object (keys:string, values:string)_ | Annotations defines annotations to apply to the target VM |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
+| `annotations` _object (keys:string, values:string)_ | Annotations defines annotations to apply to the target VM. Keys in the<br />operator's reserved virtrigaud.io domain (virtrigaud.io/... and<br />*.virtrigaud.io/...), such as virtrigaud.io/orphan-on-delete or the<br />provenance annotations, are not copied; the controller sets its own<br />provenance annotations. |  | MaxProperties: 50 <br />Optional: \{\} <br /> |
 
 
 #### VMCustomization
@@ -3493,6 +4028,7 @@ _Appears in:_
 | `prepare` _[ImagePrepare](#imageprepare)_ | Prepare contains optional image preparation steps |  | Optional: \{\} <br /> |
 | `metadata` _[ImageMetadata](#imagemetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
 | `distribution` _[OSDistribution](#osdistribution)_ | Distribution contains OS distribution information |  | Optional: \{\} <br /> |
+| `consumerNamespaceSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#labelselector-v1-meta)_ | ConsumerNamespaceSelector selects the namespaces, other than this<br />VMImage's own, that may use it: VirtualMachines there may name it in<br />spec.imageRef (which prepares it on, and creates VMs from it through,<br />their Provider). A reference from the VMImage's own namespace is always<br />allowed.<br />  - unset (the default): only its own namespace may use it.<br />  - \{\} (an empty selector): every namespace may use it.<br />  - matchLabels / matchExpressions: the namespaces whose labels match. The<br />    kubernetes.io/metadata.name label names a namespace explicitly.<br />A reference from a namespace it does not select is refused with<br />Ready=False, reason ConsumerNotAllowed, and no provider call is made for<br />it. The selector is matched against Namespace labels, so whoever can label<br />a namespace can widen what that namespace may use (see<br />docs/cross-namespace-references.md). The selector is operator-side policy:<br />it is never sent to a provider. |  | Optional: \{\} <br /> |
 
 
 #### VMImageStatus
@@ -3511,16 +4047,16 @@ _Appears in:_
 | `ready` _boolean_ | Ready indicates if the image is ready for use |  | Optional: \{\} <br /> |
 | `phase` _[ImagePhase](#imagephase)_ | Phase represents the current phase of image preparation |  | Enum: [Pending Downloading Importing Converting Optimizing Ready Failed] <br />Optional: \{\} <br /> |
 | `message` _string_ | Message provides additional details about the current state |  | Optional: \{\} <br /> |
-| `availableOn` _string array_ | AvailableOn lists the providers where the image is available |  | Optional: \{\} <br /> |
+| `availableOn` _string array_ | AvailableOn lists the Providers the image is available on, each as<br />"<namespace>/<name>" (the ProviderStatus keys whose entry is available).<br />It is informational: creating a VM consults ProviderStatus only. |  | Optional: \{\} <br /> |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  | Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
 | `lastPrepareTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastPrepareTime records when the image was last prepared |  | Optional: \{\} <br /> |
-| `prepareTaskRef` _string_ | PrepareTaskRef tracks any ongoing image preparation operations |  | Optional: \{\} <br /> |
+| `prepareTaskRef` _string_ | PrepareTaskRef is deprecated and no longer written. An in-flight<br />prepare task is recorded per Provider, in<br />ProviderStatus["<namespace>/<name>"].taskRef, and polled only through<br />that Provider. A value left by an earlier release cannot be attributed<br />to a Provider: the controller clears it without polling it and issues<br />the prepare again (it is idempotent on every provider). |  | Optional: \{\} <br /> |
 | `importProgress` _[ImageImportProgress](#imageimportprogress)_ | ImportProgress shows the progress of image import operations |  | Optional: \{\} <br /> |
 | `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the size of the prepared image |  | Optional: \{\} <br /> |
 | `checksum` _string_ | Checksum is the actual checksum of the prepared image |  | Optional: \{\} <br /> |
 | `format` _[ImageFormat](#imageformat)_ | Format is the actual format of the prepared image |  | Enum: [qcow2 raw vmdk vhd vhdx iso ova ovf] <br />Optional: \{\} <br /> |
-| `providerStatus` _object (keys:string, values:[ProviderImageStatus](#providerimagestatus))_ | ProviderStatus contains provider-specific status information |  | Optional: \{\} <br /> |
+| `providerStatus` _object (keys:string, values:[ProviderImageStatus](#providerimagestatus))_ | ProviderStatus is the per-Provider prepare state, keyed by the<br />Provider's identity "<namespace>/<name>" (for example "team-a/vsphere"),<br />so two Providers with the same name in different namespaces never share<br />an entry. A VirtualMachine consults only the entry of the Provider it<br />uses, and trusts it only when the entry's providerUID is that Provider's<br />current UID.<br />Entries written by an earlier release are keyed by the bare Provider<br />name. On the first prepare reconcile such an entry is re-keyed to<br />"<this VMImage's namespace>/<name>" when that Provider exists, and is<br />dropped otherwise. A re-keyed entry has no providerUID, so it is<br />re-validated through its Provider before a VM is created from it. |  | Optional: \{\} <br /> |
 
 
 #### VMMigration
@@ -3599,16 +4135,20 @@ _Appears in:_
 | `targetVMRef` _[LocalObjectReference](#localobjectreference)_ | TargetVMRef references the created target VM |  | Optional: \{\} <br /> |
 | `snapshotRef` _string_ | SnapshotRef references the source snapshot used for migration |  | Optional: \{\} <br /> |
 | `snapshotID` _string_ | SnapshotID is the provider-specific snapshot identifier |  | Optional: \{\} <br /> |
+| `sourceVMUID` _string_ | SourceVMUID is the UID of the source VirtualMachine the migration<br />validated and exported, recorded at Validating. With<br />spec.source.deleteAfterMigration the controller deletes only that<br />object (a UID precondition): a source VirtualMachine re-created under the<br />same name is never deleted. Written by the controller only. |  | MaxLength: 128 <br />Optional: \{\} <br /> |
 | `exportID` _string_ | ExportID is the export operation identifier |  | Optional: \{\} <br /> |
 | `importID` _string_ | ImportID is the import operation identifier |  | Optional: \{\} <br /> |
 | `taskRef` _string_ | TaskRef is the current task reference for async operations |  | Optional: \{\} <br /> |
 | `targetVMID` _string_ | TargetVMID is the provider-specific target VM identifier |  | Optional: \{\} <br /> |
+| `targetVMUID` _string_ | TargetVMUID is the UID of the target VirtualMachine this migration<br />created, recorded from the response of its own Create (or, when that<br />record was lost, from the VirtualMachine that carries this migration's<br />claim, see targetVMClaim). Every later step — waiting for the target,<br />validating it, marking it migration-completed, deleting a partial one —<br />acts only on the VirtualMachine with this UID: another VirtualMachine<br />under the target's name (one created by someone else, before or after<br />the migration's own) fails the migration and is never touched. Written<br />by the controller only. |  | MaxLength: 128 <br />Optional: \{\} <br /> |
+| `targetVMClaim` _string_ | TargetVMClaim is the hex SHA-256 digest of the one-time random token<br />the controller writes, as the virtrigaud.io/migration-claim annotation,<br />on the target VirtualMachine it creates. It is recorded BEFORE that<br />Create, so a Create that succeeded but whose targetVMUID was never<br />recorded (a lost status write, a manager restart) is still recognized<br />as this migration's: a VirtualMachine whose claim token hashes to this<br />digest. Only the digest is stored here; the token cannot be derived<br />from it. Written by the controller only. |  | MaxLength: 64 <br />Optional: \{\} <br /> |
 | `startTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | StartTime is when the migration started |  | Optional: \{\} <br /> |
 | `completionTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | CompletionTime is when the migration completed |  | Optional: \{\} <br /> |
 | `progress` _[MigrationProgress](#migrationprogress)_ | Progress shows the migration operation progress |  | Optional: \{\} <br /> |
 | `diskInfo` _[MigrationDiskInfo](#migrationdiskinfo)_ | DiskInfo contains information about the migrated disk |  | Optional: \{\} <br /> |
 | `storageInfo` _[MigrationStorageInfo](#migrationstorageinfo)_ | StorageInfo contains information about intermediate storage |  | Optional: \{\} <br /> |
 | `storagePVCName` _string_ | StoragePVCName is the name of the PVC used for migration storage |  | Optional: \{\} <br /> |
+| `storagePVCUID` _string_ | StoragePVCUID is the UID of the migration PVC this migration created<br />(pvc backend, no spec.storage.pvc.name), taken from the API server's<br />answer to its create. Only the PVC with this UID is mounted into the<br />provider pods and deleted with the migration: a PVC of the same name<br />that anyone else created — even one carrying an ownerReference to this<br />migration — is refused. Empty for a PVC named in spec.storage.pvc.name.<br />Written by the controller only. |  | MaxLength: 128 <br />Optional: \{\} <br /> |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  | Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
 | `retryCount` _integer_ | RetryCount is the number of times the migration has been retried |  | Optional: \{\} <br /> |
@@ -4213,7 +4753,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `revertToRef` _[LocalObjectReference](#localobjectreference)_ | RevertToRef specifies a snapshot to revert to |  | Optional: \{\} <br /> |
+| `revertToRef` _[LocalObjectReference](#localobjectreference)_ | RevertToRef names a VMSnapshot, in the VM's namespace, to revert the VM<br />to. The snapshot must have been taken of this VM (its spec.vmRef and<br />status.vmUID) and be Ready. The revert is sent only while the VM is<br />powered off and spec.powerState is Off or OffGraceful: the controller<br />never powers a VM off for a revert, and does not power it on afterwards<br />(spec.powerState decides that). It is sent at most once per request:<br />status.snapshotRevert records the outcome, and while the field stays set<br />to the same VMSnapshot nothing is sent again (a GitOps re-apply is a<br />no-op). To revert to the same snapshot again, remove the field, then set<br />it again; naming another VMSnapshot (another UID) is a new request.<br />The SnapshotReverted condition reports the progress. |  | Optional: \{\} <br /> |
 
 
 #### VMSnapshotSpec
@@ -4257,6 +4797,8 @@ _Appears in:_
 | `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | Size is the size of the snapshot |  | Optional: \{\} <br /> |
 | `virtualSize` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#quantity-resource-api)_ | VirtualSize is the virtual size of the snapshot |  | Optional: \{\} <br /> |
 | `taskRef` _string_ | TaskRef tracks any ongoing async operations |  | Optional: \{\} <br /> |
+| `vmUID` _string_ | VMUID is the UID of the VirtualMachine the snapshot was taken of,<br />recorded when its create is issued. A VirtualMachine deleted and<br />re-created under the same name has another UID: the snapshot is never<br />deleted or retained through it (no provider call is made), because on a<br />provider whose snapshot ids are names the call could reach another<br />VM's snapshot. Empty for a snapshot taken by an older manager, which is<br />bound on first reconcile when its VM was created before the snapshot.<br />Written only by the operator. |  | MaxLength: 128 <br />Optional: \{\} <br /> |
+| `boundProvider` _[BoundProviderRef](#boundproviderref)_ | BoundProvider is the Provider the snapshot was taken through, recorded<br />with VMUID. The snapshot is deleted only through this same Provider<br />(namespace, name and, when recorded, UID). Written only by the<br />operator. |  | Optional: \{\} <br /> |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the current service state |  | Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
 | `progress` _[SnapshotProgress](#snapshotprogress)_ | Progress shows the snapshot creation progress |  | Optional: \{\} <br /> |
@@ -4341,7 +4883,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `templateName` _string_ | TemplateName references an existing vSphere template by name.<br />This can be a simple name (searched globally) or a full inventory path. |  | MaxLength: 255 <br />Optional: \{\} <br /> |
+| `templateName` _string_ | TemplateName references an existing vSphere template by name.<br />This can be a simple name, matched exactly against the VMs in the<br />Provider's default datacenter, or an inventory path within that<br />datacenter's VM folder (absolute, e.g. "/DC1/vm/templates/ubuntu", or<br />relative to the VM folder, e.g. "templates/ubuntu"; an absolute path in any<br />other datacenter is rejected). It must name an object marked as a vSphere<br />template: a regular VM (running or powered off) is never used as a clone<br />source, a name matching more than one template is rejected (use an<br />inventory path), and a name of the form "vm-" followed only by digits is<br />rejected. |  | MaxLength: 255 <br />Optional: \{\} <br /> |
 | `contentLibrary` _[ContentLibraryRef](#contentlibraryref)_ | ContentLibrary references a vSphere content library item |  | Optional: \{\} <br /> |
 | `ovaURL` _string_ | OVAURL provides a URL to an OVA file to import |  | Pattern: `^https?://.*\.(ova\|ovf)$` <br />Optional: \{\} <br /> |
 | `checksum` _string_ | Checksum provides expected checksum for verification |  | Optional: \{\} <br /> |
@@ -4452,7 +4994,28 @@ _Appears in:_
 
 
 
-VirtualMachine is the Schema for the virtualmachines API
+VirtualMachine is the Schema for the virtualmachines API.
+
+spec.providerRef is locked once the VM is bound (status.id or
+status.placement.pendingHost set in the STORED object). The rule below is a
+transition rule, evaluated only on update; it lives on the root so it can
+read the stored status. With the status subresource enabled, a main-resource
+update is validated against the stored status and a status update carries
+the stored spec, so neither path can unlock or change it. providerRef is
+compared as a whole: an unset namespace equals only an unset namespace (an
+explicit "" is rejected by the ObjectRef pattern), so unset -> explicit is a
+change. (A per-field comparison through conditional expressions exceeds the
+apiserver's static CEL cost budget; whole-object equality does not.)
+
+spec.classRef and spec.resources are locked while a clustered create is
+pending: status.placement.pendingHost set and status.id still empty in the
+STORED object (ADR-0007 Addendum A, scheduler-accuracy amendment). The
+scheduler admitted the VM at that size and every other schedule counts the
+pending VM at it, so its owner must not grow it before the create lands.
+Once the VM is created, its size is counted from status.currentResources and
+a resize-up is admitted against the host's capacity instead. A transition
+rule on the root, like the providerRef rule above; both are compared as
+whole objects.
 
 
 
@@ -4466,6 +5029,8 @@ _Appears in:_
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[VirtualMachineSpec](#virtualmachinespec)_ |  |  |  |
 | `status` _[VirtualMachineStatus](#virtualmachinestatus)_ |  |  |  |
+
+
 
 
 #### VirtualMachineLifecycle
@@ -4561,7 +5126,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `providerRef` _[ObjectRef](#objectref)_ | ProviderRef references the Provider that manages this VM |  |  |
+| `providerRef` _[ObjectRef](#objectref)_ | ProviderRef references the Provider that manages this VM. On a<br />VirtualMachine it is immutable once the VM is bound to a hypervisor VM<br />(status.id or status.placement.pendingHost is set): every per-VM call<br />addresses the VM by its provider id, which is meaningful only on the<br />Provider that assigned it. Before binding (e.g. to fix a typo after a<br />failed create) it may still be changed. An unset namespace means the VM's<br />own; changing it from unset to an explicit namespace also counts as a<br />change. |  |  |
 | `classRef` _[ObjectRef](#objectref)_ | ClassRef references the VMClass that defines resource allocation |  |  |
 | `imageRef` _[ObjectRef](#objectref)_ | ImageRef references the VMImage to use as base template.<br />Either ImageRef or ImportedDisk must be specified, but not both. |  | Optional: \{\} <br /> |
 | `importedDisk` _[ImportedDiskRef](#importeddiskref)_ | ImportedDisk references a pre-imported disk (e.g., from migration).<br />Either ImageRef or ImportedDisk must be specified, but not both. |  | Optional: \{\} <br /> |
@@ -4592,8 +5157,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `id` _string_ | ID is the provider-specific identifier for this VM |  | Optional: \{\} <br /> |
-| `powerState` _[PowerState](#powerstate)_ | PowerState reflects the current power state |  | Enum: [On Off OffGraceful] <br />Optional: \{\} <br /> |
-| `ips` _string array_ | IPs contains the IP addresses assigned to the VM |  | Optional: \{\} <br /> |
+| `powerState` _[ObservedPowerState](#observedpowerstate)_ | PowerState reflects the current power state as the provider reports it:<br />On, Off, or — from a provider that can tell (libvirt) — Suspended (the<br />VM is paused or suspended to RAM: still active, not powered off) or<br />Unknown. While a VM is Suspended or Unknown it is not reconfigured and<br />not powered on; a Suspended VM whose spec.powerState is Off is powered<br />off (hard), while OffGraceful is held until the VM is resumed (a<br />suspended guest cannot shut down gracefully). |  | Enum: [On Off OffGraceful Suspended Unknown] <br />Optional: \{\} <br /> |
+| `ips` _string array_ | IPs lists the addresses a user can reach the VM on, in the order the<br />provider reported them, without duplicates: private, IPv6 unique-local<br />and global addresses, IPv4 and IPv6. Loopback (127.0.0.0/8, ::1),<br />unspecified (0.0.0.0, ::), link-local (169.254.0.0/16, fe80::/10) and<br />multicast addresses are never listed. It is empty while the provider<br />cannot see an address, for example while the guest tools (VMware Tools,<br />the QEMU guest agent) are not running in the guest. |  | Optional: \{\} <br /> |
 | `consoleURL` _string_ | ConsoleURL provides access to the VM console |  | Optional: \{\} <br /> |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#condition-v1-meta) array_ | Conditions represent the latest available observations |  | Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | ObservedGeneration reflects the generation observed by the controller |  | Optional: \{\} <br /> |
@@ -4603,8 +5168,11 @@ _Appears in:_
 | `lastReconfigureTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#time-v1-meta)_ | LastReconfigureTime records when the last reconfiguration occurred |  | Optional: \{\} <br /> |
 | `currentResources` _[VirtualMachineResources](#virtualmachineresources)_ | CurrentResources shows the current resource allocation |  | Optional: \{\} <br /> |
 | `snapshots` _[VMSnapshotInfo](#vmsnapshotinfo) array_ | Snapshots lists available snapshots for this VM |  | Optional: \{\} <br /> |
-| `phase` _[VirtualMachinePhase](#virtualmachinephase)_ | Phase represents the current phase of the VM |  | Enum: [Pending Provisioning Running Stopped Reconfiguring Deleting Failed] <br />Optional: \{\} <br /> |
+| `phase` _[VirtualMachinePhase](#virtualmachinephase)_ | Phase is the VM's phase, derived by the controller from the rest of its<br />status on every status write (never set by hand): Pending (not created<br />yet: waiting for its Provider, class, image or placement), Provisioning<br />(a create is requested or in flight, or its outcome is not known),<br />Running or Stopped (by status.powerState; a suspended VM counts as<br />Running), Reconfiguring (a resize is in flight), Deleting (the VM is<br />being deleted, also while the delete is held) and Failed (a hold that<br />needs an operator, such as VMNotOwned, OwnerStampUnreadable,<br />ConsumerNotAllowed or CreateOutcomeUnknown; a create the provider<br />refused; or a power state the provider cannot classify). The Ready<br />condition's reason says why. |  | Enum: [Pending Provisioning Running Stopped Reconfiguring Deleting Failed] <br />Optional: \{\} <br /> |
 | `message` _string_ | Message provides additional details about the current state |  | Optional: \{\} <br /> |
+| `placement` _[PlacementStatus](#placementstatus)_ | Placement records where a clustered ("brain-in-operator") provider's<br />scheduler bound this VM (ADR-0007 P1, D3). It is the durable source of<br />truth for which host runs the VM. It is written by the operator ONLY after<br />the provider confirms the VM is on that host (create success / migration<br />done) — never speculatively (honesty-first). Empty for VMs on single-host<br />or thin-client providers, which have no operator-owned placement decision. |  | Optional: \{\} <br /> |
+| `boundProvider` _[BoundProviderRef](#boundproviderref)_ | BoundProvider records the Provider this VM was bound through: the one<br />whose hypervisor assigned status.id (or, for a clustered create in<br />flight, the one status.placement.pendingHost belongs to). The operator<br />writes it in the same status write that binds the VM (VM create, clone,<br />adoption) and, for a VM bound before this field existed, backfills it on<br />the first reconcile from spec.providerRef. While the VM is bound, the<br />operator makes no provider call for it — and its finalizer does not<br />delete through a Provider — unless spec.providerRef still resolves to<br />this Provider (same namespace and name and, when recorded, UID);<br />otherwise the VM reports Ready=False/ProviderRefMismatch. A<br />deliberately re-created Provider (new UID) is re-accepted by an<br />administrator clearing this field through the status subresource. |  | Optional: \{\} <br /> |
+| `snapshotRevert` _[SnapshotRevertStatus](#snapshotrevertstatus)_ | SnapshotRevert records the revert spec.snapshot.revertToRef requests:<br />the VMSnapshot it is for (name and UID), its phase and outcome. While<br />it records Succeeded or Failed for the VMSnapshot the field names,<br />nothing is sent again. Cleared when spec.snapshot.revertToRef is<br />removed. Written only by the operator. |  | Optional: \{\} <br /> |
 
 
 #### WeightedVMAffinityTerm
