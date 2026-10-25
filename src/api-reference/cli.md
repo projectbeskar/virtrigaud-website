@@ -67,12 +67,12 @@ CLI for looking at VirtRigaud resources. Source: [`cmd/vrtg/main.go`](https://gi
 
 | Command | Aliases | Status | Description |
 |---------|---------|--------|-------------|
-| `vrtg vm list` | `virtualmachine`, `vms` | Implemented | List VirtualMachines in all namespaces (name, provider, class, image, IPs, age). |
-| `vrtg vm describe <name>` | | Implemented | Show one VirtualMachine: provider, class, image, power state, IDs, IPs, console URL, conditions. |
-| `vrtg vm events <name>` | | Implemented | Show the Kubernetes events of a VirtualMachine in `--namespace`. |
-| `vrtg vm console-url <name>` | | Implemented | Print `status.consoleURL`. |
-| `vrtg provider list` | `providers` | Implemented | List Providers in all namespaces (name, type, endpoint, age). |
-| `vrtg provider status <name>` | | Implemented | Show a Provider's type, endpoint and conditions. |
+| `vrtg vm list` | `virtualmachine`, `vms` | Fails in v0.4.0 | List VirtualMachines in all namespaces (name, provider, class, image, IPs, age). |
+| `vrtg vm describe <name>` | | Fails in v0.4.0 | Show one VirtualMachine: provider, class, image, power state, IDs, IPs, console URL, conditions. |
+| `vrtg vm events <name>` | | Works | Show the Kubernetes events of a VirtualMachine in `--namespace`. |
+| `vrtg vm console-url <name>` | | Fails in v0.4.0 | Print `status.consoleURL`. |
+| `vrtg provider list` | `providers` | Fails in v0.4.0 | List Providers in all namespaces (name, type, endpoint, age). |
+| `vrtg provider status <name>` | | Fails in v0.4.0 | Show a Provider's type, endpoint and conditions. |
 | `vrtg provider logs <name>` | | Placeholder | Prints "not implemented - use kubectl logs". |
 | `vrtg snapshot create <vm> <snapshot>`, `list [vm]`, `revert <vm> <snapshot>` | `snap`, `snapshots` | Placeholder | Print "not implemented". |
 | `vrtg clone run <source> <target>`, `list` | `clones` | Placeholder | Print "not implemented". |
@@ -125,8 +125,8 @@ Run conformance tests against a Provider resource.
 vcts run --provider vsphere-prod --namespace virtrigaud-system --skip vm-power-cycle
 ```
 
-!!! warning "Test steps are not implemented"
-    The runner's step executor returns "not implemented" for every step type in v0.4.0, so a test that has steps fails, and the provider's capabilities are inferred from `spec.type` rather than read from the Provider. See the [CLI Tools Reference](../references/cli-tools.md#vcts).
+!!! warning "`vcts run` fails in v0.4.0"
+    It reads the Provider with a client that does not register the VirtRigaud API types and exits with `no kind is registered for the type v1beta1.Provider in scheme` before writing any result. Behind that, the step executor returns "not implemented" for every step type. See the [CLI Tools Reference](../references/cli-tools.md#vcts).
 
 #### list
 
@@ -180,12 +180,15 @@ vrtg-provider init myprovider --type libvirt --output ./providers/
 
 #### generate
 
+!!! warning "`generate`, `verify` and `publish` do not run in v0.4.0"
+    Each first checks that the directory is a provider project and always fails with `not in a provider project directory: go.mod does not contain virtrigaud dependency`, even in a project created by `init`. See the [CLI Tools Reference](../references/cli-tools.md#generate-code-generation).
+
 Regenerate protocol buffer bindings. Source: [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/generate.go). Run from within a provider project directory (`go.mod` and `Makefile` required).
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--proto-only` | `false` | Only regenerate proto bindings |
-| `--clean` | `false` | Clean generated files first |
+| `--clean` | `false` | Intended to clean first; it only prints `Would remove files matching: ...` and deletes nothing |
 
 #### verify
 
@@ -236,11 +239,11 @@ vrtg-provider publish \
 vrtg-provider version
 ```
 
-Prints the binary version and git SHA.
+Prints the version and git SHA compiled into the binary (`dev` / `unknown` for a locally built binary).
 
 ## virtrigaud-loadgen
 
-Load generator for VirtualMachine create, delete and list operations. Source: [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/virtrigaud-loadgen/main.go).
+Load generator for VirtualMachine create, delete and list operations. In v0.4.0 those three operations fail against a real cluster (the client does not register the VirtRigaud API types); see the [CLI Tools Reference](../references/cli-tools.md#virtrigaud-loadgen). Source: [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/virtrigaud-loadgen/main.go).
 
 ### Global Flags
 
@@ -283,8 +286,8 @@ There are no `scenarios` or `analyze` subcommands and no `--workers`, `--duratio
 
 ```csv
 Operation,Provider,VMName,StartTime,Duration,Success,Error,Phase
-create,test-provider,loadgen-vm-0-1,2026-01-15T10:00:01Z,25ms,true,,Creating
-describe,test-provider,,2026-01-15T10:00:02Z,12ms,true,,Describing
+power,test-provider,,2026-01-15T10:00:01Z,0s,true,,PowerToggle
+describe,test-provider,,2026-01-15T10:00:02Z,24µs,false,"failed to list VMs: no kind is registered for the type v1beta1.VirtualMachineList in scheme",
 ```
 
 ## alpha-to-beta-dryrun
@@ -325,7 +328,7 @@ The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typ
 
 1. **Select the cluster explicitly** with `KUBECONFIG` or `kubectl config use-context`; `--kubeconfig` is not read.
 2. **Pass `--namespace`** for `describe`, `events`, `console-url` and `provider status`; the `list` commands always span all namespaces.
-3. **Use `kubectl`** for anything `vrtg` marks as a placeholder, and for scripting (there is no JSON or YAML output).
+3. **Use `kubectl`** for everything except `vrtg vm events`: the other read commands fail in v0.4.0 and the rest are placeholders (there is no JSON or YAML output).
 
 ### Testing with vcts
 
@@ -342,7 +345,7 @@ The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typ
 
 1. **Use a dedicated namespace**, and `--dry-run` first.
 2. **Create the Provider, VMClass and VMImage** named in the defaults (`test-provider`, `test-class`, `test-image`) before a real run.
-3. **Remember what is simulated**: only create, delete and describe exercise the cluster.
+3. **Remember what is simulated**: power, reconfigure, snapshot and clone are simulated, and create, delete and describe fail against a cluster in v0.4.0.
 
 ## Support
 

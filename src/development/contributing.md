@@ -202,8 +202,8 @@ release sections.
 
 ## CI on pull requests
 
-Every PR triggers the CI workflow (`.github/workflows/ci.yml`), which runs the
-following jobs:
+Every PR triggers the CI workflow (`.github/workflows/ci.yml`). Most of the jobs
+below run on every PR; two are gated and in practice run on pushes only:
 
 | Job                       | What it checks                                                                 |
 |---------------------------|--------------------------------------------------------------------------------|
@@ -219,9 +219,9 @@ following jobs:
 | **Validate Helm Charts**  | `helm lint`, `helm template`, and the render checks (webhooks, NetworkPolicy, `/tmp` size limits, disk-size ceiling, admission policy). |
 | **Conformance Tests**     | `vcts validate test/conformance/specs/` (spec validation only).                |
 | **Integration Tests**     | `make test-integration` (cross-package observability tests).                   |
-| **Catalog Validation**    | Validates `providers/catalog.yaml` against a schema; runs when that file changes. |
-| **API Conversion Tests**  | Runs when `api/` or `config/crd/` change: single-version CRDs, CRD kustomization in sync, no internal lab names in tracked files, CRD generation drift. |
-| **CI Summary**            | Aggregates the above.                                                          |
+| **Catalog Validation**    | Validates `providers/catalog.yaml` against a schema; gated on that file changing (the gate reads `head_commit`, which exists only on push events, so it is skipped on pull requests). |
+| **API Conversion Tests**  | Gated on `api/` or `config/crd/` changing (push events only, as above): single-version CRDs, CRD kustomization in sync, no internal lab names in tracked files, CRD generation drift. |
+| **CI Summary**            | Aggregates most of the above (its `needs:` list is in `ci.yml`).              |
 
 CI uses `go-version-file: go.mod` for the Go version (1.26.10 in v0.4.0).
 

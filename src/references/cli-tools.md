@@ -11,16 +11,21 @@ VirtRigaud provides a set of command-line tools for inspecting VirtRigaud resour
 
 | Tool | Purpose | Target Users |
 |------|---------|--------------|
-| [`vrtg`](#vrtg) | Read-only CLI for VMs and Providers (other commands are scaffolded) | End users, DevOps teams, System administrators |
+| [`vrtg`](#vrtg) | CLI for VMs and Providers (only `vm events` works in v0.4.0; other commands are scaffolded or fail) | End users, DevOps teams, System administrators |
 | [`vcts`](#vcts) | Conformance test runner and spec validator | Provider developers, QA teams, CI/CD pipelines |
 | [`vrtg-provider`](#vrtg-provider) | Provider development toolkit | Provider developers, Contributors |
-| [`virtrigaud-loadgen`](#virtrigaud-loadgen) | Load generator (create / delete / describe against a cluster) | Performance engineers, SREs |
+| [`virtrigaud-loadgen`](#virtrigaud-loadgen) | Load generator (its cluster operations fail in v0.4.0) | Performance engineers, SREs |
 | [`alpha-to-beta-dryrun`](#alpha-to-beta-dryrun) | v1alpha1 migration helper (tombstone) | Operators upgrading from pre-v0.3.0 |
 
-!!! note "Implementation status"
-    In v0.4.0 only some `vrtg` subcommands do real work: `vm list`, `vm describe`, `vm events`, `vm console-url`, `provider list` and `provider status`. The remaining commands (`provider logs`, `snapshot`, `clone`, `conformance`, `diag`, `init`) are defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg/main.go) but print a "not implemented" message and exit 0. Use `kubectl` for those operations. `--output json|yaml` is also not implemented (see [`vrtg`](#vrtg)).
+!!! warning "Implementation status in v0.4.0"
+    The CLI tools are early scaffolding. Verified against the v0.4.0 binaries:
 
-    The same is true of parts of the other tools; each section below says what is and is not wired up.
+    - `vrtg`: only `vm events` works. `vm list`, `vm describe`, `vm console-url`, `provider list` and `provider status` fail with `no kind is registered for the type v1beta1... in scheme`, because the client does not register the VirtRigaud API types. The other `vrtg` commands print "not implemented" and exit 0. Use `kubectl`.
+    - `vcts`: `validate` and `list` work; `run` fails for the same reason before it writes any result.
+    - `virtrigaud-loadgen`: create, delete and describe fail for the same reason; power, reconfigure, snapshot and clone are simulated.
+    - `vrtg-provider`: `init` and `version` work (the scaffold needs fixing); `generate`, `verify` and `publish` refuse to run in any directory.
+
+    Each section below gives the detail. Use `kubectl` for everything these tools cannot do.
 
 ## Installation
 
@@ -101,7 +106,7 @@ The CLI for looking at VirtRigaud resources from a terminal. Defined in [`cmd/vr
     - **Cluster access.** `--kubeconfig` is parsed but never read. `vrtg` loads its cluster configuration the way controller-runtime does: the `KUBECONFIG` environment variable, then in-cluster configuration, then `~/.kube/config`. Select a cluster with `KUBECONFIG` or `kubectl config use-context`.
     - **Output.** `--output json` and `--output yaml` are not implemented: `vm list`, `vm describe` and `provider list` print `JSON/YAML output not implemented` and exit 0. Only the table output works.
     - **Namespaces.** `vm list` and `provider list` list objects in **all** namespaces and ignore `--namespace`. `vm describe`, `vm events`, `vm console-url` and `provider status` use `--namespace`.
-    - **VMs without `spec.imageRef`.** `vm list` and `vm describe` read `spec.imageRef.name` without a nil check. A VirtualMachine created from `spec.importedDisk` (for example a migration target) has no `imageRef` and makes `vrtg` panic; use `kubectl get virtualmachine` for those.
+    - **Reads fail.** `vm list`, `vm describe`, `vm console-url`, `provider list` and `provider status` build a client without registering the `infra.virtrigaud.io/v1beta1` types and fail with `Error: failed to list VMs: no kind is registered for the type v1beta1.VirtualMachineList in scheme ...`. Only `vm events` (which uses a plain clientset) works. The behaviour described for the other commands below is what the code is written to do, not what v0.4.0 achieves; use `kubectl get virtualmachines` and `kubectl get providers`.
 
 ### Commands
 
@@ -194,8 +199,8 @@ These commands exist so the command tree is stable, but they print a "not implem
 
 VirtRigaud Conformance Test Suite. Defined in [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vcts/main.go) with the runner in [`internal/conformance/`](https://github.com/projectbeskar/virtrigaud/tree/main/internal/conformance).
 
-!!! warning "Spec validation works; test execution is a work in progress"
-    `vcts validate` checks the YAML test specifications and is what the project's CI runs. `vcts run` loads the specs, but the step executor that would create, update, delete, wait for and validate resources returns "not implemented" for every step type in v0.4.0, so any test that has steps fails. The provider's capabilities are also not read from the Provider status: the runner infers them from `spec.type` (`vsphere`: `vm-create`, `vm-delete`, `vm-power`, `vm-reconfigure`, `vm-snapshot`; `libvirt`: `vm-create`, `vm-delete`, `vm-power`; any other type: none, so every test is filtered out). Treat `vcts run` as scaffolding until the executor lands.
+!!! warning "Spec validation works; test execution does not"
+    `vcts validate` and `vcts list` work. `vcts run` fails at its first step in v0.4.0: it reads the Provider with a client that does not register the VirtRigaud API types (`failed to get provider capabilities: failed to get provider <name>: no kind is registered for the type v1beta1.Provider in scheme`), so it writes no result files. Behind that, the step executor that would create, update, delete, wait for and validate resources returns "not implemented" for every step type, and the runner infers a provider's capabilities from `spec.type` rather than from its status. Treat `vcts run` as scaffolding.
 
 ### Usage
 
@@ -241,7 +246,7 @@ vcts run --provider libvirt-provider \
   --output-dir /tmp/test-results
 ```
 
-A run writes `results.json`, `junit.xml` and `report.md` into the output directory, prints a summary (total, passed, failed, skipped, duration) and exits non-zero when any test failed.
+As written in the code, a run would write `results.json`, `junit.xml` and `report.md` into the output directory and print a summary; in v0.4.0 it exits non-zero with the error above before that.
 
 #### list - List Available Tests
 
@@ -270,7 +275,7 @@ It takes an optional directory argument (default `test/conformance/specs`) and p
 
 ### Output Formats
 
-Test results are written in three formats:
+When a run completes, results are written in three formats:
 
 - **JSON** (`results.json`): machine-readable.
 - **JUnit XML** (`junit.xml`): for CI/CD integration.
@@ -332,6 +337,9 @@ The scaffold is created under `<output>/providers/<provider-name>/`. The provide
 
 #### generate - Code Generation
 
+!!! warning "`generate`, `verify` and `publish` do not run in v0.4.0"
+    All three first check that the current directory is a provider project and always fail with `Error: not in a provider project directory: go.mod does not contain virtrigaud dependency`, even in a project created by `vrtg-provider init` (the check compares the whole `go.mod` text with the module path, so it never matches). The descriptions below are what the code is written to do.
+
 Regenerate protocol buffer bindings and other generated code. Defined in [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/generate.go).
 
 Must be run from within a provider project directory (the directory must contain `go.mod` and a `Makefile`, and `go.mod` must mention `github.com/projectbeskar/virtrigaud`). It runs the project's `make proto` target, falling back to `buf generate`; unless `--proto-only` is given it then runs `go generate ./...` and the project's `generate` and `deepcopy` make targets when they exist.
@@ -342,7 +350,7 @@ vrtg-provider generate [flags]
 
 **Flags:**
 - `--proto-only`: Only regenerate protocol buffer bindings
-- `--clean`: Clean generated files before regenerating
+- `--clean`: Intended to clean generated files first; it only prints `Would remove files matching: ...` and deletes nothing
 
 **Examples:**
 
@@ -353,7 +361,7 @@ vrtg-provider generate
 # Regenerate proto bindings only
 vrtg-provider generate --proto-only
 
-# Clean and regenerate
+# Regenerate (--clean deletes nothing)
 vrtg-provider generate --clean
 ```
 
@@ -439,7 +447,7 @@ vrtg-provider publish \
 vrtg-provider version
 ```
 
-Prints the `vrtg-provider` binary version and git SHA.
+Prints the version and git SHA that are compiled into the binary (`dev` and `unknown` in a locally built binary). `--version` prints the same.
 
 ### Provider Template Structure
 
@@ -513,7 +521,10 @@ The run always uses these built-in parameters:
 
 Each worker picks one operation at random (by those weights) about once per second. The `Provider`, `VMClass` and `VMImage` named above must exist in the namespace, or the creates are recorded as failures.
 
-Only three operations touch the cluster:
+!!! danger "The cluster operations fail in v0.4.0"
+    `create`, `delete` and `describe` use a client that does not register the VirtRigaud API types, so against a real cluster each one is recorded as a failure within microseconds (`--dry-run` makes `create` succeed without calling the API, but `delete` and `describe` still fail). The simulated operations succeed instantly, so the summary does not measure the operator.
+
+The operations that were meant to touch the cluster are:
 
 - **create** creates a `VirtualMachine` from the template.
 - **delete** deletes a random VM in the namespace (`No VMs found to delete` is recorded as a failure when there are none).
@@ -527,7 +538,7 @@ The **power**, **reconfigure**, **snapshot** and **clone** operations are placeh
 # Dry run: records what would happen without creating or deleting VMs
 virtrigaud-loadgen run --dry-run --namespace loadtest
 
-# Real run in a dedicated namespace, results in ./perf-results
+# Real run (records failures for the API operations in v0.4.0), results in ./perf-results
 virtrigaud-loadgen run --namespace loadtest --output-dir ./perf-results
 ```
 

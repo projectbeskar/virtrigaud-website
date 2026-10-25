@@ -45,7 +45,6 @@ spec:
   endpoint: https://vcenter.example.com/sdk
   credentialSecretRef:
     name: vsphere-credentials
-  insecureSkipVerify: false
   runtime:
     mode: Remote
     image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
@@ -135,7 +134,7 @@ The libvirt provider manages KVM/QEMU virtual machines through libvirt over SSH 
 - Snapshot operations, including memory snapshots of a running VM
 - Full clones
 - Image preparation from a libvirt-side path or URL, with prepared images named and stamped by the `VMImage` identity (since v0.4.0)
-- Disk export and import (`qcow2`, `raw`, `vmdk`) for cross-hypervisor migration over PVC, S3 and NFS
+- Disk export (`qcow2`, `raw`) and import (`qcow2`, `raw`, `vmdk`) for cross-hypervisor migration over PVC, S3 and NFS (a clustered Provider exports `qcow2` only, over S3 and NFS)
 - Cloud-init seeds built private (`0600`) in a dedicated directory on the host (since v0.4.0)
 
 !!! warning "Linked clones are disabled"
@@ -258,7 +257,10 @@ Run the VirtRigaud Conformance Test Suite (VCTS) against a deployed `Provider` r
 
 ```bash
 # Install the VCTS tool
-go install github.com/projectbeskar/virtrigaud/cmd/vcts@latest
+# `go install ...@latest` is refused (replace directives in go.mod): build from a checkout or
+# download the vcts-<os>-<arch> binary from the GitHub release
+git clone --branch v0.4.0 https://github.com/projectbeskar/virtrigaud.git
+cd virtrigaud && go build -o vcts ./cmd/vcts
 
 # Run conformance tests against a Provider resource in the cluster
 vcts run --provider my-provider --namespace virtrigaud-system
@@ -278,9 +280,11 @@ vrtg-provider publish \
 ```
 
 The `publish` command will:
-1. Run VCTS conformance tests (skip with `--skip-verify`)
+1. Record verification results (in v0.4.0 these are fixed placeholders; `publish` does not run VCTS)
 2. Generate a catalog entry in `providers/catalog.yaml`
 3. Print next steps for opening a pull request
+
+In v0.4.0 `vrtg-provider publish` refuses to run (`not in a provider project directory`), see the [CLI Tools Reference](cli-tools.md#vrtg-provider). Write the catalog entry by hand until that is fixed.
 
 See [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/publish.go) for the full flag list.
 
@@ -291,7 +295,7 @@ See [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud
 
 To be included in the catalog, providers must:
 
-- ✅ Pass VCTS core profile tests
+- ✅ Pass VCTS core profile tests (`vcts run` itself does not work in v0.4.0; see the [CLI Tools Reference](cli-tools.md#vcts))
 - ✅ Include comprehensive documentation
 - ✅ Provide Helm chart for deployment
 - ✅ Follow security best practices

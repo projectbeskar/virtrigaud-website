@@ -91,7 +91,7 @@ single test by name, invoke `go test` directly:
 export KUBEBUILDER_ASSETS="$(bin/setup-envtest use $(go list -m -f '{{.Version}}' k8s.io/api | awk -F'[v.]' '{printf "1.%d", $3}') --bin-dir bin -p path)"
 
 # Then target a single test
-go test -v -count=1 -run '^TestVirtualMachineReconciler_Reconcile$' ./internal/controller/...
+go test -v -count=1 -run '^TestReconcileVM_DiskSizeLimit_CreateRefused$' ./internal/controller/...
 ```
 
 ### Coverage
@@ -232,7 +232,7 @@ hack/test-helm-locally.sh                # helm chart in Kind
 hack/test-release-locally.sh v0.4.0-test # release workflow w/ local registry
 ```
 
-Each script's `--help` flag describes its options. The orchestrator
+`test-ci-locally.sh`, `test-helm-locally.sh` and `test-workflows-locally.sh` accept `help` or `--help`; read the others' header comments for their options. The orchestrator
 (`hack/test-workflows-locally.sh`) creates and reads `.actrc`, `.env.local`
 and `.secrets` files in the repo root.
 

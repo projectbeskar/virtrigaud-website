@@ -59,13 +59,21 @@ to the same commit:
 ```bash
 REV=$(git -C /path/to/virtrigaud rev-list -n1 v0.4.0)
 
-go get github.com/projectbeskar/virtrigaud/sdk@$REV
 go get github.com/projectbeskar/virtrigaud/proto@$REV
 
 # go prints the proto pseudo-version it selected, e.g. v0.0.0-<date>-<hash>
 go mod edit -replace \
   github.com/projectbeskar/virtrigaud/proto@v0.1.0=github.com/projectbeskar/virtrigaud/proto@<that-pseudo-version>
+
+# The SDK imports internal packages of the root module, so pin the root
+# module and the SDK to the same commit AFTER the replace (go get of proto
+# drops the SDK requirement, and go mod tidy would otherwise pick main)
+go get github.com/projectbeskar/virtrigaud@$REV
+go get github.com/projectbeskar/virtrigaud/sdk@$REV
+go mod tidy
 ```
+
+Check `go.mod` afterwards: `sdk`, the root module and `proto` should all name the release commit.
 
 (Alternatively, check the repository out next to your module and use two
 local `replace` directives, as the root `go.mod` does.) The generated Go
@@ -298,8 +306,9 @@ satisfies `ProviderServer`).
 
 ## Capabilities — the contract for "what works"
 
-The manager queries `GetCapabilities` after a successful `Validate` and
-caches the result per Provider CR. It surfaces what a provider reported under
+The manager fetches `GetCapabilities` on its Provider reconcile, once the
+Provider is healthy and its runtime is `Running`, and writes the result to the
+Provider's status. It surfaces what a provider reported under
 `Provider.status.reportedCapabilities`, and an opt-in
 `--enforce-provider-capabilities` manager flag (default **off**) makes the
 manager refuse snapshot and migration operations a provider does not
