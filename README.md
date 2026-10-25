@@ -13,9 +13,9 @@ VirtRigaud is a Kubernetes operator for managing virtual machines across multipl
 
 ## Prerequisites
 
-- Python 3.8 or higher
+- Python 3.9 or higher
 - [Poetry](https://python-poetry.org/) (Python dependency manager)
-- [Go](https://go.dev/) 1.23 or higher (required for CRD documentation generation)
+- [Go](https://go.dev/) 1.26 or higher (required for the CRD and gRPC reference generation)
 
 Install Poetry:
 
@@ -33,14 +33,17 @@ brew install poetry  # macOS
 ## Quick Start
 
 ```bash
-# Install dependencies
+# Install Python dependencies and the pinned Go generator tools
 make install
+make install-crd-tools
+make install-proto-tools
+
+# Build the static site (clones VirtRigaud at the tag in VIRTRIGAUD_VERSION,
+# regenerates the CRD and gRPC reference pages, then runs mkdocs)
+make build
 
 # Serve with live reload for development (http://127.0.0.1:8000)
 make serve
-
-# Build the static site
-make build
 ```
 
 ## Building the Documentation
@@ -54,27 +57,37 @@ make install
 # Install CRD generation tools (requires Go)
 make install-crd-tools
 
-# Generate CRD documentation from VirtRigaud repository
+# Install gRPC reference tools, buf and protoc-gen-doc (requires Go)
+make install-proto-tools
+
+# Generate CRD documentation from the VirtRigaud release in VIRTRIGAUD_VERSION
 make generate-crds
 
-# Build the documentation (automatically generates CRDs)
+# Generate the gRPC API reference
+make generate-proto-docs
+
+# Build the documentation (automatically generates both references)
 make build
+
+# Same, but fail on warnings (CI builds with --strict)
+make build-strict
 
 # Serve with live reload for development
 make serve
 
-# Clean generated files (including cloned repo and generated CRDs)
+# Remove site/, .cache/ and the cloned virtrigaud/ (the committed generated pages are kept)
 make clean
 
 # Run linting checks
 make lint
 ```
 
-The `make build` target automatically:
+The `make build` target:
 1. Installs Python dependencies
-2. Clones/updates the VirtRigaud repository
-3. Generates CRD documentation using `crd-ref-docs`
-4. Builds the MkDocs site
+2. Clones/updates the VirtRigaud repository at the tag in `VIRTRIGAUD_VERSION`
+3. Generates the CRD reference using `crd-ref-docs`
+4. Generates the gRPC reference using `buf` and `protoc-gen-doc`
+5. Builds the MkDocs site
 
 ### Using Poetry Directly
 
@@ -97,16 +110,17 @@ poetry run mkdocs build --strict
 ```
 .
 ├── mkdocs.yml              # MkDocs configuration
-├── book.toml               # mdBook configuration (alternative)
 ├── pyproject.toml          # Python dependencies (Poetry)
 ├── Makefile                # Build automation
+├── VIRTRIGAUD_VERSION      # VirtRigaud release tag the reference pages describe
+├── tools/                  # Reference generators (gen-*.sh), their configs and pinned tool versions
 ├── src/                    # Documentation markdown files
-│   ├── README.md           # Homepage
+│   ├── index.md            # Homepage
 │   ├── getting-started/    # Getting started guides
 │   ├── providers/          # Provider-specific documentation
 │   ├── examples/           # Configuration examples
+│   ├── stylesheets/        # Custom CSS
 │   └── ...                 # Other documentation files
-├── theme/                  # Custom theme assets
 ├── site/                   # Build output (generated, gitignored)
 └── .github/workflows/      # CI/CD automation
 ```
@@ -138,12 +152,13 @@ The site features:
 
 The documentation is automatically deployed to GitHub Pages when changes are pushed to the `main` branch. The CI/CD workflow:
 
-1. Clones the main VirtRigaud repository
-2. Generates CRD documentation using `crd-ref-docs`
-3. Builds the MkDocs site
-4. Deploys to GitHub Pages
+1. Checks out the VirtRigaud release tag in `VIRTRIGAUD_VERSION` (never the default branch, so unreleased behaviour does not reach the site)
+2. Generates the CRD reference using `crd-ref-docs`
+3. Generates the gRPC reference using `buf` and `protoc-gen-doc`
+4. Builds the MkDocs site with `--strict`
+5. Deploys to GitHub Pages
 
-Manual deployment can be triggered via the GitHub Actions UI.
+To document another release, change `VIRTRIGAUD_VERSION`, regenerate the two reference pages and commit them. A manual run of the workflow accepts a release tag; it deploys only when started from `main`.
 
 ## Related Links
 
@@ -154,7 +169,7 @@ Manual deployment can be triggered via the GitHub Actions UI.
 
 ## Contributing
 
-Contributions are welcome! Please see the main project's [contributing guidelines](https://github.com/projectbeskar/virtrigaud/blob/main/CONTRIBUTING.md).
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for this documentation repository and the main project's [contributing guidelines](https://github.com/projectbeskar/virtrigaud/blob/main/CONTRIBUTING.md) for the operator code.
 
 ## License
 

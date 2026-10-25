@@ -70,9 +70,12 @@ jobs:
 
       - name: Install Go documentation tools
         run: |
-          go install github.com/elastic/crd-ref-docs@latest
-          go install github.com/bufbuild/buf/cmd/buf@latest
-          go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
+          # Tool versions are pinned in tools/tool-versions.env (also used by the Makefile).
+          grep -E '^[A-Z_]+=' tools/tool-versions.env >> "$GITHUB_ENV"
+          . tools/tool-versions.env
+          go install "github.com/elastic/crd-ref-docs@${CRD_REF_DOCS_VERSION}"
+          go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
+          go install "github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@${PROTOC_GEN_DOC_VERSION}"
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
       - name: Generate CRD documentation
@@ -105,7 +108,7 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Build documentation
-        run: poetry run mkdocs build
+        run: poetry run mkdocs build --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
@@ -113,7 +116,8 @@ jobs:
           path: ./site
 
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # Deploy only from main: a workflow_dispatch run from another ref builds but does not deploy.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

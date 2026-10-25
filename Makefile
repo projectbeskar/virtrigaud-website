@@ -4,6 +4,8 @@
 .PHONY: help install install-crd-tools install-proto-tools clone-virtrigaud generate-crds generate-proto-docs build serve clean lint
 
 # Variables
+# Pinned versions of crd-ref-docs, buf and protoc-gen-doc (shared with CI).
+include tools/tool-versions.env
 VIRTRIGAUD_REPO ?= https://github.com/projectbeskar/virtrigaud.git
 VIRTRIGAUD_DIR ?= virtrigaud
 # Release tag of VirtRigaud the reference pages are generated from (pinned in VIRTRIGAUD_VERSION).
@@ -13,6 +15,7 @@ PROTO_OUTPUT := src/references/grpc-api.md
 GOPATH ?= $(shell go env GOPATH 2>/dev/null || echo $$HOME/go)
 CRD_REF_DOCS := $(GOPATH)/bin/crd-ref-docs
 BUF := $(GOPATH)/bin/buf
+PROTOC_GEN_DOC := $(GOPATH)/bin/protoc-gen-doc
 export PATH := $(GOPATH)/bin:$(PATH)
 PORT ?= 8000
 
@@ -22,15 +25,15 @@ help:
 	@echo ""
 	@echo "Available targets:"
 	@echo "  install             - Install dependencies with Poetry"
-	@echo "  install-crd-tools   - Install crd-ref-docs tool (requires Go)"
-	@echo "  install-proto-tools - Install buf tool (requires Go)"
+	@echo "  install-crd-tools   - Install crd-ref-docs $(CRD_REF_DOCS_VERSION) (requires Go)"
+	@echo "  install-proto-tools - Install buf $(BUF_VERSION) and protoc-gen-doc $(PROTOC_GEN_DOC_VERSION) (requires Go)"
 	@echo "  clone-virtrigaud    - Clone/update VirtRigaud repository at the tag in VIRTRIGAUD_VERSION"
 	@echo "  generate-crds       - Generate CRD documentation from VirtRigaud repo"
 	@echo "  generate-proto-docs - Generate gRPC/proto API documentation from VirtRigaud repo"
 	@echo "  build               - Generate all docs and build the documentation site"
 	@echo "  build-strict        - Build in strict mode (for CI/CD)"
 	@echo "  serve               - Serve the documentation locally with live reload"
-	@echo "  clean               - Remove generated files"
+	@echo "  clean               - Remove site/, .cache/ and the cloned virtrigaud/ (the committed generated pages are kept)"
 	@echo "  lint                - Run linting checks"
 
 # Install dependencies
@@ -42,8 +45,8 @@ install:
 install-crd-tools:
 	@echo "Checking for Go..."
 	@which go > /dev/null || (echo "Error: Go is not installed. Please install Go first." && exit 1)
-	@echo "Installing crd-ref-docs to $(GOPATH)/bin..."
-	@go install github.com/elastic/crd-ref-docs@latest
+	@echo "Installing crd-ref-docs $(CRD_REF_DOCS_VERSION) to $(GOPATH)/bin..."
+	@go install github.com/elastic/crd-ref-docs@$(CRD_REF_DOCS_VERSION)
 	@if [ -f "$(CRD_REF_DOCS)" ]; then \
 		echo "crd-ref-docs installed successfully at $(CRD_REF_DOCS)"; \
 	else \
@@ -65,14 +68,15 @@ clone-virtrigaud:
 		git clone $(VIRTRIGAUD_REPO) $(VIRTRIGAUD_DIR) && cd $(VIRTRIGAUD_DIR) && git checkout --detach $(VIRTRIGAUD_VERSION); \
 	fi
 
-# Install buf tool (requires Go)
+# Install buf and protoc-gen-doc (requires Go)
 install-proto-tools:
 	@echo "Checking for Go..."
 	@which go > /dev/null || (echo "Error: Go is not installed. Please install Go first." && exit 1)
-	@echo "Installing buf to $(GOPATH)/bin..."
-	@go install github.com/bufbuild/buf/cmd/buf@latest
-	@if [ -f "$(BUF)" ]; then \
-		echo "buf installed successfully at $(BUF)"; \
+	@echo "Installing buf $(BUF_VERSION) and protoc-gen-doc $(PROTOC_GEN_DOC_VERSION) to $(GOPATH)/bin..."
+	@go install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+	@go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@$(PROTOC_GEN_DOC_VERSION)
+	@if [ -f "$(BUF)" ] && [ -f "$(PROTOC_GEN_DOC)" ]; then \
+		echo "buf installed at $(BUF), protoc-gen-doc at $(PROTOC_GEN_DOC)"; \
 	else \
 		echo "Error: Installation failed"; \
 		exit 1; \
@@ -99,9 +103,9 @@ serve: build
 	@echo "Documentation will be available at http://127.0.0.1:$(PORT)"
 	poetry run mkdocs serve --dev-addr 127.0.0.1:$(PORT)
 
-# Clean generated files
+# Remove build output, cache and the cloned VirtRigaud checkout
 clean:
-	@echo "Cleaning generated files..."
+	@echo "Cleaning build output..."
 	rm -rf site/
 	rm -rf .cache/
 	rm -rf $(VIRTRIGAUD_DIR)/

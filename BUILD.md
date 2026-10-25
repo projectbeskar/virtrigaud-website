@@ -34,7 +34,9 @@ sudo apt-get install golang-go
 # Or download from https://go.dev/dl/
 ```
 
-Go 1.23 or higher is required for generating CRD documentation.
+Go 1.26 or higher is required: the generators run `go` against the pinned VirtRigaud release (v0.4.0 declares `go 1.26.10` in its `go.mod`).
+
+The generators are Go tools pinned in `tools/tool-versions.env` (`crd-ref-docs`, `buf`, `protoc-gen-doc`); `make install-crd-tools` and `make install-proto-tools` install exactly those versions.
 
 ## Quick Start
 
@@ -42,8 +44,9 @@ Go 1.23 or higher is required for generating CRD documentation.
 # Install dependencies (Python and Go tools)
 make install
 make install-crd-tools
+make install-proto-tools
 
-# Build the documentation (includes CRD generation)
+# Build the documentation (includes CRD and gRPC reference generation)
 make build
 
 # Serve with live reload for development
@@ -61,30 +64,40 @@ make install
 # Install CRD generation tools (requires Go)
 make install-crd-tools
 
-# Clone/update VirtRigaud repository
+# Install the gRPC reference tools, buf and protoc-gen-doc (requires Go)
+make install-proto-tools
+
+# Clone/update VirtRigaud at the release tag in VIRTRIGAUD_VERSION
 make clone-virtrigaud
 
-# Generate CRD documentation
+# Generate CRD documentation (src/references/generated-crd-docs.md)
 make generate-crds
 
-# Build the documentation (automatically runs generate-crds)
+# Generate the gRPC API reference (src/references/grpc-api.md)
+make generate-proto-docs
+
+# Build the documentation (automatically runs generate-crds and generate-proto-docs)
 make build
+
+# Same, but fail on warnings (CI builds with --strict)
+make build-strict
 
 # Serve with live reload for development (http://127.0.0.1:8000)
 make serve
 
-# Clean generated files (including cloned repo and generated CRDs)
+# Remove site/, .cache/ and the cloned virtrigaud/ (the committed generated pages are kept)
 make clean
 
 # Run linting checks
 make lint
 ```
 
-The `make build` target automatically handles CRD generation by:
-1. Installing Python dependencies with Poetry
-2. Cloning/updating the VirtRigaud repository
-3. Running `crd-ref-docs` to generate CRD documentation
-4. Building the MkDocs site with all content
+The `make build` target:
+1. Installs Python dependencies with Poetry
+2. Clones/updates the VirtRigaud repository at the tag in `VIRTRIGAUD_VERSION`
+3. Runs `crd-ref-docs` (`tools/gen-crd-docs.sh`) to regenerate the CRD reference
+4. Runs `buf generate` with `protoc-gen-doc` (`tools/gen-proto-docs.sh`) to regenerate the gRPC reference from `provider.proto`
+5. Builds the MkDocs site with all content
 
 ### Using Poetry directly
 
@@ -112,13 +125,14 @@ The build process automatically generates API reference documentation for VirtRi
 
 The gRPC reference `src/references/grpc-api.md` is generated the same way (`tools/gen-proto-docs.sh`, `make generate-proto-docs`) and is purely generated. The hand-written explanation lives in `src/references/grpc-api-guide.md`.
 
-This ensures the documentation always reflects the current CRD structure.
+The generated pages describe the CRDs and gRPC contract of the pinned release (`VIRTRIGAUD_VERSION`), not of the VirtRigaud default branch. To document another release, change `VIRTRIGAUD_VERSION`, run `make generate-crds generate-proto-docs` and commit the regenerated pages.
 
 ## Structure
 
 - `mkdocs.yml` - MkDocs configuration
 - `tools/crd-ref-docs-config.yaml` - CRD documentation generation config
 - `tools/buf.gen.docs.yaml` - buf template for gRPC API doc generation
+- `tools/tool-versions.env` - pinned versions of `crd-ref-docs`, `buf` and `protoc-gen-doc` (read by the Makefile and by CI)
 - `pyproject.toml` - Python dependencies (Poetry)
 - `Makefile` - Build automation
 - `src/` - All documentation markdown files
@@ -127,19 +141,20 @@ This ensures the documentation always reflects the current CRD structure.
 - `tools/gen-crd-docs.sh`, `tools/gen-proto-docs.sh` - generators used by both the Makefile and CI
 - `src/references/generated-crd-docs.md`, `src/references/grpc-api.md` - Generated references (committed; do not hand-edit)
 - `site/` - Build output (gitignored)
-- `virtrigaud/` - Cloned VirtRigaud repo for CRD generation (gitignored)
+- `virtrigaud/` - Cloned VirtRigaud repo used by the generators (gitignored)
 - `.github/workflows/` - CI/CD workflows
 
 ## Deployment
 
 The documentation is automatically deployed to GitHub Pages when changes are pushed to the main branch. The workflow:
 
-1. Clones the VirtRigaud repository
-2. Generates CRD documentation using `crd-ref-docs`
-3. Builds the MkDocs site
-4. Deploys to GitHub Pages
+1. Checks out the VirtRigaud release tag in `VIRTRIGAUD_VERSION` (or the tag given to a manual run)
+2. Generates the CRD reference with `crd-ref-docs`
+3. Generates the gRPC reference with `buf` and `protoc-gen-doc`
+4. Builds the MkDocs site with `--strict`
+5. Deploys to GitHub Pages (only from the `main` branch)
 
-Manual deployment can be triggered via the GitHub Actions UI.
+A manual run of the workflow can document another release tag; started from a branch other than `main`, it builds but does not deploy.
 
 ## Live Development
 
