@@ -5,15 +5,21 @@ SPDX-License-Identifier: Apache-2.0
 
 # Operations Guide
 
-Operator-facing reference for running VirtRigaud **v0.3.8** in production. The
+Operator-facing reference for running VirtRigaud **v0.4.0** in production. The
 pages linked from here are the authoritative source for each topic; this index
 is a router, not a duplicate.
 
+!!! warning "Upgrading from v0.3.11? Read the Upgrade Guide first"
+    v0.4.0 is a security-hardening release with breaking changes (cross-namespace
+    references need a grant, `providerRef` is immutable once bound, a new vCenter
+    privilege, a libvirt seed directory that must exist before the provider rolls).
+    Follow the [Upgrade Guide](upgrade.md) in order.
+
 !!! warning "Read the security page before you trust this section in production"
-    Several network-security controls landed in **v0.3.7** and are now enforced:
-    mTLS between the manager and provider pods (#147) and libvirt SSH host-key
-    verification (#149). Server-side bearer auth on the provider gRPC endpoint
-    (#148) is still not enabled by the in-tree providers — `NetworkPolicy`
+    Several network-security controls are enforced: mTLS between the manager and
+    provider pods (since v0.3.7, #147) and libvirt SSH host-key verification
+    (since v0.3.7, #149). Server-side bearer auth on the provider gRPC endpoint
+    (#148) is still not enabled by the in-tree providers; `NetworkPolicy`
     remains the compensating control there. These are called out on the
     [Security](security.md) page and the per-control pages
     ([mTLS](../providers/security/mtls.md),
@@ -25,10 +31,10 @@ is a router, not a duplicate.
 
 | Page | Scope |
 |------|-------|
-| [Observability](observability.md) | What VirtRigaud exposes on `/metrics`: 11 of 12 `virtrigaud_*` families wired in code (G6 CircuitBreaker pair + G7.1/7.2/7.3 + v0.3.5 baseline), the 12th deprecated. The reconcile metrics gained `kind="VMClone"` and `kind="VMSet"` in v0.3.8. No invented metrics. |
-| [Resilience](resilience.md) | **G6 CircuitBreaker is WIRED** (one breaker per `Provider` CR via `internal/transport/grpc/client.go`). Plus the **v0.3.8 provider-side connection resilience** (vSphere vCenter keepalive/reconnect #190; libvirt SSH retry #191; migration-PVC delete safety #184). Explains failure classification (`isInfraFailure`), default thresholds (`FailureThreshold=10`, `ResetTimeout=60s`, `HalfOpenMaxCalls=3`). |
-| [Security](security.md) | Canonical operator-facing security reference. STRIDE pass, credential-flow diagram, the mTLS/SSH host-key controls wired in v0.3.7, the remaining gRPC-auth disclosure, and the compensating controls a regulated deployment must layer on top. |
-| [Upgrade Guide](upgrade.md) | Helm-based upgrade matrix, **v0.3.7 → v0.3.8** notes (additive: VMClone+VMSet controllers, `VMClone.status.targetVMID`, chart templated-providers-disabled-by-default #173, no breaking changes), CRD upgrade procedure, rollback. |
+| [Observability](observability.md) | What VirtRigaud exposes on `/metrics`: the `virtrigaud_*` families wired in code, with their labels and when they populate. No invented metrics. |
+| [Resilience](resilience.md) | The per-`Provider` CircuitBreaker (`internal/transport/grpc/client.go`), failure classification (`isInfraFailure`), default thresholds (`FailureThreshold=10`, `ResetTimeout=60s`, `HalfOpenMaxCalls=3`), and provider-side connection resilience (vSphere vCenter keepalive/reconnect, libvirt SSH retry, migration-PVC delete safety). |
+| [Security](security.md) | Canonical operator-facing security reference. STRIDE pass, credential-flow diagram, the mTLS/SSH host-key controls, the remaining gRPC-auth disclosure, and the compensating controls a regulated deployment must layer on top. |
+| [Upgrade Guide](upgrade.md) | **v0.3.11 → v0.4.0**: pre-flight checks, the required order (hosts and accounts, CRDs, consumer grants, manager, providers), every breaking change with its action, new privileges, changed chart values, in-flight migrations, upgrading from a release candidate, rollback caveats. Plus notes for older releases, GitOps and troubleshooting. |
 
 ### Security sub-pages
 
@@ -55,16 +61,19 @@ SDK. They are kept **honest about what is and is not wired**:
 
 | Page | When you need it |
 |------|------------------|
-| [vSphere Hardware Versions](vsphere-hardware-version.md) | Managing the `vmx-N` compatibility level of guest VMs via the `HardwareUpgrade` gRPC RPC. vSphere-only. |
-| [Libvirt Host Preparation](libvirt-host-prepare.md) | Preparing a Libvirt/KVM host (SSH user, groups, storage pool, network bridge, SELinux/AppArmor) so the libvirt provider can drive it. Covers v0.3.7 SSH host-key verification (#149, now enforced) and v0.3.8 `sshd` `MaxStartups`/`fail2ban` tuning for the SSH-retry fix (#191). |
+| [vSphere Hardware Versions](vsphere-hardware-version.md) | Setting the `vmx-N` compatibility level at VM creation (VMClass `extraConfig`) and upgrading existing VMs via the `HardwareUpgrade` gRPC RPC (no controller path yet). vSphere-only. |
+| [Libvirt Host Preparation](libvirt-host-prepare.md) | Preparing a Libvirt/KVM host so the libvirt provider can drive it: SSH user and host-key verification, the `default` pool and image directories, the cloud-init seed directory (required in v0.4.0), sudo rules for disk reads and copies, bridged networking and placement labels for clustered hosts, AppArmor/SELinux. |
 
 ## Production-readiness checklist
 
 Use this before promoting a VirtRigaud deployment to production. Each item links
 to the page that actually covers it.
 
-- [ ] **CRDs installed at the v0.3.8 schema** — `helm pull virtrigaud/virtrigaud --version 0.3.11 --untar && kubectl apply -f virtrigaud/crds/`. See [Upgrade Guide](upgrade.md).
-- [ ] **Manager + provider images pinned to v0.3.8** — release artifacts are tagged in lockstep; do not mix versions across the manager/providers/CRDs trio.
+- [ ] **CRDs installed at the v0.4.0 schema** — `helm pull virtrigaud/virtrigaud --version 0.4.0 --untar && kubectl apply --server-side --force-conflicts -f virtrigaud/crds/`. See [Upgrade Guide](upgrade.md).
+- [ ] **Manager + provider images pinned to v0.4.0** — release artifacts are tagged in lockstep; do not mix versions across the manager/providers/CRDs trio. Provider images are set per `Provider` in `spec.runtime.image`; the chart does not change them.
+- [ ] **Shared `Provider`/`VMClass`/`VMImage` have a consumer grant** — `spec.consumerNamespaceSelector` on every object another namespace uses (v0.4.0); unset means own namespace only. See the [Upgrade Guide](upgrade.md#breaking-changes).
+- [ ] **Hypervisor accounts and hosts prepared** — vSphere: `VirtualMachine.Config.AdvancedConfig` and `System.Read`; Proxmox: `VM.Config.Network`, `VM.Config.Cloudinit`, `SDN.Use`; libvirt: [seed directory, sudo rules, image directories](libvirt-host-prepare.md).
+- [ ] **Admission policy understood** — on Kubernetes 1.30+ the chart installs a ValidatingAdmissionPolicy that reserves the manager-owned `virtrigaud.io` keys; exempt your backup/restore tooling (`admissionPolicy.reservedKeys`).
 - [ ] **Metrics scrape configured** — a `ServiceMonitor` (or equivalent) against the manager's `/metrics`. Expect the families documented in [Observability](observability.md), including the v0.3.8 `kind="VMClone"`/`kind="VMSet"` reconcile series.
 - [ ] **mTLS configured on every Provider CR** — enforced since v0.3.7 (#147).
       A Provider without a `spec.runtime.service.tls` block (or an explicit,
@@ -84,9 +93,9 @@ to the page that actually covers it.
       Manager, etc.) per [External Secrets](../providers/security/external-secrets.md).
 - [ ] **Manager HA** — manager Deployment with at least 2 replicas and leader
       election (controller-runtime enables it by default).
-- [ ] **Audit trail** — CHANGELOG entries with author attribution per
-      `CLAUDE.md` (regulated-deployment posture), plus K8s audit logging
-      enabled at the cluster level.
+- [ ] **Audit trail** — K8s audit logging enabled at the cluster level, and the
+      release notes / CHANGELOG reviewed for each upgrade (regulated-deployment
+      posture).
 - [ ] **Backup/restore procedure** — VirtRigaud does not back up CRs;
       reuse your standard `etcd` snapshot + cluster-level Velero / equivalent.
 
@@ -94,12 +103,12 @@ to the page that actually covers it.
 
 The commands below are the same patterns the [Observability](observability.md)
 and [Security](security.md) pages cite; they live here as a quick-reference.
-Provider workloads in v0.3.8 are operator-deployed via Helm with the chart's
-provider sub-charts (or applied directly as Deployments referenced by a
-`Provider` CR). Note that as of v0.3.8 the chart's templated providers are
-**disabled by default** (#173) — CR-managed providers are unaffected; set
-`providers.<type>.enabled=true` if you rely on templated providers. The labels
-below assume the chart's defaults.
+Provider workloads are normally deployed by the manager from `Provider` CRs, as
+a Deployment named `virtrigaud-provider-<namespace>-<provider>` carrying the
+labels `app.kubernetes.io/managed-by=virtrigaud` and
+`app.kubernetes.io/component=provider`. The chart's templated providers are
+**disabled by default** (since v0.3.8); set `providers.<type>.enabled=true` only
+if you rely on them. The commands assume the chart's defaults.
 
 ### Inspect Provider CR state
 
@@ -129,7 +138,7 @@ kubectl get events --field-selector involvedObject.kind=VirtualMachine,involvedO
 # Manager logs
 kubectl logs -n virtrigaud-system deploy/virtrigaud-manager
 
-# Provider pod logs (label depends on chart values; this matches the default sub-chart)
+# Provider pod logs (CR-managed providers; add -n <namespace> of the Provider)
 kubectl logs -n virtrigaud-system -l app.kubernetes.io/component=provider --tail=200
 ```
 
@@ -145,7 +154,7 @@ kubectl -n virtrigaud-system patch secret <provider-creds> \
   -p '{"stringData":{"password":"<NEW>"}}'
 
 # Restart so the file mount picks up the new value
-kubectl -n virtrigaud-system rollout restart deploy/<provider-deployment>
+kubectl -n virtrigaud-system rollout restart deploy/virtrigaud-provider-<namespace>-<provider>
 ```
 
 ### Reading CircuitBreaker state
@@ -154,12 +163,13 @@ The G6 wiring (since v0.3.6) exposes one breaker per Provider CR. The fast
 operator signal is:
 
 ```bash
-kubectl exec -n virtrigaud-system deploy/virtrigaud-manager -- \
-  curl -s localhost:8080/metrics | \
+kubectl -n virtrigaud-system port-forward deploy/virtrigaud-manager 8080:8080 &
+curl -s localhost:8080/metrics | \
   grep -E 'virtrigaud_circuit_breaker_(state|failures_total)'
 ```
 
-`state == 1` is Open; `state == 2` is Half-Open; `state == 0` is Closed. See
+`state == 0` is Closed, `state == 1` is Half-Open and `state == 2` is Open
+(`# HELP`: "0=closed, 1=half-open, 2=open"). See
 [Resilience](resilience.md#circuitbreaker-on-the-provider-grpc-path-v036).
 
 ## What this section does NOT cover
