@@ -179,6 +179,7 @@ nav:
       - Metrics Catalog: api-reference/metrics.md
       - Provider Catalog: references/catalog.md
       - Full CRD Reference: references/generated-crd-docs.md
+      - Provider gRPC API Guide: references/grpc-api-guide.md
       - Provider gRPC API: references/grpc-api.md
   - Development:
       - Overview: development/index.md

@@ -45,8 +45,5 @@ ENV/
 # mdbook (old build system)
 book/
 
-# Generated documentation
-src/generated-crd-docs.md
-
 # Cloned VirtRigaud repository for CRD generation
 virtrigaud/

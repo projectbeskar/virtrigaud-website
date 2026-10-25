@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # buf template used exclusively for documentation generation.
-# Run from the virtrigaud/ source directory:
-#   buf generate proto --template ../tools/buf.gen.docs.yaml
+# Run through tools/gen-proto-docs.sh, which executes
+#   buf generate proto --template tools/buf.gen.docs.yaml -o src/references
+# inside the virtrigaud/ source directory. `out` is relative to the -o directory.
 #
 # This is intentionally separate from proto/buf.gen.yaml so that
 # doc generation is owned by the website repo and does not affect
@@ -11,6 +12,6 @@
 version: v1
 plugins:
   - name: doc
-    out: ../src/references
+    out: .
     opt:
       - markdown,grpc-api.md

@@ -337,14 +337,13 @@ poetry run mkdocs build --strict
 The build process automatically generates API reference documentation for
 VirtRigaud's Custom Resource Definitions (CRDs):
 
-1. **Clones VirtRigaud repository** - Gets the latest CRD definitions from the
-   main project
+1. **Clones VirtRigaud repository** - Checks out the release tag pinned in
+   the website repository's `VIRTRIGAUD_VERSION` file
 2. **Runs crd-ref-docs** - Extracts CRD schemas and generates markdown
    documentation
-3. **Writes `src/generated-crd-docs.md`** - A comprehensive API reference.
-   The page the site navigation links to is the committed copy
-   `src/references/generated-crd-docs.md`, which is refreshed for each
-   release; do not hand-edit it.
+3. **Writes `src/references/generated-crd-docs.md`** - A comprehensive API
+   reference, the page the site navigation links to. The file is committed
+   and refreshed for each release; do not hand-edit it.
 
 This ensures the documentation reflects the CRD structure of the cloned
 source. As of v0.4.0 there are **12 CRDs**: VirtualMachine, Provider,
@@ -441,7 +440,7 @@ The site features:
 
 The documentation is automatically deployed to GitHub Pages when changes are
 pushed to the main branch. The workflow:
-
+1. Checks out the VirtRigaud release tag pinned in `VIRTRIGAUD_VERSION`
 1. Clones the VirtRigaud repository
 2. Generates CRD documentation using `crd-ref-docs`
 3. Generates the gRPC API reference from `provider.proto` using `buf`
@@ -449,7 +448,7 @@ pushed to the main branch. The workflow:
 5. Deploys to GitHub Pages
 
 Manual deployment can be triggered via the GitHub Actions UI, optionally with
-a VirtRigaud release tag to document (the default is the latest `main`).
+a VirtRigaud release tag to document (the default is the tag in `VIRTRIGAUD_VERSION`).
 
 ## Troubleshooting
 
@@ -503,14 +502,9 @@ which crd-ref-docs
 # Reinstall the tool
 make install-crd-tools
 
-# Manually clone and generate
-git clone https://github.com/projectbeskar/virtrigaud.git
-cd virtrigaud
-crd-ref-docs \
-  --source-path=api \
-  --config=../tools/crd-ref-docs-config.yaml \
-  --renderer=markdown \
-  --output-path=../src/generated-crd-docs.md
+# Manually clone the pinned release and generate
+git clone --branch "$(cat VIRTRIGAUD_VERSION)" https://github.com/projectbeskar/virtrigaud.git
+./tools/gen-crd-docs.sh virtrigaud
 ```
 
 ## Next Steps

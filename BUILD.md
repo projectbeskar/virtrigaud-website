@@ -106,9 +106,11 @@ poetry run mkdocs build --strict
 
 The build process automatically generates API reference documentation for VirtRigaud's Custom Resource Definitions (CRDs):
 
-1. **Clones VirtRigaud repository** - Gets the latest CRD definitions from the main project
-2. **Runs crd-ref-docs** - Extracts CRD schemas and generates markdown documentation
-3. **Outputs to `src/generated-crd-docs.md`** - Creates a comprehensive API reference
+1. **Clones VirtRigaud repository** - Checks out the release tag pinned in `VIRTRIGAUD_VERSION` (CI does the same), so the reference never describes unreleased code
+2. **Runs crd-ref-docs** (`tools/gen-crd-docs.sh`) - Extracts CRD schemas and generates markdown documentation
+3. **Outputs to `src/references/generated-crd-docs.md`** - the page the navigation links to. The file is committed; regenerate and commit it when `VIRTRIGAUD_VERSION` changes
+
+The gRPC reference `src/references/grpc-api.md` is generated the same way (`tools/gen-proto-docs.sh`, `make generate-proto-docs`) and is purely generated. The hand-written explanation lives in `src/references/grpc-api-guide.md`.
 
 This ensures the documentation always reflects the current CRD structure.
 
@@ -121,7 +123,9 @@ This ensures the documentation always reflects the current CRD structure.
 - `Makefile` - Build automation
 - `src/` - All documentation markdown files
 - `src/stylesheets/` - Custom CSS styles
-- `src/generated-crd-docs.md` - Generated CRD API reference (not in git)
+- `VIRTRIGAUD_VERSION` - VirtRigaud release tag the reference pages are generated from
+- `tools/gen-crd-docs.sh`, `tools/gen-proto-docs.sh` - generators used by both the Makefile and CI
+- `src/references/generated-crd-docs.md`, `src/references/grpc-api.md` - Generated references (committed; do not hand-edit)
 - `site/` - Build output (gitignored)
 - `virtrigaud/` - Cloned VirtRigaud repo for CRD generation (gitignored)
 - `.github/workflows/` - CI/CD workflows

@@ -5,8 +5,10 @@
 
 # Variables
 VIRTRIGAUD_REPO ?= https://github.com/projectbeskar/virtrigaud.git
-VIRTRIGAUD_DIR := virtrigaud
-CRD_OUTPUT := src/generated-crd-docs.md
+VIRTRIGAUD_DIR ?= virtrigaud
+# Release tag of VirtRigaud the reference pages are generated from (pinned in VIRTRIGAUD_VERSION).
+VIRTRIGAUD_VERSION ?= $(shell cat VIRTRIGAUD_VERSION)
+CRD_OUTPUT := src/references/generated-crd-docs.md
 PROTO_OUTPUT := src/references/grpc-api.md
 GOPATH ?= $(shell go env GOPATH 2>/dev/null || echo $$HOME/go)
 CRD_REF_DOCS := $(GOPATH)/bin/crd-ref-docs
@@ -22,7 +24,7 @@ help:
 	@echo "  install             - Install dependencies with Poetry"
 	@echo "  install-crd-tools   - Install crd-ref-docs tool (requires Go)"
 	@echo "  install-proto-tools - Install buf tool (requires Go)"
-	@echo "  clone-virtrigaud    - Clone/update VirtRigaud repository"
+	@echo "  clone-virtrigaud    - Clone/update VirtRigaud repository at the tag in VIRTRIGAUD_VERSION"
 	@echo "  generate-crds       - Generate CRD documentation from VirtRigaud repo"
 	@echo "  generate-proto-docs - Generate gRPC/proto API documentation from VirtRigaud repo"
 	@echo "  build               - Generate all docs and build the documentation site"
@@ -55,12 +57,12 @@ install-crd-tools:
 
 # Clone or update VirtRigaud repository
 clone-virtrigaud:
-	@if [ -d "$(VIRTRIGAUD_DIR)" ]; then \
-		echo "Updating VirtRigaud repository..."; \
-		cd $(VIRTRIGAUD_DIR) && git pull; \
+	@if [ -d "$(VIRTRIGAUD_DIR)/.git" ]; then \
+		echo "Updating VirtRigaud repository to $(VIRTRIGAUD_VERSION)..."; \
+		cd $(VIRTRIGAUD_DIR) && git fetch --tags --force origin && git checkout --detach $(VIRTRIGAUD_VERSION); \
 	else \
-		echo "Cloning VirtRigaud repository..."; \
-		git clone $(VIRTRIGAUD_REPO) $(VIRTRIGAUD_DIR); \
+		echo "Cloning VirtRigaud repository at $(VIRTRIGAUD_VERSION)..."; \
+		git clone $(VIRTRIGAUD_REPO) $(VIRTRIGAUD_DIR) && cd $(VIRTRIGAUD_DIR) && git checkout --detach $(VIRTRIGAUD_VERSION); \
 	fi
 
 # Install buf tool (requires Go)
@@ -79,30 +81,12 @@ install-proto-tools:
 # Generate CRD documentation
 generate-crds: install-crd-tools clone-virtrigaud
 	@echo "Generating CRD documentation..."
-	@if [ ! -f "$(CRD_REF_DOCS)" ]; then \
-		echo "Error: crd-ref-docs not found at $(CRD_REF_DOCS)"; \
-		echo "Please run 'make install-crd-tools' first"; \
-		exit 1; \
-	fi
-	@cd $(VIRTRIGAUD_DIR) && \
-		$(CRD_REF_DOCS) \
-			--source-path=api \
-			--config=../tools/crd-ref-docs-config.yaml \
-			--renderer=markdown \
-			--output-path=../$(CRD_OUTPUT)
-	@echo "CRD documentation generated at $(CRD_OUTPUT)"
+	@./tools/gen-crd-docs.sh $(VIRTRIGAUD_DIR)
 
 # Generate proto/gRPC API documentation
 generate-proto-docs: install-proto-tools clone-virtrigaud
 	@echo "Generating proto/gRPC API documentation..."
-	@if [ ! -f "$(BUF)" ]; then \
-		echo "Error: buf not found at $(BUF)"; \
-		echo "Please run 'make install-proto-tools' first"; \
-		exit 1; \
-	fi
-	@cd $(VIRTRIGAUD_DIR) && \
-		$(BUF) generate proto --template ../tools/buf.gen.docs.yaml
-	@echo "Proto documentation generated at $(PROTO_OUTPUT)"
+	@./tools/gen-proto-docs.sh $(VIRTRIGAUD_DIR)
 
 # Build the site
 build: install generate-crds generate-proto-docs
@@ -121,8 +105,7 @@ clean:
 	rm -rf site/
 	rm -rf .cache/
 	rm -rf $(VIRTRIGAUD_DIR)/
-	rm -f $(CRD_OUTPUT)
-	rm -f $(PROTO_OUTPUT)
+	# $(CRD_OUTPUT) and $(PROTO_OUTPUT) are committed; regenerate them with 'make generate-crds generate-proto-docs'.
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 
