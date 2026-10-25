@@ -96,7 +96,7 @@ kubectl logs -n virtrigaud-system deployment/virtrigaud-manager | head -5
 The 12 CRDs in `infra.virtrigaud.io/v1beta1` are `virtualmachines`, `providers`,
 `vmclasses`, `vmimages`, `vmnetworkattachments`, `vmsnapshots`, `vmmigrations`,
 `vmclones`, `vmsets`, `vmplacementpolicies`, `hosts` and `hostpools`. `hosts` and
-`hostpools` are used only by [clustered libvirt providers](../providers/libvirt.md).
+`hostpools` are used only by [clustered libvirt providers](../guides/clustered/index.md).
 
 Confirm the running version through the metrics endpoint:
 

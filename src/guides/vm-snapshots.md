@@ -55,6 +55,7 @@ kubectl get vmsnapshot web-server-01-pre-update \
 | `Ready` | The provider confirmed the snapshot; `status.snapshotID` is the provider's id for it |
 | `Deleting` | The snapshot is being removed from the hypervisor |
 | `Failed` | The create failed; the message says why. A failed snapshot is re-checked every 5 minutes |
+| `Expired` | Accepted by the API enum. The controller does not set it: a snapshot past `retentionPolicy.maxAge` is deleted instead |
 
 Retention: the controller acts on `retentionPolicy.maxAge` (the `VMSnapshot` is
 deleted once older than that; checked hourly) and `retentionPolicy.deleteOnVMDelete`

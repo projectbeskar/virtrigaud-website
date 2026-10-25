@@ -503,7 +503,7 @@ While a retry is pending nothing is deleted: the retry overwrites the artifacts.
 ### Staged disk (`StagingCleanup`)
 
 The manager asks the **target** Provider to delete the staged object (RPC
-`DeleteStagedDisk`, [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0011-migration-staging-cleanup.md)).
+`DeleteStagedDisk`, [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0011-migration-staging-cleanup.md)).
 The manager never opens the backend. Watch it:
 
 ```bash
@@ -542,7 +542,7 @@ while held. The provider refuses to delete a disk any VM uses. Do not share the 
 datastore or libvirt `default` pool directory with hypervisors the Provider does not
 manage, and run one replica of each provider. Disks left by migrations before v0.4.0
 are not touched; remove them as described in
-[Leftovers from earlier releases](https://github.com/projectbeskar/virtrigaud/blob/main/docs/upgrading.md#leftovers-from-earlier-releases).
+[Leftovers from earlier releases](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md#leftovers-from-earlier-releases).
 
 <a id="a-migration-held-with-outcomeunknown"></a>
 
@@ -578,7 +578,7 @@ kubectl annotate vmmigration <name> -n <ns> virtrigaud.io/operation-outcome=not-
 
 Alert on migrations stuck in a phase and on the three `...OutcomeUnknown` reasons. The
 full rules, including which failures each provider treats as definite, are in
-[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/main/docs/provider-call-outcomes.md).
+[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md).
 
 ## Failure modes and recovery
 
@@ -701,7 +701,7 @@ spec:
 - The S3 credentials Secret is always read from the **migration's** namespace.
 
 How the grants fit together with ownership and the admission policy: [Security model](../guides/security-model.md#cross-namespace-clone-and-migration-targets). Details and the pre-upgrade query:
-[Cross-namespace clone and migration targets](https://github.com/projectbeskar/virtrigaud/blob/main/docs/cross-namespace-targets.md).
+[Cross-namespace clone and migration targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-targets.md).
 
 ## Migration into a clustered libvirt Provider (experimental)
 
@@ -735,13 +735,13 @@ previous incarnation were not run in the lab.
 Full guide: [Migrating into a clustered Provider](clustered-target.md) (prerequisites, watching a
 migration, cleanup, known limits). Setting the clustered Provider up: [Clustered libvirt](../guides/clustered/index.md). Every
 condition and how to clear it: [Migration into a clustered
-provider](https://github.com/projectbeskar/virtrigaud/blob/main/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
-Example: [`examples/vmmigration-into-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmmigration-into-clustered.yaml).
+provider](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
+Example: [`examples/vmmigration-into-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/vmmigration-into-clustered.yaml).
 
 ## The migrated guest's network
 
 A migration copies the disk, not the NIC. What the guest does on first boot depends on
-the target ([ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0014-migrated-guest-network.md),
+the target ([ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0014-migrated-guest-network.md),
 **known limitation R36, not fixed in v0.4.0**):
 
 | Target | Result with a Linux cloud-image guest whose netplan matches the NIC by MAC address (Ubuntu cloud images do) |
@@ -775,7 +775,7 @@ read. Move the data of other disks yourself.
 
 ## Upgrading with migrations in flight
 
-From v0.3.11, follow the [upgrade guide](https://github.com/projectbeskar/virtrigaud/blob/main/docs/upgrading.md)
+From v0.3.11, follow the [upgrade guide](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md)
 (and [Upgrade](../operations/upgrade.md)): CRDs first, then the manager, then the
 providers promptly. Specific to migrations:
 
@@ -806,15 +806,15 @@ providers promptly. Specific to migrations:
 ## Examples in the main repository
 
 Example manifests are in the main repository, in
-[`examples/migration/`](https://github.com/projectbeskar/virtrigaud/tree/main/examples/migration)
+[`examples/migration/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/examples/migration)
 (a README with the details, plus `libvirt-to-vsphere.yaml`, `vsphere-to-proxmox.yaml` and
 `proxmox-to-libvirt.yaml`) and `examples/vmmigration-*.yaml`:
 
-- [`vmmigration-s3.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmmigration-s3.yaml) - S3 staging, vSphere to libvirt
-- [`vmmigration-nfs.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmmigration-nfs.yaml) - NFS staging
-- [`vmmigration-proxmox-s3.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmmigration-proxmox-s3.yaml) - Proxmox over S3
-- [`vmmigration-into-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmmigration-into-clustered.yaml) - into a clustered libvirt Provider (experimental)
-- [`vmmigration-basic.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmmigration-basic.yaml) and [`vmmigration-advanced.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmmigration-advanced.yaml) - `pvc` staging, kept for compatibility
+- [`vmmigration-s3.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/vmmigration-s3.yaml) - S3 staging, vSphere to libvirt
+- [`vmmigration-nfs.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/vmmigration-nfs.yaml) - NFS staging
+- [`vmmigration-proxmox-s3.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/vmmigration-proxmox-s3.yaml) - Proxmox over S3
+- [`vmmigration-into-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/vmmigration-into-clustered.yaml) - into a clustered libvirt Provider (experimental)
+- [`vmmigration-basic.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/vmmigration-basic.yaml) and [`vmmigration-advanced.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/vmmigration-advanced.yaml) - `pvc` staging, kept for compatibility
 
 ## See also
 
@@ -827,9 +827,9 @@ Example manifests are in the main repository, in
 - [Security model](../guides/security-model.md) - cross-namespace targets, migration storage mounts and the disk-size limit.
 - [Resilience](../operations/resilience.md) - what happens when a provider flaps during a long migration.
 - [Libvirt Host Preparation](../operations/libvirt-host-prepare.md) - host setup for libvirt migrations.
-- [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) -
+- [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) -
   storage-backend-agnostic migration.
-- [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0011-migration-staging-cleanup.md) -
+- [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0011-migration-staging-cleanup.md) -
   staged and landed disk cleanup.
-- [ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0014-migrated-guest-network.md) -
+- [ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0014-migrated-guest-network.md) -
   the migrated guest's identity and network.

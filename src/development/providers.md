@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 This page is aligned to **VirtRigaud v0.4.0** and describes how to build a
 provider against the public SDK in
-[`sdk/provider/`](https://github.com/projectbeskar/virtrigaud/tree/main/sdk/provider).
+[`sdk/provider/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/sdk/provider).
 External providers are first-class — they implement the same gRPC contract
 as the in-tree vSphere/Libvirt/Proxmox providers and the manager dials them
 identically.
@@ -45,7 +45,7 @@ as a rough starting point:
 - `publish` writes a catalog entry with placeholder conformance results.
 
 The most reliable skeleton is
-[`cmd/provider-mock/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/provider-mock/main.go)
+[`cmd/provider-mock/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/provider-mock/main.go)
 together with `internal/providers/mock/`.
 
 ## Consuming the SDK from your own module
@@ -82,7 +82,7 @@ bindings are imported from `github.com/projectbeskar/virtrigaud/proto/rpc/provid
 ## Contract surface (v0.4.0)
 
 The gRPC contract lives in
-[`proto/provider/v1/provider.proto`](https://github.com/projectbeskar/virtrigaud/blob/main/proto/provider/v1/provider.proto)
+[`proto/provider/v1/provider.proto`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/proto/provider/v1/provider.proto)
 (service `provider.v1.Provider`) and is a separate Go module. The RPCs your
 provider must implement (or explicitly answer with `Unimplemented`) are:
 
@@ -177,7 +177,7 @@ re-sends an uncertain Create to a provider that does not report
 ## SDK packages
 
 The SDK is laid out as five packages under
-[`sdk/provider/`](https://github.com/projectbeskar/virtrigaud/tree/main/sdk/provider):
+[`sdk/provider/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/sdk/provider):
 
 | Package | What it gives you | Source |
 |--------|------------------|--------|
@@ -187,13 +187,13 @@ The SDK is laid out as five packages under
 | `errors` | Typed errors (`NewNotFound`, `NewInvalidSpec`, etc.) that map cleanly to gRPC status codes via `.GRPCStatus()`. | `sdk/provider/errors/errors.go` |
 | `client` | High-level gRPC client (mostly useful for testing your provider end-to-end from another Go program). | `sdk/provider/client/client.go` |
 
-The [`sdk/provider/doc.go`](https://github.com/projectbeskar/virtrigaud/blob/main/sdk/provider/doc.go)
+The [`sdk/provider/doc.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/sdk/provider/doc.go)
 is the canonical entry point; it includes a working server example.
 
 ### Compatibility commitment
 
 `sdk/` is a separate Go module from `internal/`. Per
-[`sdk/provider/doc.go`](https://github.com/projectbeskar/virtrigaud/blob/main/sdk/provider/doc.go):
+[`sdk/provider/doc.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/sdk/provider/doc.go):
 
 > The SDK abstracts the underlying gRPC protocol and provides stable
 > interfaces that will not change in minor releases, even if the internal
@@ -490,7 +490,7 @@ configuration.
 ## proto + SDK regeneration
 
 The protobuf bindings are owned by the
-[`proto/`](https://github.com/projectbeskar/virtrigaud/tree/main/proto)
+[`proto/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/proto)
 module and regenerated with `buf`:
 
 ```bash
@@ -581,8 +581,8 @@ end-to-end; it's the SDK in production, minus a real hypervisor.
 
 ## See also
 
-- [SDK doc.go](https://github.com/projectbeskar/virtrigaud/blob/main/sdk/provider/doc.go) — canonical usage example.
-- [proto/provider/v1/provider.proto](https://github.com/projectbeskar/virtrigaud/blob/main/proto/provider/v1/provider.proto) — the contract.
+- [SDK doc.go](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/sdk/provider/doc.go) — canonical usage example.
+- [proto/provider/v1/provider.proto](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/proto/provider/v1/provider.proto) — the contract.
 - [Provider gRPC API](../references/grpc-api.md) — the generated reference for the contract.
 - [Provider Tutorial](../providers/tutorial.md) — operator-facing walkthrough.
 - [Provider Capabilities Matrix](../providers/providers-capabilities.md) —

@@ -154,7 +154,7 @@ spec:
         insecureSkipVerify: false
 ```
 
-A Provider used from other namespaces must set `spec.consumerNamespaceSelector`; see [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/main/docs/cross-namespace-references.md).
+A Provider used from other namespaces must set `spec.consumerNamespaceSelector`; see [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-references.md).
 
 ### Username / password
 
@@ -271,7 +271,7 @@ spec:
 - **URL image import is refused** (ADR-0009 D10). `source.http` makes `ImagePrepare` return `InvalidSpec` ("Proxmox URL image import (source.http) is not supported in this release ..."); the `VMImage` shows `phase: Failed` and `Ready=False/InvalidSource`, and no VM is created. The earlier import only downloaded the file and never produced a usable template, and it reported any same-named template as "already prepared", whoever made it. To prepare an image yourself, import the cloud image into a VM disk on the node (for example `qm importdisk`), convert the VM to a template (`qm template <vmid>`), and put that VMID in `templateID`.
 - A reference-style source reaches **every template the Provider's PVE account can read**. Give each tenant its own templates, or a PVE pool that only its Provider's account can read.
 
-See [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/main/docs/image-preparation.md#proxmox-image-sources).
+See [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/image-preparation.md#proxmox-image-sources).
 
 ## Networking
 
@@ -324,10 +324,10 @@ spec:
 
 Not applied on Proxmox: the attachment's `firewall`, `rateLimit` and `mtu`; `VMNetworkAttachment.spec.ipAllocation` (put static settings on the VM's entry); `spec.networks[].macAddress` (the manager drops it, ADR-0014 slice 0b); IPv6 (the CRD patterns are IPv4-only). The attachment CRD restricts a Proxmox `bridge` to `vmbrN`, so an SDN VNet is not reachable through it yet. `Describe` reports no NICs; `ListVMs` reports each NIC's bridge and MAC.
 
-VMs that relied on the accidental `vmbr0` default change on their next create or clone; a VM that already exists is not modified. Full rules: [Proxmox networks](https://github.com/projectbeskar/virtrigaud/blob/main/docs/proxmox-networks.md).
+VMs that relied on the accidental `vmbr0` default change on their next create or clone; a VM that already exists is not modified. Full rules: [Proxmox networks](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/proxmox-networks.md).
 
 !!! warning "Migrated guests (R36)"
-    A Linux cloud-image guest whose netplan matches its NIC by MAC address (Ubuntu cloud images do) can boot **without network** on a Proxmox target, because the target NIC has a new MAC and cloud-init does not run again. The fix is designed ([ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0014-migrated-guest-network.md)) and planned after GA; only its Proxmox network plumbing is in v0.4.0. Until then, make the guest's netplan match its NIC by name or driver before you migrate, or fix its network from the console. See the [migration guide](../migration/user-guide.md).
+    A Linux cloud-image guest whose netplan matches its NIC by MAC address (Ubuntu cloud images do) can boot **without network** on a Proxmox target, because the target NIC has a new MAC and cloud-init does not run again. The fix is designed ([ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0014-migrated-guest-network.md)) and planned after GA; only its Proxmox network plumbing is in v0.4.0. Until then, make the guest's netplan match its NIC by name or driver before you migrate, or fix its network from the console. See the [migration guide](../migration/user-guide.md).
 
 ## Cloud-init: what the provider applies
 
@@ -364,7 +364,7 @@ A `VirtualMachine` that carries user-data gets a cloud-init drive (`ide2` unless
 3. `PROVIDER_DEFAULT_STORAGE`, else `PVE_DEFAULT_STORAGE`. Used for a clone whose config shows no storage-backed disk, for a VM made without a template, and for migration.
 4. `local`, with a warning, only when nothing above applies.
 
-If the template already has a cloud-init drive, the provider keeps it when it is already on the chosen storage, moves it to the chosen storage otherwise, and adds `ide2` if the clone has none. The boot order (`order=<primary disk>;<cloud-init slot>`) follows. A VM created before v0.4.0 keeps a drive on `local`; move it with `qm set <vmid> --ide2 <storage>:cloudinit`. Details: [Proxmox cloud-init drive storage](https://github.com/projectbeskar/virtrigaud/blob/main/docs/proxmox-cloud-init-storage.md).
+If the template already has a cloud-init drive, the provider keeps it when it is already on the chosen storage, moves it to the chosen storage otherwise, and adds `ide2` if the clone has none. The boot order (`order=<primary disk>;<cloud-init slot>`) follows. A VM created before v0.4.0 keeps a drive on `local`; move it with `qm set <vmid> --ide2 <storage>:cloudinit`. Details: [Proxmox cloud-init drive storage](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/proxmox-cloud-init-storage.md).
 
 ## VM example
 
@@ -441,9 +441,9 @@ Proxmox VMIDs are cluster-wide and reused, and PVE does not keep VM names unique
     | Unreadable or multiple stamp | `FailedPrecondition` + `OWNER_STAMP_UNREADABLE`; nothing is done |
 
     The VM controller shows these as `Ready=False/VMNotOwned` and `Ready=False/OwnerStampUnreadable` (phase `Failed`). `status.id` is kept and no VM is created in its place. A `VMMigration` or `VMClone` whose source fails the check fails with a constant message and copies nothing. A `Delete` additionally refuses templates outright (`VM_IS_IMAGE_ARTIFACT`). Every checked call except `Reconfigure` and `GetDiskInfo` costs one extra `GET .../config`.
-- **Known limits at v0.4.0.** The legacy name rule can be claimed by anyone who can create a VM at a freed VMID (grant `VM.Allocate` carefully, above). [ADR-0012](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0012-proxmox-legacy-unstamped-name-rule.md) plans to retire it in stages; none of that is in v0.4.0. A stamp can be copied by someone who knows the UID and holds `VM.Config.Options`. The owner check and the call are two requests, so a VMID freed and reused between them is not caught: do not delete VirtRigaud-managed VMs outside VirtRigaud; delete the `VirtualMachine`, or detach it with `virtrigaud.io/orphan-on-delete: "true"`. A VM adopted by an earlier release that still carries a previous owner's stamp is held `VMNotOwned` until you remove the stale `virtrigaud.owner` line.
+- **Known limits at v0.4.0.** The legacy name rule can be claimed by anyone who can create a VM at a freed VMID (grant `VM.Allocate` carefully, above). [ADR-0012](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0012-proxmox-legacy-unstamped-name-rule.md) plans to retire it in stages; none of that is in v0.4.0. A stamp can be copied by someone who knows the UID and holds `VM.Config.Options`. The owner check and the call are two requests, so a VMID freed and reused between them is not caught: do not delete VirtRigaud-managed VMs outside VirtRigaud; delete the `VirtualMachine`, or detach it with `virtrigaud.io/orphan-on-delete: "true"`. A VM adopted by an earlier release that still carries a previous owner's stamp is held `VMNotOwned` until you remove the stale `virtrigaud.owner` line.
 
-Full rules and the `Create`/`Clone` error classes: [VM ownership](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-ownership.md#proxmox) and [ADR-0012](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0012-proxmox-legacy-unstamped-name-rule.md).
+Full rules and the `Create`/`Clone` error classes: [VM ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-ownership.md#proxmox) and [ADR-0012](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0012-proxmox-legacy-unstamped-name-rule.md).
 
 ## Reconfigure
 
@@ -455,7 +455,7 @@ Full rules and the `Create`/`Clone` error classes: [VM ownership](https://github
 | Disk size | **Not applied.** `Reconfigure` resizes no disk: neither the VMClass `diskDefaults.size` nor `spec.disks[].sizeGiB` goes to a disk. The entries are logged. |
 | Failure | A config update PVE fails is answered `VM_OPERATION_FAILED` with a constant message (kept out of the circuit breaker) and retried on a per-VM backoff. |
 
-The provider does not report `supportsHonestReconfigure`. Hot-plug of CPU and memory is up to PVE and the guest (virtio balloon, hot-plug enabled on the VM). A disk-size change alone never triggers a `Reconfigure`; the manager sends one when the effective CPU or memory changes. See [Reconfigure results](https://github.com/projectbeskar/virtrigaud/blob/main/docs/reconfigure-results.md#other-providers).
+The provider does not report `supportsHonestReconfigure`. Hot-plug of CPU and memory is up to PVE and the guest (virtio balloon, hot-plug enabled on the VM). A disk-size change alone never triggers a `Reconfigure`; the manager sends one when the effective CPU or memory changes. See [Reconfigure results](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/reconfigure-results.md#other-providers).
 
 ## Disks
 
@@ -485,7 +485,7 @@ Memory snapshots are slower (RAM is streamed to storage) but allow point-in-time
 
 ### Revert
 
-Set `spec.snapshot.revertToRef` on the `VirtualMachine` (the VM must be powered off: `spec.powerState: "Off"`). The provider checks the owner and calls `POST .../snapshot/{name}/rollback`, which returns a task recorded in `status.snapshotRevert.taskRef` and polled every 10 seconds; a task that has not completed after 2 hours fails the revert with its outcome unknown. The result is in the `SnapshotReverted` condition. The revert was exercised on a real PVE node from v0.4.0-rc6 on and is covered by controller tests and the in-repo PVE fake. Flow, status fields and GitOps notes: [Reverting a VirtualMachine to a VMSnapshot](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-snapshot-revert.md).
+Set `spec.snapshot.revertToRef` on the `VirtualMachine` (the VM must be powered off: `spec.powerState: "Off"`). The provider checks the owner and calls `POST .../snapshot/{name}/rollback`, which returns a task recorded in `status.snapshotRevert.taskRef` and polled every 10 seconds; a task that has not completed after 2 hours fails the revert with its outcome unknown. The result is in the `SnapshotReverted` condition. The revert was exercised on a real PVE node from v0.4.0-rc6 on and is covered by controller tests and the in-repo PVE fake. Flow, status fields and GitOps notes: [Reverting a VirtualMachine to a VMSnapshot](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md).
 
 ### Cloning
 
@@ -514,13 +514,13 @@ spec:
 
 Every long-running PVE operation returns a UPID. The provider returns it as a `TaskRef`; the manager polls `TaskStatus` (`/api2/json/nodes/{node}/tasks/{upid}/status`) with jittered backoff until terminal. In-flight tasks are counted by `virtrigaud_provider_tasks_inflight{provider_type="proxmox", provider="<name>"}` ([Observability](../operations/observability.md#11-virtrigaud_provider_tasks_inflight)).
 
-**A power change returns a task**, so `status.phase` shows `Reconfiguring` (`Reconfiguring=True`, reason `Updating`, message "Adjusting power state") while the task runs, then settles to `Running` or `Stopped`. A failed power task is forgotten and shown as `Ready=False/ProviderError` with "Power state change failed: ..."; the power operation is sent again on a per-VM backoff (5 seconds doubling to 5 minutes). A VM whose power was changed on v0.4.0-rc4 or earlier stayed in `Reconfiguring` with `Ready=True`; the first reconcile after the upgrade settles it. A task-status query that fails for a transient reason keeps the task recorded; one PVE rejects as malformed or unknown ends it with an error. Power is idempotent: a start of a running VM, or a stop of a stopped one, is success with no task. A suspended or paused guest is reported `On`. See [`status.phase`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-status-phase.md#a-power-change-that-returns-a-task).
+**A power change returns a task**, so `status.phase` shows `Reconfiguring` (`Reconfiguring=True`, reason `Updating`, message "Adjusting power state") while the task runs, then settles to `Running` or `Stopped`. A failed power task is forgotten and shown as `Ready=False/ProviderError` with "Power state change failed: ..."; the power operation is sent again on a per-VM backoff (5 seconds doubling to 5 minutes). A VM whose power was changed on v0.4.0-rc4 or earlier stayed in `Reconfiguring` with `Ready=True`; the first reconcile after the upgrade settles it. A task-status query that fails for a transient reason keeps the task recorded; one PVE rejects as malformed or unknown ends it with an error. Power is idempotent: a start of a running VM, or a stop of a stopped one, is success with no task. A suspended or paused guest is reported `On`. See [`status.phase`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-phase.md#a-power-change-that-returns-a-task).
 
 **Delete** stops a running VM, destroys it with `purge=1` and waits for the destroy task, so a successful delete means the VM is gone. A VM that is missing from the node asked is treated as deleted only when no node of the cluster has the VMID.
 
 ## `status.ips`
 
-`Describe` asks the QEMU guest agent (`/agent/network-get-interfaces`) of a **running** VM, skips `lo` and loopback, link-local (`169.254.`, `fe80:`) addresses, and the manager then applies the common filter (loopback, unspecified, link-local, multicast, non-addresses and duplicates are dropped). If the agent is not installed or not running, `status.ips` is empty. See [`status.ips`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-status-ips.md).
+`Describe` asks the QEMU guest agent (`/agent/network-get-interfaces`) of a **running** VM, skips `lo` and loopback, link-local (`169.254.`, `fe80:`) addresses, and the manager then applies the common filter (loopback, unspecified, link-local, multicast, non-addresses and duplicates are dropped). If the agent is not installed or not running, `status.ips` is empty. See [`status.ips`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-ips.md).
 
 ## Cross-hypervisor migration
 
@@ -549,7 +549,7 @@ Without these, control-plane operations still work, but a migration with a Proxm
 - **NFS**: uses a **kernel NFS mount on the node**, not libnfs, because `pve-qemu-kvm` is built without the libnfs block driver (`qemu-img` rejects `nfs://` with `Unknown protocol 'nfs'`). The export must be written as the migration's `nfs.uid`/`nfs.gid` while `qemu-img` must run as root to read the root-owned source, so the export is two-stage: `qemu-img` (as root) flattens the source to a local temp, then the temp is copied onto the export as `nfs.uid`/`nfs.gid` via `setpriv`.
 
 !!! warning "Set `nfs.uid` / `nfs.gid` to the export owner"
-    NFS AUTH_SYS authorizes by the numeric uid/gid the client presents, and the Proxmox node presents the migration's `nfs.uid`/`nfs.gid`. Set them to the uid/gid that **owns the export's files**, or the staged-object read/write fails with `NFS3ERR_ACCES`. `uid: 0` and `gid: 0` are refused at `Validating` for every `VMMigration`. The staged disk is a single **flat** file in the export root (`vmmigrations-<ns>-<name>-<stage>.qcow2`): NFS cannot auto-create directories, so use one export per tenant. AUTH_SYS over NFSv3 is cleartext with no Kerberos; run the export on a trusted network with `root_squash` on. See the [VM Migration User Guide](../migration/user-guide.md#nfs-staging) and the [`vmmigration-nfs.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmmigration-nfs.yaml) example.
+    NFS AUTH_SYS authorizes by the numeric uid/gid the client presents, and the Proxmox node presents the migration's `nfs.uid`/`nfs.gid`. Set them to the uid/gid that **owns the export's files**, or the staged-object read/write fails with `NFS3ERR_ACCES`. `uid: 0` and `gid: 0` are refused at `Validating` for every `VMMigration`. The staged disk is a single **flat** file in the export root (`vmmigrations-<ns>-<name>-<stage>.qcow2`): NFS cannot auto-create directories, so use one export per tenant. AUTH_SYS over NFSv3 is cleartext with no Kerberos; run the export on a trusted network with `root_squash` on. See the [VM Migration User Guide](../migration/user-guide.md#nfs-staging) and the [`vmmigration-nfs.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/vmmigration-nfs.yaml) example.
 
 Run one VirtRigaud installation per PVE node: import-stage names are unique within one Kubernetes cluster only. A `VMMigration` into Proxmox leaves the guest's network to the limitation in [Networking](#networking) (R36). The Proxmox provider is not a clustered provider: it ignores `target_host_id`.
 

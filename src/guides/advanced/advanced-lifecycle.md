@@ -14,7 +14,7 @@ This page describes how a `VirtualMachine` moves through its lifecycle in VirtRi
 | `status.phase` | Set on every status write of the VirtualMachine controller ([phases](#phases)) |
 | Reconfiguration (CPU, memory, disk growth) | Functional; result is one of *applied*, *restart required* or *failed* ([details](#reconfiguration)) |
 | Snapshots (`VMSnapshot`) | Functional, subject to provider support; `maxAge` and `deleteOnVMDelete` retention are enforced ([details](#snapshot-management)) |
-| Snapshot revert (`spec.snapshot.revertToRef`) | Functional since v0.4.0-rc6; run in the lab on vSphere, Proxmox and libvirt (single-host and clustered) ([details](#reverting-to-a-snapshot)) |
+| Snapshot revert (`spec.snapshot.revertToRef`) | Functional in v0.4.0 (v0.3.11 accepted the field and ignored it); run in the lab on vSphere, Proxmox and libvirt (single-host and clustered) ([details](#reverting-to-a-snapshot)) |
 | `VMClone` | Functional: `source.vmRef` only, same provider ([VM cloning](vm-cloning.md)) |
 | Image preparation (`VMImage.spec.prepare`) | Functional, lazily on first VM create ([details](#image-preparation)) |
 | VM adoption, `orphan-on-delete` | Functional ([details](#detaching-and-adopting-vms)) |
@@ -36,7 +36,7 @@ This page describes how a `VirtualMachine` moves through its lifecycle in VirtRi
 | `Deleting` | The VM has a deletion timestamp, including while the delete is held |
 | `Failed` | A hold that needs an operator (`VMNotOwned`, `OwnerStampUnreadable`, `ProviderUnavailable`, `VMIsImageArtifact`, `CreateOutcomeUnknown`, `DeleteBlocked`, `ProviderRefMismatch`, `PlacementTopologyMismatch`, `ConsumerNotAllowed`, `VMMissingOnHost`), a create that was refused (`CreateBackoff`, `CreateRefused`, `ProviderConflict`, `ValidationError`), or a power state the provider cannot classify |
 
-A transient provider error (`Ready=False` / `ProviderError`) on a VM that exists does not change the phase, and neither does a snapshot revert: the phase follows the power state. The full rule is in [`vm-status-phase.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-status-phase.md).
+A transient provider error (`Ready=False` / `ProviderError`) on a VM that exists does not change the phase, and neither does a snapshot revert: the phase follows the power state. The full rule is in [`vm-status-phase.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-phase.md).
 
 ### Conditions
 
@@ -98,7 +98,7 @@ The manager **never powers a VM off by itself** to apply a resize. If a change n
 | **libvirt** | Changes the persistent definition first (`--config`), then the running domain (`--live`). A grow within the headroom provisioned at create time (VMClass hot-add flags, ceiling min(4x initial, 64) vCPUs, 4x memory) is applied live; anything else, and every memory **shrink** of a running VM, is *restart required*. The primary disk grows live (`blockresize`, grow-only; a best-effort in-guest filesystem grow needs the guest agent). A domain that is paused, suspended, shutting down or in an unknown state is refused with a retryable error before anything changes |
 | **Proxmox** | Reports `restart_required: false`. A CPU or memory change that PVE stores as *pending* (hot-plug not enabled for it) is currently reported as applied; detecting it is a follow-up. Validated against an in-repo PVE fake for this path, not a real PVE |
 
-Clustered libvirt Providers additionally hold a running VM's **shrink** until the VM is powered off (`ShrinkPendingPowerOff`) and refuse to resize anything while the Provider lacks the honest-reconfigure capability (`ProviderLacksHonestReconfigure`). `status.currentResources` always records, per resource, the larger of the size the VM runs with and the size it boots with next. The full contract is in [`reconfigure-results.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/reconfigure-results.md).
+Clustered libvirt Providers additionally hold a running VM's **shrink** until the VM is powered off (`ShrinkPendingPowerOff`) and refuse to resize anything while the Provider lacks the honest-reconfigure capability (`ProviderLacksHonestReconfigure`). `status.currentResources` always records, per resource, the larger of the size the VM runs with and the size it boots with next. The full contract is in [`reconfigure-results.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/reconfigure-results.md).
 
 ### Power states
 
@@ -147,15 +147,15 @@ spec:
 
 - **vSphere** supports memory snapshots (they need the VM powered on). `snapshotConfig.quiesce` is accepted but not passed on: the vSphere provider always takes the snapshot without quiescing the guest file system.
 - **libvirt:** a snapshot of a powered-off VM, or without memory, is an external disk-only snapshot; a memory snapshot of a running VM is internal. `SnapshotCreate` of a **powered-off** VM briefly ejects the CD-ROMs (including the cloud-init seed) so the snapshot does not store them; a running VM is never ejected.
-- **libvirt, delete order with memory snapshots:** a memory snapshot taken after a disk-only snapshot is stored inside the disk-only snapshot's overlay. Deleting the disk-only snapshot first would destroy the memory snapshot's data, so since v0.4.0-rc9 the provider refuses (`DeleteBlocked`, naming the snapshots to delete first). **Delete the memory snapshots first, then the disk-only one.**
+- **libvirt, delete order with memory snapshots:** a memory snapshot taken after a disk-only snapshot is stored inside the disk-only snapshot's overlay. Deleting the disk-only snapshot first would destroy the memory snapshot's data, so in v0.4.0 the provider refuses (`DeleteBlocked`, naming the snapshots to delete first). **Delete the memory snapshots first, then the disk-only one.**
 - **libvirt:** while another domain uses the VM's disk (a linked clone made by an earlier release), snapshot create, delete and revert of that VM are refused (`VM_DISK_IN_USE`).
 - **Proxmox:** a snapshot revert is owner-checked and returns a task, which the manager polls.
 
-See [libvirt clones and the linked-clone dependency](https://github.com/projectbeskar/virtrigaud/blob/main/docs/libvirt-clones.md#deleting-memory-and-disk-only-snapshots-of-the-same-vm) for the delete rules and the manual cleanup of a memory snapshot whose data an earlier release already destroyed.
+See [libvirt clones and the linked-clone dependency](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#deleting-memory-and-disk-only-snapshots-of-the-same-vm) for the delete rules and the manual cleanup of a memory snapshot whose data an earlier release already destroyed.
 
 ### Reverting to a snapshot
 
-`spec.snapshot.revertToRef` on the `VirtualMachine` reverts it to a `VMSnapshot`. Up to v0.4.0-rc5 the field was accepted and ignored; since v0.4.0-rc6 the controller acts on it.
+`spec.snapshot.revertToRef` on the `VirtualMachine` reverts it to a `VMSnapshot`. In v0.3.11 the field was accepted and ignored; in v0.4.0 the controller acts on it.
 
 1. Power the VM off. VirtRigaud never powers a VM off for a revert:
 
@@ -179,11 +179,11 @@ Rules:
 - **A failed revert is not retried by itself.** Remove the field and set it again, except for a refusal the provider repeats every time (`FailedPrecondition`), whose message says what to do instead.
 - **Unknown outcomes** (a lost answer, a clustered host that stopped answering) are re-sent on a backoff (no sooner than 6 minutes, up to 5 calls) only while the VM is still seen `Off`; otherwise the revert ends `Failed` with a message that the VM may or may not have been reverted. A revert task that has not ended after 2 hours also ends `Failed`.
 - **GitOps:** a `VirtualMachine` re-created from the same manifest is a new VM; the field then names a snapshot of the old VM and is refused (`SnapshotForAnotherVM`). Do not keep `revertToRef` in Git after the revert if VMs are re-created from it.
-- **libvirt:** a revert needs a snapshot that does not store the cloud-init CD-ROM. A disk-only snapshot taken while the VM was **running**, or by v0.4.0-rc6 or earlier, is refused with `RevertFailed` and nothing changes: take the snapshot with the VM powered off. libvirt 9.9 or later is needed for external snapshots.
+- **libvirt:** a revert needs a snapshot that does not store the cloud-init CD-ROM. A disk-only snapshot taken while the VM was **running**, or by v0.3.11 or earlier, is refused with `RevertFailed` and nothing changes: take the snapshot with the VM powered off. libvirt 9.9 or later is needed for external snapshots.
 - `status.currentResources` is not changed by a revert.
 
 !!! note "Validation status"
-    The revert flow is covered by controller unit and envtest tests that drive a scripted provider fake, and was run in the lab on vSphere, on Proxmox and on libvirt (single-host and clustered; the libvirt run found the cloud-init CD-ROM problem fixed in rc7). Other versions of those hypervisors are untested. Read [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-snapshot-revert.md) before relying on it.
+    The revert flow is covered by controller unit and envtest tests that drive a scripted provider fake, and was run in the lab on vSphere, on Proxmox and on libvirt (single-host and clustered; the libvirt run found the cloud-init CD-ROM problem described above, which v0.4.0 handles). Other versions of those hypervisors are untested. Read [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md) before relying on it.
 
 ## Cloning
 
@@ -213,7 +213,7 @@ spec:
 - `spec.prepare.onMissing`: `Import` prepares the image on the Provider; `Fail` and `Wait` never prepare and hold the VM until the image is prepared out of band.
 - Prepare state is recorded **per Provider** in `status.providerStatus["<namespace>/<name>"]` and `status.availableOn`; a VM consults only the entry of the Provider it uses. `status.phase` is one of `Pending`, `Downloading`, `Importing`, `Converting`, `Optimizing`, `Ready`, `Failed`.
 - Prepared images carry an identity stamp (ADR-0009): a prepared image is reused only if it was stamped for the same `spec.source`; a provider that imports images but does not report artifact identity is held. libvirt image paths (`source.libvirt.path`) must resolve to a regular file directly inside an allowed image directory (`VIRTRIGAUD_LIBVIRT_IMAGE_DIRS`, default `/var/lib/libvirt/images`).
-- Reference: [`image-preparation.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/image-preparation.md).
+- Reference: [`image-preparation.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/image-preparation.md).
 
 ## IP addresses (`status.ips`)
 
@@ -225,13 +225,13 @@ spec:
 | Proxmox | QEMU guest agent (`network-get-interfaces`) |
 | libvirt | The guest agent, with `virsh domifaddr` (`--source agent`, then `lease`, then `arp`) as the fallback |
 
-On libvirt, a guest on libvirt's NAT `default` network shows its DHCP lease without the guest agent. A guest on a **host bridge** (`VMNetworkAttachment` `spec.network.libvirt.bridge`) has no libvirt lease: its address shows only if the QEMU guest agent runs in the guest (or the host happens to hold an ARP entry for the guest's MAC). The cloud-init the provider injects by default installs and starts `qemu-guest-agent`; an image or `spec.userData` that does not has none. Up to v0.4.0-rc7, libvirt listed loopback and link-local addresses and dropped lease rows; tooling that took `status.ips[0]` should expect the filtered list. Reference: [`vm-status-ips.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-status-ips.md).
+On libvirt, a guest on libvirt's NAT `default` network shows its DHCP lease without the guest agent. A guest on a **host bridge** (`VMNetworkAttachment` `spec.network.libvirt.bridge`) has no libvirt lease: its address shows only if the QEMU guest agent runs in the guest (or the host happens to hold an ARP entry for the guest's MAC). The cloud-init the provider injects by default installs and starts `qemu-guest-agent`; an image or `spec.userData` that does not has none. In v0.3.11, libvirt listed loopback and link-local addresses and dropped lease rows; tooling that took `status.ips[0]` should expect the filtered list. Reference: [`vm-status-ips.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-ips.md).
 
 ## Detaching and adopting VMs
 
 ### `spec.providerRef` is immutable once bound
 
-Once a VM is bound to a hypervisor VM (`status.id`, or a clustered `status.placement.pendingHost`, is set), `spec.providerRef` can no longer be changed: the API server rejects the update (a CEL rule on the CRD). Before binding it stays editable, for example to fix a typo after a failed create. The operator also records the Provider it bound through in `status.boundProvider` and makes no provider call for the VM unless `spec.providerRef` still resolves to it; a mismatch shows `Ready=False` / `ProviderRefMismatch`. See [`vm-provider-binding.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-provider-binding.md).
+Once a VM is bound to a hypervisor VM (`status.id`, or a clustered `status.placement.pendingHost`, is set), `spec.providerRef` can no longer be changed: the API server rejects the update (a CEL rule on the CRD). Before binding it stays editable, for example to fix a typo after a failed create. The operator also records the Provider it bound through in `status.boundProvider` and makes no provider call for the VM unless `spec.providerRef` still resolves to it; a mismatch shows `Ready=False` / `ProviderRefMismatch`. See [`vm-provider-binding.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-provider-binding.md).
 
 ### Stop managing a VM without destroying it
 
@@ -252,7 +252,7 @@ If the provider refuses to delete a VM because other domains depend on its disk 
 
 ### Adoption
 
-Adoption brings existing hypervisor VMs under management. It is a controller in the manager, not a CRD, triggered by annotations on the **Provider**: `virtrigaud.io/adopt-vms: "true"`, an optional `virtrigaud.io/adopt-filter` (JSON with `namePattern`, `powerState`, `minCPU`, `minMemoryMiB`, ...) and, on a single-host Provider, `virtrigaud.io/adopt-stamped-vms: "true"` to take VMs whose owner stamp names only VirtualMachines that are not in this cluster. Creating a VirtualMachine whose name matches an existing hypervisor VM does **not** bind to it: the provider binds only a VM stamped with that VirtualMachine's own UID, and otherwise the create fails with `Ready=False` / `ProviderConflict`. An adopted VM is stamped with its new VirtualMachine before it is bound. See [`vm-adoption-example.yaml`](../../examples/vm-adoption-example.yaml) and [`vm-ownership.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-ownership.md).
+Adoption brings existing hypervisor VMs under management. It is a controller in the manager, not a CRD, triggered by annotations on the **Provider**: `virtrigaud.io/adopt-vms: "true"`, an optional `virtrigaud.io/adopt-filter` (JSON with `namePattern`, `powerState`, `minCPU`, `minMemoryMiB`, ...) and, on a single-host Provider, `virtrigaud.io/adopt-stamped-vms: "true"` to take VMs whose owner stamp names only VirtualMachines that are not in this cluster. Creating a VirtualMachine whose name matches an existing hypervisor VM does **not** bind to it: the provider binds only a VM stamped with that VirtualMachine's own UID, and otherwise the create fails with `Ready=False` / `ProviderConflict`. An adopted VM is stamped with its new VirtualMachine before it is bound. See [`vm-adoption-example.yaml`](../../examples/vm-adoption-example.yaml) and [`vm-ownership.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-ownership.md).
 
 ## Placement and sets
 
@@ -289,7 +289,7 @@ Events you will see on a VM: `SnapshotRevertStarted`, `SnapshotRevertSucceeded`,
 
 - **Snapshots:** set a `maxAge`, use memory snapshots sparingly, take libvirt snapshots you may want to revert to with the VM powered off, and test the revert procedure before you need it.
 - **Reconfiguration:** make incremental changes, enable hot-add in the VMClass for VMs that must resize without a restart, and take a snapshot before a major change.
-- **Calls whose outcome is unknown:** when a provider call's answer is lost, the manager holds the object (`CreateOutcomeUnknown`, `CloneOutcomeUnknown`) instead of repeating a call that could duplicate a VM. See [`provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/provider-call-outcomes.md).
+- **Calls whose outcome is unknown:** when a provider call's answer is lost, the manager holds the object (`CreateOutcomeUnknown`, `CloneOutcomeUnknown`) instead of repeating a call that could duplicate a VM. See [`provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md).
 
 ## Troubleshooting
 

@@ -143,8 +143,8 @@ Apply and verify:
 ```bash
 kubectl apply -f provider.yaml
 kubectl get providers
-# NAME               TYPE      READY   AGE
-# vsphere-provider   vsphere   true    10s
+# NAME               TYPE      ENDPOINT                      HEALTHY   CONNECTED VMS   AGE
+# vsphere-provider   vsphere   https://vcenter.example.com   true      0               10s
 ```
 
 !!! note "TLS block required"
@@ -309,8 +309,8 @@ kubectl get events --field-selector involvedObject.name=my-first-vm
 Once the VM is ready:
 
 ```
-NAME          PROVIDER           CLASS   IMAGE       PHASE     AGE
-my-first-vm   vsphere-provider   small   ubuntu-22   Running   2m
+NAME          PHASE     PROVIDER           CLASS   IMAGE       IPS            AGE
+my-first-vm   Running   vsphere-provider   small   ubuntu-22   192.0.2.50     2m
 ```
 
 `status.phase` is set on every status write and is never empty: `Pending`, `Provisioning`, `Running`, `Stopped`, `Reconfiguring`, `Deleting` or `Failed`. The `Ready`, `Provisioning`, `Reconfiguring` and `Placed` conditions carry the reason; every phase, condition and reason is explained in the [VM Status Reference](../guides/vm-status.md).

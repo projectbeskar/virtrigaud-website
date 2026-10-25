@@ -90,7 +90,7 @@ vrtg completion powershell | Out-String | Invoke-Expression
 
 ## vrtg
 
-The CLI for looking at VirtRigaud resources from a terminal. Defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg/main.go).
+The CLI for looking at VirtRigaud resources from a terminal. Defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg/main.go).
 
 ### Global Flags
 
@@ -197,7 +197,7 @@ These commands exist so the command tree is stable, but they print a "not implem
 
 ## vcts
 
-VirtRigaud Conformance Test Suite. Defined in [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vcts/main.go) with the runner in [`internal/conformance/`](https://github.com/projectbeskar/virtrigaud/tree/main/internal/conformance).
+VirtRigaud Conformance Test Suite. Defined in [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vcts/main.go) with the runner in [`internal/conformance/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/internal/conformance).
 
 !!! warning "Spec validation works; test execution does not"
     `vcts validate` and `vcts list` work. `vcts run` fails at its first step in v0.4.0: it reads the Provider with a client that does not register the VirtRigaud API types (`failed to get provider capabilities: failed to get provider <name>: no kind is registered for the type v1beta1.Provider in scheme`), so it writes no result files. Behind that, the step executor that would create, update, delete, wait for and validate resources returns "not implemented" for every step type, and the runner infers a provider's capabilities from `spec.type` rather than from its status. Treat `vcts run` as scaffolding.
@@ -285,7 +285,7 @@ When a run completes, results are written in three formats:
 
 ## vrtg-provider
 
-Provider development toolkit for creating and managing VirtRigaud providers. Defined in [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/main.go).
+Provider development toolkit for creating and managing VirtRigaud providers. Defined in [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/main.go).
 
 ### Usage
 
@@ -305,10 +305,10 @@ vrtg-provider [command] [flags]
 
 #### init - Initialize Provider
 
-Bootstrap a new provider project with scaffolded code. Defined in [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/init.go).
+Bootstrap a new provider project with scaffolded code. Defined in [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/init.go).
 
 !!! warning "The generated scaffold needs fixing before it builds (v0.4.0)"
-    The project that `init` writes does not compile as generated: `main.go` imports `github.com/projectbeskar/virtrigaud/internal/version` (an `internal` package that a separate Go module cannot import), `internal/provider/provider.go` has an unused `fmt` import, its `ImagePrepare` stub still returns `*TaskResponse` (the RPC now returns `ImagePrepareResponse`), and its `go.mod` pins `github.com/projectbeskar/virtrigaud v0.1.0`. Treat it as a skeleton: fix those points, or start from [`cmd/provider-mock/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/provider-mock/main.go) as described in [Provider Development](../development/providers.md).
+    The project that `init` writes does not compile as generated: `main.go` imports `github.com/projectbeskar/virtrigaud/internal/version` (an `internal` package that a separate Go module cannot import), `internal/provider/provider.go` has an unused `fmt` import, its `ImagePrepare` stub still returns `*TaskResponse` (the RPC now returns `ImagePrepareResponse`), and its `go.mod` pins `github.com/projectbeskar/virtrigaud v0.1.0`. Treat it as a skeleton: fix those points, or start from [`cmd/provider-mock/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/provider-mock/main.go) as described in [Provider Development](../development/providers.md).
 
 ```bash
 vrtg-provider init <provider-name> [flags]
@@ -340,7 +340,7 @@ The scaffold is created under `<output>/providers/<provider-name>/`. The provide
 !!! warning "`generate`, `verify` and `publish` do not run in v0.4.0"
     All three first check that the current directory is a provider project and always fail with `Error: not in a provider project directory: go.mod does not contain virtrigaud dependency`, even in a project created by `vrtg-provider init` (the check compares the whole `go.mod` text with the module path, so it never matches). The descriptions below are what the code is written to do.
 
-Regenerate protocol buffer bindings and other generated code. Defined in [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/generate.go).
+Regenerate protocol buffer bindings and other generated code. Defined in [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/generate.go).
 
 Must be run from within a provider project directory (the directory must contain `go.mod` and a `Makefile`, and `go.mod` must mention `github.com/projectbeskar/virtrigaud`). It runs the project's `make proto` target, falling back to `buf generate`; unless `--proto-only` is given it then runs `go generate ./...` and the project's `generate` and `deepcopy` make targets when they exist.
 
@@ -367,7 +367,7 @@ vrtg-provider generate --clean
 
 #### verify - Verification
 
-Verify a provider project: build, code-quality checks, unit tests and a VCTS conformance run. Defined in [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/verify.go).
+Verify a provider project: build, code-quality checks, unit tests and a VCTS conformance run. Defined in [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/verify.go).
 
 Must be run from within a provider project directory. The build (`make build`, else `go build ./...`) and the unit tests (`make test`, else `go test ./...`) fail the command. The code-quality step (`gofmt -l`, `go vet`, `golangci-lint run`, `make lint`) and the conformance step only print warnings.
 
@@ -399,7 +399,7 @@ vrtg-provider verify --profile clone
 
 #### publish - Publishing
 
-Create a catalog entry for a provider and write it to a catalog YAML file. Defined in [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/publish.go).
+Create a catalog entry for a provider and write it to a catalog YAML file. Defined in [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/publish.go).
 
 Must be run from within a provider project directory.
 
@@ -476,7 +476,7 @@ providers/my-provider/
 
 ## virtrigaud-loadgen
 
-Load generator that creates, deletes and lists `VirtualMachine` resources in a cluster and records how long each operation took. Defined in [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/virtrigaud-loadgen/main.go).
+Load generator that creates, deletes and lists `VirtualMachine` resources in a cluster and records how long each operation took. Defined in [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/virtrigaud-loadgen/main.go).
 
 !!! danger "Run it in a dedicated namespace"
     The `delete` operation deletes a **random VirtualMachine from the target namespace**; it does not restrict itself to VMs that `virtrigaud-loadgen` created. Point `--namespace` at a throw-away namespace, or use `--dry-run`.
@@ -552,7 +552,7 @@ The Markdown summary contains the totals, the operation counts, and a table of c
 
 ## manager
 
-The `manager` binary is the VirtRigaud controller manager. It is not invoked by end users directly - it runs as a Deployment inside the cluster, installed by the Helm chart. The flags below are relevant to operators tuning its behaviour. Defined in [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/manager/main.go).
+The `manager` binary is the VirtRigaud controller manager. It is not invoked by end users directly - it runs as a Deployment inside the cluster, installed by the Helm chart. The flags below are relevant to operators tuning its behaviour. Defined in [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/manager/main.go).
 
 `manager --version` (as the first argument) prints the version and exits. The other flags use Go's `flag` syntax (`-flag` and `--flag` are equivalent), and the standard controller-runtime `--zap-*` logging flags are also accepted.
 
@@ -683,7 +683,7 @@ kubectl logs -n <namespace> -l app.kubernetes.io/instance=<provider-name>
 
 ## alpha-to-beta-dryrun
 
-A one-shot migration helper from the v1alpha1 API era. Defined in [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/alpha-to-beta-dryrun/main.go).
+A one-shot migration helper from the v1alpha1 API era. Defined in [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/alpha-to-beta-dryrun/main.go).
 
 !!! warning "Tombstoned"
     The `v1alpha1` API was removed before v0.3.0. This binary now exits with status 1 and an error message explaining that v1alpha1 resources should have been migrated before reaching this version. It is retained in the repository as a safety net, has no flags or functionality, and is not part of the release binaries.

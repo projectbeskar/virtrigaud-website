@@ -98,7 +98,7 @@ The vSphere provider enables VirtRigaud to manage VMware vSphere environments, i
 - Power operations (on, off, restart, suspend)
 - Snapshot management, including memory snapshots of a powered-on VM
 - VM cloning (full and linked) and templates
-- Image preparation: an OVA/OVF source is imported into vCenter as a template, named and verified by the `VMImage` identity (since v0.4.0, [ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0009-prepared-image-artifact-identity.md))
+- Image preparation: an OVA/OVF source is imported into vCenter as a template, named and verified by the `VMImage` identity (since v0.4.0, [ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0009-prepared-image-artifact-identity.md))
 - Disk export and import (`vmdk`, `qcow2`, `raw`) for cross-hypervisor migration over PVC, S3 and NFS
 - Resource allocation and configuration
 
@@ -158,7 +158,7 @@ New in v0.4.0: a `Provider` with `spec.topology: cluster` fronts several bare li
 - A clustered provider runs a single replica with the `Recreate` strategy, so a rollout is a short outage. A delete waits while any host of the Provider is unreachable (`DeleteBlocked`); `virtrigaud.io/force-delete` and `virtrigaud.io/orphan-on-delete` still release it.
 - Not yet supported on a clustered provider: linked clones, image preparation (`ImagePrepare`), and host-to-host migration.
 
-See the example manifests `provider-libvirt-clustered.yaml`, `hostpool-clustered.yaml` and `host-libvirt-clustered-first-vm.yaml` in the [`examples/`](https://github.com/projectbeskar/virtrigaud/tree/main/examples) directory of the main repository, and [Clustered provider inventory](https://github.com/projectbeskar/virtrigaud/blob/main/docs/clustered-provider-inventory.md) for the full design.
+See the example manifests `provider-libvirt-clustered.yaml`, `hostpool-clustered.yaml` and `host-libvirt-clustered-first-vm.yaml` in the [`examples/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/examples) directory of the main repository, and [Clustered provider inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md) for the full design.
 
 ### Proxmox Provider
 
@@ -286,7 +286,7 @@ The `publish` command will:
 
 In v0.4.0 `vrtg-provider publish` refuses to run (`not in a provider project directory`), see the [CLI Tools Reference](cli-tools.md#vrtg-provider). Write the catalog entry by hand until that is fixed.
 
-See [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/publish.go) for the full flag list.
+See [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/publish.go) for the full flag list.
 
 !!! note "Dry-run first"
     Add `--dry-run` to see what the catalog entry would look like without writing any files.

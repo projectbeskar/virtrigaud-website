@@ -26,7 +26,7 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 | [vmclass-small.yaml](vmclass-small.yaml) | A VMClass (CPU, memory, disk defaults, firmware, guest-tools policy, `extraConfig`) |
 | [vmimage-ubuntu.yaml](vmimage-ubuntu.yaml) | A VMImage |
 | [vmnetwork-app.yaml](vmnetwork-app.yaml) | A VMNetworkAttachment |
-| [vmimage-prepare-on-create.yaml](vmimage-prepare-on-create.yaml) | A libvirt VMImage with a URL source and a VirtualMachine that uses it: the provider downloads and imports the image before the VM is created (see [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/main/docs/image-preparation.md)) |
+| [vmimage-prepare-on-create.yaml](vmimage-prepare-on-create.yaml) | A libvirt VMImage with a URL source and a VirtualMachine that uses it: the provider downloads and imports the image before the VM is created (see [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/image-preparation.md)) |
 | [cloud-init-with-metadata.yaml](cloud-init-with-metadata.yaml) | Cloud-init `userData` and `metaData` on a VirtualMachine, inline and from a Secret, and the default meta-data |
 
 ## Providers and credentials
@@ -39,7 +39,7 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 | [libvirt-advanced-example.yaml](libvirt-advanced-example.yaml) | A libvirt Provider with a host-resident image, a network and a VM |
 | [proxmox-complete-example.yaml](proxmox-complete-example.yaml) | A complete Proxmox VE setup: credentials, Provider, classes, images, networks, VMs and snapshots |
 | [multi-provider-example.yaml](multi-provider-example.yaml) | vSphere and libvirt Providers in one cluster, with shared classes |
-| [shared-provider-consumer-namespaces.yaml](shared-provider-consumer-namespaces.yaml) | A Provider, VMClass and VMImage shared with other namespaces through `spec.consumerNamespaceSelector`, and a tenant VM that uses them ([cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/main/docs/cross-namespace-references.md)) |
+| [shared-provider-consumer-namespaces.yaml](shared-provider-consumer-namespaces.yaml) | A Provider, VMClass and VMImage shared with other namespaces through `spec.consumerNamespaceSelector`, and a tenant VM that uses them ([cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-references.md)) |
 | [vm-adoption-example.yaml](vm-adoption-example.yaml) | Bringing existing hypervisor VMs under management with the adoption annotations, per provider, and detaching a VM with `virtrigaud.io/orphan-on-delete` |
 | [secrets/](secrets/vsphere-creds.yaml) | Credential Secrets per provider: [vSphere](secrets/vsphere-creds.yaml), [libvirt](secrets/libvirt-creds.yaml) (SSH key or password), [Proxmox](secrets/proxmox-creds.yaml) (API token or username/password) |
 
@@ -137,7 +137,7 @@ kubectl apply -f examples/provider-vsphere.yaml
 kubectl apply -f examples/vmimage-ubuntu.yaml
 kubectl apply -f examples/vm-ubuntu-small.yaml
 
-# Watch the VM: PHASE and READY come from status.phase and the Ready condition
+# Watch the VM: PHASE comes from status.phase; read the Ready condition with the jsonpath below
 kubectl get vm my-vm -w
 
 # Why is it not Ready?
@@ -151,7 +151,7 @@ kubectl patch virtualmachine my-vm --type=merge \
   -p '{"spec":{"classRef":{"name":"medium"}}}'
 ```
 
-The examples are files in this site's source tree; download the ones you need, or take them from the `examples/` directory of the [repository](https://github.com/projectbeskar/virtrigaud/tree/main/examples).
+The examples are files in this site's source tree; download the ones you need, or take them from the `examples/` directory of the [repository](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/examples).
 
 ## File organization
 

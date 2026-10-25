@@ -51,7 +51,7 @@ You never write the pod's arguments or environment: the controller derives them.
 | `spec.type` | Env `PROVIDER_TYPE` |
 | `spec.endpoint` | Env `PROVIDER_ENDPOINT` |
 | `metadata.namespace`, `metadata.name` | Env `PROVIDER_NAMESPACE`, `PROVIDER_NAME` |
-| `spec.runtime.service.tls` | Env `TLS_ENABLED`; with `tls.enabled: true` the Secret is mounted at `/etc/virtrigaud/tls`; with `tls.enabled: false` the pod gets `VIRTRIGAUD_PROVIDER_INSECURE=true` so it starts in plaintext. `TLS_INSECURE_SKIP_VERIFY` carries `spec.insecureSkipVerify` |
+| `spec.runtime.service.tls` | Env `TLS_ENABLED`; with `tls.enabled: true` the Secret is mounted at `/etc/virtrigaud/tls`; with `tls.enabled: false` the pod gets `VIRTRIGAUD_PROVIDER_INSECURE=true` so it starts in plaintext. `TLS_INSECURE_SKIP_VERIFY` carries the top-level `spec.insecureSkipVerify` (deprecated; it controls whether the provider verifies the hypervisor's certificate), not `spec.runtime.service.tls.insecureSkipVerify`, which only makes the manager skip verification of the provider's server certificate |
 | `spec.runtime.logLevel`, `logFormat` | Env `LOG_LEVEL` (`debug`, `info`, `warn`, `error`), `LOG_FORMAT` (`text`, `json`) |
 | `spec.defaults.{datastore,storagePod,cluster,folder}` | Env `PROVIDER_DEFAULT_DATASTORE`, `_STORAGE_POD`, `_CLUSTER`, `_FOLDER` |
 | `spec.runtime.env` | Appended to the environment |
@@ -198,7 +198,7 @@ spec:
       kubernetes.io/metadata.name: team-a      # unset: own namespace only; {}: every namespace
 ```
 
-A reference from a namespace the selector does not match is refused with `Ready=False` / `ConsumerNotAllowed`, and no provider call is made. Each object grants for itself: sharing a Provider does not share its VMClasses or VMImages. **Sharing a Provider shares everything its credentials can reach** (a tenant can write its own `VMImage` naming any template or image file the account can read): share only with namespaces trusted with that, and scope the hypervisor account accordingly. See [`shared-provider-consumer-namespaces.yaml`](../../examples/shared-provider-consumer-namespaces.yaml) and [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/main/docs/cross-namespace-references.md).
+A reference from a namespace the selector does not match is refused with `Ready=False` / `ConsumerNotAllowed`, and no provider call is made. Each object grants for itself: sharing a Provider does not share its VMClasses or VMImages. **Sharing a Provider shares everything its credentials can reach** (a tenant can write its own `VMImage` naming any template or image file the account can read): share only with namespaces trusted with that, and scope the hypervisor account accordingly. See [`shared-provider-consumer-namespaces.yaml`](../../examples/shared-provider-consumer-namespaces.yaml) and [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-references.md).
 
 ## Clustered topology (experimental)
 
@@ -214,7 +214,7 @@ The controller keeps the finalizer `provider.infra.virtrigaud.io/in-use` on ever
 - **Delete the VMs, and wait for them to go, before deleting their namespace.** Deleting a namespace removes the provider Deployment too; a VM deleted afterwards is held with `ProviderUnavailable` and the Provider shows `ProviderInUseRuntimeNotKept` until you force-delete or the VMs are gone.
 - Delete VMs and Providers before removing the manager, or nothing releases the finalizer.
 
-See [VM provider binding](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-provider-binding.md#deleting-a-provider) for the details and the rollback procedure.
+See [VM provider binding](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-provider-binding.md#deleting-a-provider) for the details and the rollback procedure.
 
 ## Security model
 
@@ -243,7 +243,7 @@ The provider gRPC service (`provider.v1.Provider`, `proto/provider/v1/provider.p
 | Migration | `ExportDisk`, `ImportDisk`, `GetDiskInfo`, `DeleteStagedDisk`, `DeleteLandedDisk` |
 | Inventory and ownership | `ListVMs`, `TransferOwner`, `ListHosts`, `GetHostInfo` |
 
-An RPC a provider does not implement answers `Unimplemented`, and what a provider supports is reported by `GetCapabilities` into `Provider.status.reportedCapabilities`. Error handling: the manager retries transient failures with backoff, a per-Provider circuit breaker stops calls to a provider that keeps failing (definite per-VM refusals do not count toward it), and a call whose outcome was lost is held rather than repeated ([Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/main/docs/provider-call-outcomes.md)).
+An RPC a provider does not implement answers `Unimplemented`, and what a provider supports is reported by `GetCapabilities` into `Provider.status.reportedCapabilities`. Error handling: the manager retries transient failures with backoff, a per-Provider circuit breaker stops calls to a provider that keeps failing (definite per-VM refusals do not count toward it), and a call whose outcome was lost is held rather than repeated ([Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md)).
 
 ## Observability
 

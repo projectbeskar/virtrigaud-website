@@ -213,7 +213,7 @@ vmsets.infra.virtrigaud.io
 vmsnapshots.infra.virtrigaud.io
 ```
 
-`hosts` and `hostpools` describe the hypervisor hosts behind a clustered libvirt Provider and are unused otherwise.
+`hosts` and `hostpools` describe the hypervisor hosts behind a clustered libvirt Provider and are unused otherwise. See [clustered libvirt providers](../guides/clustered/index.md).
 
 ### Check the admission policy (Kubernetes 1.30+)
 

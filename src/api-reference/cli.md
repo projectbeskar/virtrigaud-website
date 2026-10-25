@@ -51,7 +51,7 @@ done
 
 ## vrtg
 
-CLI for looking at VirtRigaud resources. Source: [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg/main.go).
+CLI for looking at VirtRigaud resources. Source: [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg/main.go).
 
 ### Global Flags
 
@@ -96,7 +96,7 @@ vrtg provider status vsphere-prod -n virtrigaud-system
 
 ## vcts
 
-VirtRigaud Conformance Test Suite. Source: [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vcts/main.go).
+VirtRigaud Conformance Test Suite. Source: [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vcts/main.go).
 
 ### Global Flags
 
@@ -144,7 +144,7 @@ The repository ships `test/conformance/specs/basic-lifecycle.yaml` with two test
 
 ## vrtg-provider
 
-Development toolkit for provider projects. Source: [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/main.go).
+Development toolkit for provider projects. Source: [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/main.go).
 
 ### Global Flags
 
@@ -158,7 +158,7 @@ Development toolkit for provider projects. Source: [`cmd/vrtg-provider/main.go`]
 
 #### init
 
-Initialize a new provider project. Source: [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/init.go).
+Initialize a new provider project. Source: [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/init.go).
 
 ```bash
 vrtg-provider init <provider-name> [flags]
@@ -183,7 +183,7 @@ vrtg-provider init myprovider --type libvirt --output ./providers/
 !!! warning "`generate`, `verify` and `publish` do not run in v0.4.0"
     Each first checks that the directory is a provider project and always fails with `not in a provider project directory: go.mod does not contain virtrigaud dependency`, even in a project created by `init`. See the [CLI Tools Reference](../references/cli-tools.md#generate-code-generation).
 
-Regenerate protocol buffer bindings. Source: [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/generate.go). Run from within a provider project directory (`go.mod` and `Makefile` required).
+Regenerate protocol buffer bindings. Source: [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/generate.go). Run from within a provider project directory (`go.mod` and `Makefile` required).
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -192,7 +192,7 @@ Regenerate protocol buffer bindings. Source: [`cmd/vrtg-provider/generate.go`](h
 
 #### verify
 
-Build, check, test and (best effort) conformance-check a provider project. Source: [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/verify.go). Run from within a provider project directory.
+Build, check, test and (best effort) conformance-check a provider project. Source: [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/verify.go). Run from within a provider project directory.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -209,7 +209,7 @@ vrtg-provider verify --skip-conformance
 
 #### publish
 
-Write a catalog entry for a provider. Source: [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/vrtg-provider/publish.go). Run from within a provider project directory.
+Write a catalog entry for a provider. Source: [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/publish.go). Run from within a provider project directory.
 
 | Flag | Required | Default | Description |
 |------|----------|---------|-------------|
@@ -243,7 +243,7 @@ Prints the version and git SHA compiled into the binary (`dev` / `unknown` for a
 
 ## virtrigaud-loadgen
 
-Load generator for VirtualMachine create, delete and list operations. In v0.4.0 those three operations fail against a real cluster (the client does not register the VirtRigaud API types); see the [CLI Tools Reference](../references/cli-tools.md#virtrigaud-loadgen). Source: [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/virtrigaud-loadgen/main.go).
+Load generator for VirtualMachine create, delete and list operations. In v0.4.0 those three operations fail against a real cluster (the client does not register the VirtRigaud API types); see the [CLI Tools Reference](../references/cli-tools.md#virtrigaud-loadgen). Source: [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/virtrigaud-loadgen/main.go).
 
 ### Global Flags
 
@@ -292,7 +292,7 @@ describe,test-provider,,2026-01-15T10:00:02Z,24µs,false,"failed to list VMs: no
 
 ## alpha-to-beta-dryrun
 
-A tombstoned migration helper from the v1alpha1 API era. Source: [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/alpha-to-beta-dryrun/main.go).
+A tombstoned migration helper from the v1alpha1 API era. Source: [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/alpha-to-beta-dryrun/main.go).
 
 !!! warning "No-op"
     The v1alpha1 API was removed before v0.3.0. Running this binary prints an error explaining that v1alpha1 resources should have already been migrated and exits with status 1. There are no flags and no useful operations, and it is not part of the release binaries.
@@ -301,7 +301,7 @@ A tombstoned migration helper from the v1alpha1 API era. Source: [`cmd/alpha-to-
 
 ## virtrigaud-manager flags
 
-The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typically invoked directly. The flags below are the ones it defines; run `manager --help` for the full list, which also includes the standard `--zap-*` logging flags. Source: [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/main/cmd/manager/main.go).
+The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typically invoked directly. The flags below are the ones it defines; run `manager --help` for the full list, which also includes the standard `--zap-*` logging flags. Source: [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/manager/main.go).
 
 | Flag | Default | Description |
 |------|---------|-------------|

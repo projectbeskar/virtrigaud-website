@@ -41,7 +41,7 @@ a password or a private key, both read from the Kubernetes Secret mounted at
     mode (`VIRTRIGAUD_LIBVIRT_NATIVE`, off by default) to compare its answers
     with `virsh`'s. The answers served are still `virsh`'s, so host
     requirements do not change. See
-    [ADR-0008](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0008-libvirt-pure-go-driver-and-ssh-transport.md).
+    [ADR-0008](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0008-libvirt-pure-go-driver-and-ssh-transport.md).
 
 ## Host prerequisites at a glance
 
@@ -190,7 +190,7 @@ the host key on every connection against the `known_hosts` file mounted at
 `/etc/virtrigaud/credentials/known_hosts`. A missing or empty file, or an entry
 for another host, is a hard failure: there is no trust-on-first-use. The error
 names the problem and `ProviderAvailable` reports it. See
-[ADR-0004](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0004-libvirt-ssh-host-key-verification.md).
+[ADR-0004](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0004-libvirt-ssh-host-key-verification.md).
 
 Collect the key from a trusted network path and add it as the `known_hosts` key
 of the credentials Secret. Use a placeholder in files you commit:
@@ -387,7 +387,7 @@ pool, keep the image catalog apart from the pool.
 `default` pool. If you add a directory here, add it to the
 [`VR_DISK_READ` sudo rule](#sudo-rules-for-disk-reads-and-copies) too.
 
-Full rules: [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/main/docs/image-preparation.md#libvirt-image-paths-sourcelibvirtpath).
+Full rules: [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/image-preparation.md#libvirt-image-paths-sourcelibvirtpath).
 
 ### Prepared images (`ImagePrepare`)
 
@@ -450,7 +450,7 @@ install -d -m 0711 -o <ssh user> -g <ssh user> /var/lib/libvirt/virtrigaud-seeds
   lists the commands to make old seeds private and to move them.
 
 Full reference:
-[libvirt domain ownership: cloud-init seed directory](https://github.com/projectbeskar/virtrigaud/blob/main/docs/libvirt-domain-ownership.md#cloud-init-seed-directory).
+[libvirt domain ownership: cloud-init seed directory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-domain-ownership.md#cloud-init-seed-directory).
 
 ## Sudo rules for disk reads and copies
 
@@ -483,7 +483,7 @@ as before except cloning or exporting a VM whose active disk is such an overlay.
 For the default pool directory `/var/lib/libvirt/images`, an SSH user
 `virtrigaud`, and an NFS migration export `nfs.example.com:/exports/virtrigaud`
 (adjust all three, and the paths of `qemu-img` and `timeout`), exactly as in the
-[libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/main/docs/libvirt-clones.md#what-the-copies-run-as-root)
+[libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#what-the-copies-run-as-root)
 reference:
 
 ```
@@ -531,7 +531,7 @@ virtrigaud ALL=(root) NOPASSWD: VR_DISK_READ, VR_CLONE_COPY, VR_EXPORT_COPY
 Without any rule, a `VR_DISK_READ`-less setup can instead repair each overlay by
 hand (`sudo chown -h libvirt-qemu:kvm -- <file>` and `sudo chmod 0640 -- <file>`
 with the VM off), which every new snapshot or revert needs again. See
-[Unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/main/docs/libvirt-clones.md#unreadable-disk-images).
+[Unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#unreadable-disk-images).
 
 ### QEMU version (CVE-2024-4467)
 
@@ -550,7 +550,7 @@ Libvirt `VMClone` of type `LinkedClone` is **refused** in v0.4.0 (the clone woul
 read its source's live disk, and powering the source on corrupts it): use
 `FullClone`. A full clone needs a powered-off source. Existing linked clones keep
 working, but their source VM cannot be deleted, reverted or snapshotted while
-they exist. See [libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/main/docs/libvirt-clones.md).
+they exist. See [libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md).
 
 ## Network configuration
 
@@ -566,7 +566,7 @@ agent in the guest (otherwise it stays empty unless the host happens to have an
 ARP entry for the guest's MAC). The provider adds the agent channel to every
 domain; make sure the image or your `spec.userData` installs and starts
 `qemu-guest-agent`. See
-[VM status IPs](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-status-ips.md).
+[VM status IPs](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-ips.md).
 
 The example below uses netplan on Ubuntu; consult your distribution for
 alternatives.
@@ -703,7 +703,7 @@ sudo aa-status | grep libvirt
   takes snapshots of a powered-off VM with the CD-ROM ejected, and refuses to
   revert to a snapshot that stored it. Take snapshots of VMs you want to be able
   to revert with the VM powered off. See
-  [VM snapshot revert](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-snapshot-revert.md).
+  [VM snapshot revert](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md).
 - If you see other denials in `journalctl -u apparmor` or the audit log, work
   out which path is blocked and add it to `/etc/apparmor.d/local/usr.sbin.libvirtd`
   rather than disabling the profile.

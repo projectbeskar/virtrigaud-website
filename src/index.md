@@ -132,7 +132,7 @@ VirtRigaud v0.4.0 ships **12 Custom Resource Definitions** in the `infra.virtrig
 | `VMImage` | Reference to a hypervisor template / OVA / cloud image. Can be shared with other namespaces through `spec.consumerNamespaceSelector`. |
 | `VMNetworkAttachment` | Logical network the VM attaches to (resolved per-provider). |
 | `VMSnapshot` | A point-in-time snapshot of a VirtualMachine. |
-| `VMMigration` | Inter-provider VM migration (export → import) through S3 or NFS staging. |
+| `VMMigration` | Inter-provider VM migration (export → import) through S3 or NFS staging (a legacy PVC backend also exists). |
 | `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.4.0. |
 | `VMPlacementPolicy` | Placement / anti-affinity rules. Applied via `VirtualMachine.spec.placementRef`; the clustered libvirt scheduler uses it as its constraint language. There is no standalone controller. |
 | `VMClone` | One-shot clone of an existing VM (vSphere, Proxmox and Libvirt). libvirt supports full clones only; linked clones are not supported there. |
