@@ -101,7 +101,7 @@ spec:
 
 ## Migration
 
-`VMMigration` moves a VM between providers. S3 and NFS staging are the validated backends, in any direction between vSphere, libvirt and Proxmox VE; the PVC backend is a legacy compatibility path that does not work for Proxmox or for host-resident libvirt disks. See the [Migration user guide](../migration/user-guide.md).
+`VMMigration` moves a VM between providers. S3 and NFS staging are the validated backends (S3 for every pair among vSphere, libvirt and Proxmox VE; NFS for all but vSphere ⇄ Proxmox VE, see the [validation tables](../migration/user-guide.md#what-virtrigaud-v040-supports)); the PVC backend is a legacy compatibility path that does not work for Proxmox or for host-resident libvirt disks. See the [Migration user guide](../migration/user-guide.md).
 
 | File | What it shows |
 |------|---------------|

@@ -29,9 +29,6 @@ The vSphere provider advertises the following via `GetCapabilities` (`internal/p
 | `SupportedDiskTypes` | `thin`, `thick`, `eager-zeroed` | Native VMDK provisioning modes. |
 | `SupportedNetworkTypes` | `standard`, `distributed` | Standard vSwitch portgroups and Distributed Virtual Switch portgroups. |
 
-!!! note "Memory snapshots"
-    Earlier versions of this page said the vSphere provider could not take memory snapshots. At v0.4.0 it does: `snapshotConfig.includeMemory: true` on a powered-on VM creates a snapshot with memory.
-
 For the full cross-provider matrix and resilience / observability story, see:
 
 - [Provider capabilities matrix](providers-capabilities.md): every capability across all providers.

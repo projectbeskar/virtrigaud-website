@@ -639,7 +639,7 @@ A clustered Provider is an ordinary `Provider` with `spec.topology: cluster`, `t
 
 ## VMMigration
 
-The `VMMigration` CRD migrates a virtual machine's disk from one provider to another (snapshot, export to staging storage, import, create the target VM). Disks are staged through **S3** or **NFS** (`pvc` is kept for compatibility). The S3 and NFS paths are validated across vSphere, libvirt and Proxmox VE in both directions; a clustered libvirt Provider is also a valid target (experimental). Other combinations are unverified. See the [Migration API reference](../migration/api-reference.md) for every field.
+The `VMMigration` CRD migrates a virtual machine's disk from one provider to another (snapshot, export to staging storage, import, create the target VM). Disks are staged through **S3** or **NFS** (`pvc` is kept for compatibility). S3 was validated for every pair among vSphere, libvirt and Proxmox VE, and NFS for five pairs (not vSphere ⇄ Proxmox VE); a clustered libvirt Provider is also a valid target (experimental). Other combinations are unverified, see [what was validated](../migration/user-guide.md#what-virtrigaud-v040-supports). See the [Migration API reference](../migration/api-reference.md) for every field.
 
 Full schema: [generated-crd-docs.md#vmmigration](generated-crd-docs.md#vmmigration)
 

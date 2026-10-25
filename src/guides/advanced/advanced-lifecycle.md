@@ -14,7 +14,7 @@ This page describes how a `VirtualMachine` moves through its lifecycle in VirtRi
 | `status.phase` | Set on every status write of the VirtualMachine controller ([phases](#phases)) |
 | Reconfiguration (CPU, memory, disk growth) | Functional; result is one of *applied*, *restart required* or *failed* ([details](#reconfiguration)) |
 | Snapshots (`VMSnapshot`) | Functional, subject to provider support; `maxAge` and `deleteOnVMDelete` retention are enforced ([details](#snapshot-management)) |
-| Snapshot revert (`spec.snapshot.revertToRef`) | Functional since v0.4.0-rc6; not yet validated on real hosts of every provider ([details](#reverting-to-a-snapshot)) |
+| Snapshot revert (`spec.snapshot.revertToRef`) | Functional since v0.4.0-rc6; run in the lab on vSphere, Proxmox and libvirt (single-host and clustered) ([details](#reverting-to-a-snapshot)) |
 | `VMClone` | Functional: `source.vmRef` only, same provider ([VM cloning](vm-cloning.md)) |
 | Image preparation (`VMImage.spec.prepare`) | Functional, lazily on first VM create ([details](#image-preparation)) |
 | VM adoption, `orphan-on-delete` | Functional ([details](#detaching-and-adopting-vms)) |
@@ -183,7 +183,7 @@ Rules:
 - `status.currentResources` is not changed by a revert.
 
 !!! note "Validation status"
-    The revert flow is covered by controller unit and envtest tests that drive a scripted provider fake. It has not been validated on a real vSphere, libvirt or Proxmox host for every provider. Read [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-snapshot-revert.md) before relying on it.
+    The revert flow is covered by controller unit and envtest tests that drive a scripted provider fake, and was run in the lab on vSphere, on Proxmox and on libvirt (single-host and clustered; the libvirt run found the cloud-init CD-ROM problem fixed in rc7). Other versions of those hypervisors are untested. Read [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-snapshot-revert.md) before relying on it.
 
 ## Cloning
 
