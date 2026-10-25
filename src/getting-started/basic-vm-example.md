@@ -5,11 +5,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # Creating Your First Virtual Machine
 
-This guide walks through creating a complete, working virtual machine from start to finish using VirtRigaud v0.3.8.
+This guide walks through creating a complete, working virtual machine from start to finish using VirtRigaud v0.4.0.
 
 ## Prerequisites
 
-- VirtRigaud v0.3.8 installed in your Kubernetes cluster
+- VirtRigaud v0.4.0 installed in your Kubernetes cluster
 - A configured Provider (vSphere, Libvirt, or Proxmox)
 - `kubectl` access to your cluster
 
@@ -31,10 +31,8 @@ Create credentials for your hypervisor, then create the Provider CR.
     ```bash
     kubectl create secret generic vsphere-creds \
       --namespace default \
-      --from-literal=endpoint=https://vcenter.example.com \
       --from-literal=username=administrator@vsphere.local \
-      --from-literal=password=your-password \
-      --from-literal=insecure=false
+      --from-literal=password=your-password
     ```
 
     ```yaml
@@ -48,21 +46,34 @@ Create credentials for your hypervisor, then create the Provider CR.
       endpoint: https://vcenter.example.com
       credentialSecretRef:
         name: vsphere-creds
-        namespace: default
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
         service:
           port: 9090
+          tls:
+            enabled: true
+            secretRef:
+              name: provider-vsphere-tls
     ```
 
+    The vCenter account needs **Virtual machine > Change Configuration > Advanced
+    configuration** (`VirtualMachine.Config.AdvancedConfig`): every `Create` and
+    `Clone` writes an owner stamp into the VM's extra configuration. `VMImage`
+    `templateName` must name a real vSphere template, not a regular VM.
+
 === "Libvirt"
+
+    The libvirt provider connects over SSH. The Secret holds `username`, either
+    `ssh-privatekey` or `password`, and a `known_hosts` entry for the host (host-key
+    verification is on by default; there is no trust-on-first-use).
 
     ```bash
     kubectl create secret generic libvirt-creds \
       --namespace default \
-      --from-literal=uri=qemu+ssh://root@hypervisor.example.com/system \
-      --from-literal=privateKey="$(cat ~/.ssh/id_rsa)"
+      --from-literal=username=virtrigaud \
+      --from-file=ssh-privatekey=$HOME/.ssh/id_ed25519 \
+      --from-file=known_hosts=<(ssh-keyscan -t ed25519 hypervisor.example.com)
     ```
 
     ```yaml
@@ -73,26 +84,36 @@ Create credentials for your hypervisor, then create the Provider CR.
       namespace: default
     spec:
       type: libvirt
-      endpoint: qemu+ssh://root@hypervisor.example.com/system
+      endpoint: qemu+ssh://virtrigaud@hypervisor.example.com/system
       credentialSecretRef:
         name: libvirt-creds
-        namespace: default
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.8"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
         service:
           port: 9090
+          tls:
+            enabled: true
+            secretRef:
+              name: provider-libvirt-tls
     ```
+
+    Prepare each libvirt host once, as root, or every create fails with
+    `refusing to stage cloud-init data`:
+
+    ```bash
+    install -d -m 0711 -o virtrigaud -g virtrigaud /var/lib/libvirt/virtrigaud-seeds
+    ```
+
+    See the [Libvirt provider page](../providers/libvirt.md) for the other host requirements.
 
 === "Proxmox"
 
     ```bash
     kubectl create secret generic proxmox-creds \
       --namespace default \
-      --from-literal=endpoint=https://proxmox.example.com:8006 \
-      --from-literal=tokenID=user@pam!token \
-      --from-literal=secret=your-token-secret \
-      --from-literal=insecure=false
+      --from-literal=token_id='virtrigaud@pve!vrtg-token' \
+      --from-literal=token_secret=your-token-secret
     ```
 
     ```yaml
@@ -106,12 +127,15 @@ Create credentials for your hypervisor, then create the Provider CR.
       endpoint: https://proxmox.example.com:8006
       credentialSecretRef:
         name: proxmox-creds
-        namespace: default
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0"
         service:
           port: 9090
+          tls:
+            enabled: true
+            secretRef:
+              name: provider-proxmox-tls
     ```
 
 Apply and verify:
@@ -124,10 +148,13 @@ kubectl get providers
 ```
 
 !!! note "TLS block required"
-    Production Provider CRs must include a `spec.runtime.service.tls` block
-    (required since v0.3.7). The abbreviated examples above omit it for
-    readability; see the [15-Minute Quickstart](index.md#step-3-configure-a-provider)
-    for a complete Provider CR with TLS configured.
+    Every Provider CR needs a `spec.runtime.service.tls` block (required since v0.3.7); a
+    Provider without it does not reconcile (`TLSConfigured=False, Reason=TLSBlockMissing`).
+    With `tls.enabled: true` the Secret named by `secretRef` must exist in the Provider's
+    namespace and hold `tls.crt`, `tls.key` and `ca.crt` (see
+    [mTLS Configuration](../providers/security/mtls.md)). For a throwaway lab only,
+    `tls.enabled: false` is an explicit plaintext opt-out. The
+    [15-Minute Quickstart](index.md#step-3-configure-a-provider) has complete examples.
 
 ## Step 2: Define a VM Class
 
@@ -191,7 +218,8 @@ Reference your OS template or image URL. The source structure is provider-specif
     spec:
       source:
         proxmox:
-          templateId: 9000
+          templateID: 9000
+          node: pve1
     ```
 
 ```bash
@@ -200,7 +228,32 @@ kubectl apply -f vmimage.yaml
 
 ## Step 4: Create the Virtual Machine
 
-Network attachments are listed under `spec.networks[]`. Each entry references a `VMNetworkAttachment` CR via `networkRef`. If `networkRef` is omitted, the VM template's pre-configured network adapter is used.
+Network attachments are listed under `spec.networks[]`. Each entry may reference a `VMNetworkAttachment` CR via `networkRef`. If `networkRef` is omitted, vSphere and Proxmox use the template's pre-configured network adapter, and a libvirt VM gets a user-mode interface with no libvirt-managed DHCP lease. To put a libvirt VM on libvirt's `default` network, create a `VMNetworkAttachment` and reference it:
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMNetworkAttachment
+metadata:
+  name: kvm-default-network
+  namespace: default
+spec:
+  network:
+    type: bridged
+    libvirt:
+      networkName: default
+      model: virtio
+  ipAllocation:
+    type: DHCP
+```
+
+```yaml
+# in the VirtualMachine spec
+  networks:
+  - name: default
+    networkRef:
+      name: kvm-default-network
+      namespace: default
+```
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -219,6 +272,15 @@ spec:
     name: ubuntu-22
     namespace: default
   powerState: "On"
+  userData:
+    cloudInit:
+      inline: |
+        #cloud-config
+        users:
+          - name: ubuntu
+            sudo: ALL=(ALL) NOPASSWD:ALL
+            ssh_authorized_keys:
+              - ssh-ed25519 AAAAC3... your-public-key
   networks:
   - name: default
 ```
@@ -226,6 +288,10 @@ spec:
 ```bash
 kubectl apply -f vm.yaml
 ```
+
+!!! warning "Give a libvirt VM its own login"
+    A libvirt VM created without `spec.userData` gets no default user, SSH key or
+    sudo (changed after v0.3.11). Supply `spec.userData` as above or you cannot log in.
 
 ## Step 5: Verify VM Creation
 
@@ -247,8 +313,7 @@ NAME          PROVIDER           CLASS   IMAGE       PHASE     AGE
 my-first-vm   vsphere-provider   small   ubuntu-22   Running   2m
 ```
 
-!!! note "Phase column for adopted VMs"
-    VMs auto-adopted by the VMAdoption controller (watching Provider CRs annotated `virtrigaud.io/adopt-vms: "true"`) may show an empty `phase` column. This is a known gap (issue I2); `status.ips` is still populated correctly.
+`status.phase` is set on every status write and is never empty: `Pending`, `Provisioning`, `Running`, `Stopped`, `Reconfiguring`, `Deleting` or `Failed`. The `Ready`, `Provisioning`, `Reconfiguring` and `Placed` conditions carry the reason.
 
 ## Step 6: Access Your VM
 
@@ -259,6 +324,8 @@ kubectl get vm my-first-vm -o jsonpath='{.status.ips}'
 # Get console URL (provider-dependent)
 kubectl get vm my-first-vm -o jsonpath='{.status.consoleURL}'
 ```
+
+`status.ips` lists only addresses a client can reach (loopback, link-local and similar addresses are dropped). It needs VMware Tools (vSphere) or the QEMU guest agent (Proxmox, libvirt) in the guest; a libvirt guest on a libvirt-managed network also shows its DHCP lease without the agent.
 
 === "SSH"
 
@@ -286,10 +353,8 @@ metadata:
   namespace: default
 type: Opaque
 stringData:
-  endpoint: https://vcenter.example.com
   username: administrator@vsphere.local
   password: your-password
-  insecure: "false"
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: Provider
@@ -301,12 +366,15 @@ spec:
   endpoint: https://vcenter.example.com
   credentialSecretRef:
     name: vsphere-creds
-    namespace: default
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
     service:
       port: 9090
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-vsphere-tls   # Secret with tls.crt, tls.key, ca.crt
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMClass
@@ -343,6 +411,15 @@ spec:
     name: ubuntu-22
     namespace: default
   powerState: "On"
+  userData:
+    cloudInit:
+      inline: |
+        #cloud-config
+        users:
+          - name: ubuntu
+            sudo: ALL=(ALL) NOPASSWD:ALL
+            ssh_authorized_keys:
+              - ssh-ed25519 AAAAC3... your-public-key
   networks:
   - name: default
 ```
@@ -353,7 +430,8 @@ kubectl apply -f complete-vm.yaml
 
 ## Next Steps
 
-- [Advanced VM Operations](../examples/) — Snapshots, cloning (VMClone MVP in v0.3.8)
+- [Quickstart](index.md#step-9-advanced-operations) — snapshots, snapshot revert and cloning (`VMClone`)
+- [Examples](../examples/index.md) — more configuration files
 - [Provider Capabilities](../providers/providers-capabilities.md) — per-provider feature matrix
 - [Observability Guide](../operations/observability.md) — dashboards and alerting
 
@@ -381,12 +459,18 @@ kubectl get vm my-first-vm -o jsonpath='{.status.powerState}'
 
 `virtrigaud_ip_discovery_duration_seconds` on `/metrics` tracks how long the no-IPs → has-IPs transition takes per provider type.
 
+### VM Held with `ConsumerNotAllowed`
+
+`Ready=False` with reason `ConsumerNotAllowed` (phase `Failed`) means the VM names a `Provider`, `VMClass` or `VMImage` in another namespace whose `spec.consumerNamespaceSelector` does not select the VM's namespace. Nothing is sent to the provider. Set the selector on that object (unset means its own namespace only, `{}` means every namespace).
+
 ### Authentication Errors
 
 ```bash
 # Verify the credentials secret exists and has the expected keys
-kubectl get secret vsphere-creds -o yaml
+# (vSphere: username, password; libvirt: username + ssh-privatekey or password, known_hosts;
+#  Proxmox: token_id, token_secret)
+kubectl get secret vsphere-creds -o jsonpath='{.data}' | jq 'keys'
 
 # Check provider pod logs
-kubectl logs -n virtrigaud-system -l app.kubernetes.io/component=provider-vsphere
+kubectl logs -n default -l app.kubernetes.io/name=virtrigaud-provider,app.kubernetes.io/instance=vsphere-provider
 ```
