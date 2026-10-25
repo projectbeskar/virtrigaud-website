@@ -5,25 +5,27 @@ SPDX-License-Identifier: Apache-2.0
 
 # mTLS for Manager <-> Provider gRPC
 
-!!! success "mTLS is wired and on by default (since v0.3.7, unchanged in v0.3.8)"
+!!! success "mTLS is wired and on by default (since v0.3.7, unchanged in v0.4.0)"
     Manager↔provider gRPC traffic is protected by **mutual TLS by default** (ADR-0003, #147/#148, shipped in v0.3.7). The manager dials each provider over TLS 1.3, presenting a client certificate; the provider verifies that certificate against a configured CA and enforces a SAN allow-list before accepting any RPC. Plaintext gRPC is not the default and requires an **explicit, audit-flagged opt-out**.
 
-    This behaviour landed in v0.3.7 (a change from v0.3.6, where the `Provider.spec.runtime.service.tls` field was parsed but had no runtime effect) and is **unchanged in v0.3.8** — there are no new mTLS features or breaking changes in v0.3.8. See the historical [v0.3.6 → v0.3.7 upgrade note](#breaking-change-v036-v037-historical) below.
+    This behaviour landed in v0.3.7 (a change from v0.3.6, where the `Provider.spec.runtime.service.tls` field was parsed but had no runtime effect) and is **unchanged in v0.4.0** — there are no new mTLS features or breaking mTLS changes in v0.4.0. See the historical [v0.3.6 → v0.3.7 upgrade note](#breaking-change-v036-v037-historical) below.
 
-This page describes how to enable and operate mTLS for manager↔provider gRPC in v0.3.8: the Provider CR `tls` block, how the manager and provider enforce it, the SAN allow-list, the secure-by-default/fail-closed behaviour, certificate rotation and its limitation, the Helm `providerTLS` block for chart-templated providers, the `TLSConfigured` status condition, and a worked cert-manager example for producing the TLS Secret.
+This page describes how to enable and operate mTLS for manager↔provider gRPC in v0.4.0: the Provider CR `tls` block, how the manager and provider enforce it, the SAN allow-list, the secure-by-default/fail-closed behaviour, certificate rotation and its limitation, the Helm `providerTLS` block for chart-templated providers, the `TLSConfigured` status condition, and a worked cert-manager example for producing the TLS Secret.
 
 ## Trust model
 
 VirtRigaud uses a **single CA per install** (ADR-0003 decision #5):
 
-- The manager holds a **client** certificate + key plus the CA bundle.
-- Each provider holds a **server** certificate + key plus the same CA bundle.
+- The manager presents the Provider's Secret key pair as its **client** certificate and verifies the provider against the Secret's CA bundle.
+- Each provider holds a **server** certificate + key plus the same CA bundle (the same Secret).
 - All provider pods trust the same CA. One VirtRigaud install is one administrative boundary.
+
+One Secret serves both ends: the manager reads the Secret named by the Provider's `spec.runtime.service.tls.secretRef` (in the Provider's namespace) and presents its `tls.crt` / `tls.key` as its **client** certificate, while the provider pod mounts the same Secret and serves with the same key pair. The certificate must therefore be valid for **both** server and client authentication.
 
 The TLS Secret is **provisioned by the operator**. VirtRigaud reads a Kubernetes Secret containing `tls.crt` / `tls.key` / `ca.crt`; how those bytes are minted — manual `openssl`, an internal PKI pipeline, Vault, External Secrets, or cert-manager — is the operator's choice. **The Helm chart ships no cert-manager `Certificate` or issuer scaffolding**; it only references a Secret you provide. A worked cert-manager example for *producing* that Secret is given [below](#producing-the-secret-with-cert-manager).
 
 !!! note "Per-provider trust roots are deferred"
-    The `tls` block is per-Provider, so the data path can already carry a per-Provider CA bundle, but the manager side is currently single-CA. Per-provider trust roots and SPIFFE/SPIRE identity remain out of scope in v0.3.8 and are tracked as follow-up ADRs.
+    The `tls` block is per-Provider, so the data path can already carry a per-Provider CA bundle, but the manager side is currently single-CA. Per-provider trust roots and SPIFFE/SPIRE identity are not implemented.
 
 ## The Provider CR `tls` block
 
@@ -41,7 +43,7 @@ spec:
   credentialSecretRef:
     name: vsphere-prod-credentials
   runtime:
-    image: ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.8
+    image: ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0
     service:
       tls:
         enabled: true                       # default true
@@ -69,8 +71,7 @@ Provider CR (spec.runtime.service.tls.enabled=true, secretRef → Secret)
         ▼
 ProviderReconciler                                  internal/controller/provider_controller.go
   evaluateTLSPosture() sets the TLSConfigured Condition,
-  mounts the Secret on the provider pod at /etc/virtrigaud/tls,
-  and passes VIRTRIGAUD_PROVIDER_ALLOWED_SANS to the provider
+  mounts the Secret on the provider pod at /etc/virtrigaud/tls
         │
         ├──────────────► Manager-side gRPC client          internal/runtime/remote/resolver.go
         │                  buildTLSConfig() loads tls.crt/tls.key/ca.crt
@@ -117,14 +118,24 @@ On top of TLS chain verification, the provider applies an authorization gate via
 | Allow-list **empty** (default) | **Permissive** — any client certificate signed by the configured CA is accepted. This is the single-CA trust model: the CA *is* the trust boundary. |
 | Allow-list **non-empty** | The leaf certificate must match an entry by **DNS SAN**, **URI SAN**, or **Common Name** (CN checked last, as a fallback for legacy CN-only certs). A mismatch returns gRPC `PermissionDenied`. |
 
-The allow-list is delivered to the provider via the `VIRTRIGAUD_PROVIDER_ALLOWED_SANS` environment variable (comma-joined), set by the controller for controller-managed providers and by the chart for static providers.
+The allow-list is delivered to the provider via the `VIRTRIGAUD_PROVIDER_ALLOWED_SANS` environment variable (comma-separated; whitespace is trimmed). **The controller does not set it** for a Provider it manages: set it yourself through `spec.runtime.env`. For the chart's static providers, `providerTLS.allowedSANs` sets it.
+
+```yaml
+spec:
+  runtime:
+    env:
+      - name: VIRTRIGAUD_PROVIDER_ALLOWED_SANS
+        value: "virtrigaud-provider-virtrigaud-system-provider-vsphere-prod.virtrigaud-system.svc.cluster.local"   # a DNS SAN, URI SAN or CN of the certificate in the Secret
+```
+
+Because the manager presents the Secret's own certificate, the allow-list must name an identity **of that certificate**.
 
 !!! warning "Empty allow-list assumes a trustworthy CA"
-    The permissive empty-list default matches kube-apiserver client-cert auth: it trusts any certificate the configured CA signed. This is correct for a single-administrative-domain install. It would be **incorrect** for a multi-tenant cluster where multiple distinct managers share one CA — in that posture, populate `AllowedSANs` (via `providerTLS.allowedSANs` or the controller-derived value) so a provider only accepts its own manager's identity.
+    The permissive empty-list default matches kube-apiserver client-cert auth: it trusts any certificate the configured CA signed. This is correct for a single-administrative-domain install. It would be **incorrect** for a multi-tenant cluster where multiple distinct managers share one CA — in that posture, populate the allow-list (`spec.runtime.env` or `providerTLS.allowedSANs`) so a provider only accepts its own manager's identity.
 
 ## Secure-by-default and fail-closed
 
-The provider is fail-closed (behaviour shipped in v0.3.7, unchanged in v0.3.8). A provider pod that finds **no TLS material** at `/etc/virtrigaud/tls` **and** does not have `VIRTRIGAUD_PROVIDER_INSECURE=true` set will **hard-exit on startup** rather than silently fall back to plaintext, with this error:
+The provider is fail-closed (behaviour shipped in v0.3.7, unchanged in v0.4.0). A provider pod that finds **no TLS material** at `/etc/virtrigaud/tls` **and** does not have `VIRTRIGAUD_PROVIDER_INSECURE=true` set will **hard-exit on startup** rather than silently fall back to plaintext, with this error:
 
 ```
 TLS material missing at /etc/virtrigaud/tls and VIRTRIGAUD_PROVIDER_INSECURE is not set to "true"; either provision /etc/virtrigaud/tls/{tls.crt,tls.key,ca.crt} or set VIRTRIGAUD_PROVIDER_INSECURE=true to opt into plaintext (audit-flagged)
@@ -162,7 +173,7 @@ kubectl get provider provider-vsphere-prod -n virtrigaud-system \
 
 ## Certificate rotation
 
-Leaf certificate/key rotation is **hot-reloaded** without a pod restart. When TLS material is present, the provider enables a controller-runtime `certwatcher` on the mounted leaf cert/key by default; Kubernetes' Secret-to-Pod sync (~60s) updates the mounted files and the watcher picks up the new bytes.
+Leaf certificate/key rotation is **hot-reloaded** without a pod restart. When TLS material is present, the provider enables a controller-runtime `certwatcher` on the mounted leaf cert/key by default; Kubernetes' Secret-to-Pod sync (~60s) updates the mounted files and the watcher picks up the new bytes. The **manager** reads the Secret when it builds its client for the Provider; it keeps that client until a health check on it fails, so it presents the rotated client certificate after the next rebuild (for example when the old certificate expires and the handshake fails), not at the moment the Secret changes. Rotate before expiry and watch the Provider's `virtrigaud_circuit_breaker_state` and VM conditions afterwards.
 
 To rotate the leaf certificate:
 
@@ -175,7 +186,7 @@ To rotate the leaf certificate:
 
 ## Helm `providerTLS` block (chart-templated providers only)
 
-The `providerTLS` block in `values.yaml` governs **chart-templated / static provider Deployments only**. Controller-managed providers read their TLS posture from the Provider CR's `tls` block, not from these values.
+The `providerTLS` block in `values.yaml` governs **chart-templated / static provider Deployments only** (`providers.libvirt|vsphere|proxmox.enabled`, all `false` by default; they listen on port 9090 rather than 9443). In normal operation providers are deployed by the manager from Provider CRs, which read their TLS posture from the CR's `tls` block, not from these values.
 
 ```yaml
 providerTLS:
@@ -235,12 +246,17 @@ spec:
   commonName: provider-vsphere-prod
   dnsNames:
     - virtrigaud-provider-virtrigaud-system-provider-vsphere-prod.virtrigaud-system.svc.cluster.local
+  usages:             # the manager presents this same key pair as its client certificate
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
   duration: 2160h     # 90 days
-  renewBefore: 720h   # rotate 30 days early; leaf hot-reloads, no restart
+  renewBefore: 720h   # rotate 30 days early; the provider hot-reloads the leaf
 ```
 
 !!! note "Match the SAN to the manager's expected ServerName"
-    The manager dials the provider with `ServerName` set to the provider Service FQDN (`virtrigaud-provider-<namespace>-<name>.<namespace>.svc.cluster.local`). The provider server certificate's DNS SAN **must** include that FQDN, or the manager's verification fails. Mint the manager's own client certificate from the same CA, with a SAN you can list in `providerTLS.allowedSANs` if you want SAN-level authorization rather than the permissive CA-only default.
+    The manager dials the provider with `ServerName` set to the provider Service FQDN (`virtrigaud-provider-<namespace>-<name>.<namespace>.svc.cluster.local`). The certificate's DNS SAN **must** include that FQDN, or the manager's verification fails. The same certificate is what the manager presents as its client certificate, so it needs the `client auth` usage too (set `usages` as above), and a SAN allow-list entry, if you configure one, must name an identity of this certificate. One Secret per Provider keeps each Provider's identity separate.
 
 For the manual `openssl`-only recipe (CA, manager client cert, and N provider server certs) and the operator runbook, see the in-repo operator security guide and the [Operations → Security](../../operations/security.md) page.
 
@@ -256,8 +272,8 @@ For a regulated deployment:
 
 ## Breaking change: v0.3.6 → v0.3.7 (historical)
 
-!!! note "Upgrading v0.3.7 → v0.3.8 needs no mTLS action"
-    The breaking change documented below landed on the **v0.3.6 → v0.3.7** upgrade. Upgrading from **v0.3.7 → v0.3.8** requires no mTLS changes — the posture is unchanged. This section is retained for operators still moving off v0.3.6.
+!!! note "Upgrading v0.3.7 → v0.4.0 needs no mTLS action"
+    The breaking change documented below landed on the **v0.3.6 → v0.3.7** upgrade. Upgrading from **v0.3.7 → v0.4.0** requires no mTLS changes — the posture is unchanged. This section is retained for operators still moving off v0.3.6.
 
 !!! danger "Existing Provider CRs without a `tls` block will not reconcile after upgrade from v0.3.6"
     In v0.3.6, the `spec.runtime.service.tls` block had no runtime effect. In v0.3.7, a **nil** `tls` block is a loud failure: the Provider reports `TLSConfigured=False, Reason=TLSBlockMissing` and **no Deployment is created** until the operator decides.
@@ -271,7 +287,7 @@ For a regulated deployment:
 
 ## See also
 
-- [Operations -> Security](../../operations/security.md) — overall v0.3.8 security posture, including the [resolved-gap inventory](../../operations/security.md#v036-security-gap-inventory).
+- [Operations -> Security](../../operations/security.md) — overall v0.4.0 security posture, including the [resolved-gap inventory](../../operations/security.md#v036-security-gap-inventory).
 - [Bearer Token Authentication](bearer-token.md) — the other half of the gRPC-channel and hypervisor-credential auth story.
 - [Network Policies](network-policies.md) — defence-in-depth, and the required compensating control for any Provider you run with `tls.enabled=false`.
 - [Resilience](../../operations/resilience.md) — per-Provider CircuitBreaker limits the blast radius of a degraded or spoofed provider.

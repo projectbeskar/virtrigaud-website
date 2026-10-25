@@ -5,9 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # External Secrets for Provider Credentials
 
-This page shows how to wire [External Secrets Operator](https://external-secrets.io) (ESO) into a VirtRigaud **v0.3.8** deployment so provider credentials are sourced from your central secret store (Vault / AWS Secrets Manager / Azure Key Vault / GCP Secret Manager / etc.) rather than committed to Git or hand-applied with `kubectl create secret`.
+This page shows how to wire [External Secrets Operator](https://external-secrets.io) (ESO) into a VirtRigaud **v0.4.0** deployment so provider credentials are sourced from your central secret store (Vault / AWS Secrets Manager / Azure Key Vault / GCP Secret Manager / etc.) rather than committed to Git or hand-applied with `kubectl create secret`.
 
-The key constraint is: **VirtRigaud providers read credentials as named files**, not as env vars. So the `ExternalSecret` you produce must materialise a `Secret` whose **keys match exactly** what each provider's `New()` function reads.
+The key constraint is: **VirtRigaud providers read credentials as named files**, not as env vars. So the `ExternalSecret` you produce must materialise a `Secret` whose **keys match exactly** what each provider reads.
 
 ## How VirtRigaud consumes the Secret
 
@@ -25,12 +25,9 @@ ExternalSecret  ────►  Secret (operator namespace)
                        (e.g. /etc/virtrigaud/credentials/username)
 ```
 
-References:
+References (code paths): the controller mounts the Secret in `internal/controller/provider_controller.go`; vSphere reads `username` and `password` (`internal/providers/vsphere/server.go`); libvirt reads `username`, `password`, `ssh-privatekey` and `known_hosts` (`internal/providers/libvirt/virsh.go`, `sshhostkey.go`); Proxmox reads `token_id`, `token_secret`, `username`, `password` (`internal/providers/proxmox/server.go`) and, for its SSH data plane, `ssh_user`, `ssh_password`, `ssh_privatekey`, `known_hosts` (`internal/providers/proxmox/ssh.go`).
 
-- `internal/controller/provider_controller.go:692-700` — controller mounts the Secret.
-- `internal/providers/vsphere/server.go:129-140` — vSphere reads `username` and `password`.
-- `internal/providers/libvirt/virsh.go:115-133` — libvirt reads `username`, `password`, `ssh-privatekey`.
-- `internal/providers/proxmox/server.go:69-72` — Proxmox reads `token_id`, `token_secret`, `username`, `password`.
+The Secret must be in the **same namespace as the `Provider`** (the pod mounts it as a volume). Whoever can read Secrets in that namespace can read the hypervisor credentials, so keep the namespace of a shared `Provider` administrator-only (tenants use the Provider from their own namespaces through `consumerNamespaceSelector`; see [Security](../../operations/security.md#cross-namespace-use-of-a-provider)).
 
 The implication: **every example below must produce a Secret whose `.data` keys match those filenames exactly**. Wrong key names = silent credential failure at provider startup (validation will fail with "no valid credentials found in environment variables or mounted files" for libvirt, or "username and password are required" for vSphere).
 
@@ -76,9 +73,12 @@ type: Opaque
 data:
   username: <base64>          # SSH username
   ssh-privatekey: <base64>    # PEM-encoded SSH private key
+  known_hosts: <base64>       # host-key trust for the libvirt host (ssh-keyscan -H <host>)
 ```
 
-The key name is `ssh-privatekey` (no underscore) to match the read at `internal/providers/libvirt/virsh.go:129`.
+The key name is `ssh-privatekey` (hyphen, no underscore) for libvirt. **`known_hosts` is required** unless you set the audit-flagged `LIBVIRT_INSECURE_SKIP_HOST_KEY_VERIFICATION=true`: without it the connection hard-fails (there is no trust-on-first-use). The same applies to the password variant above. See [Security](../../operations/security.md#libvirt-ssh-host-key-verification).
+
+For a **clustered** libvirt Provider, each `Host` uses the Secret named by its own `spec.credentialSecretRef` if set, otherwise the Provider's `spec.credentialSecretRef`; both are read from the Provider's namespace and carry the same `ssh-privatekey` / `known_hosts` keys. See the [clustered libvirt guide](../../guides/clustered-libvirt.md).
 
 ### Proxmox (API token — required for production)
 
@@ -92,6 +92,16 @@ data:
   token_id: <base64>      # e.g. virtrigaud@pve!vrtg-token
   token_secret: <base64>  # the token's UUID value
 ```
+
+For disk migration and `qemu-img` on the PVE node the provider also uses an SSH **data plane**; add its credentials to the same Secret (all optional if you do not use those features):
+
+```yaml
+  ssh_user: <base64>        # SSH user on the PVE node
+  ssh_privatekey: <base64>  # or ssh_password
+  known_hosts: <base64>     # host-key trust; verification is on by default
+```
+
+Give each Proxmox `Provider` its own API token.
 
 ### Proxmox (password — development/CI only)
 
@@ -191,7 +201,8 @@ Stored at `secret/data/virtrigaud/libvirt-prod`:
 ```json
 {
   "username": "virtrigaud",
-  "ssh_privatekey": "-----BEGIN OPENSSH PRIVATE KEY-----\n..."
+  "ssh_privatekey": "-----BEGIN OPENSSH PRIVATE KEY-----\n...",
+  "known_hosts": "libvirt-host.example.com ssh-ed25519 AAAA..."
 }
 ```
 
@@ -215,13 +226,19 @@ spec:
         key: secret/data/virtrigaud/libvirt-prod
         property: username
     # NOTE the secretKey value: ssh-privatekey (hyphen), matching the file
-    # that internal/providers/libvirt/virsh.go:129 reads. The Vault property
+    # that the libvirt provider reads. The Vault property
     # name on the right is whatever you store it under; the LEFT side must
     # match the provider's expected filename exactly.
     - secretKey: ssh-privatekey
       remoteRef:
         key: secret/data/virtrigaud/libvirt-prod
         property: ssh_privatekey
+    # known_hosts is required unless host-key verification is explicitly
+    # disabled (there is no trust-on-first-use).
+    - secretKey: known_hosts
+      remoteRef:
+        key: secret/data/virtrigaud/libvirt-prod
+        property: known_hosts
 ```
 
 ### Proxmox API token via Vault
@@ -401,12 +418,12 @@ Store as `projects/my-gcp-project/secrets/virtrigaud-vsphere-prod-username` etc.
 
 ## What ESO does NOT solve in v0.3.6
 
-!!! note "Heading retained for stable links; limitations still apply through v0.3.8"
-    This heading and its anchor (`#what-eso-does-not-solve-in-v036`) are retained so existing cross-links keep resolving. The limitations below are **still current in v0.3.8** unless noted otherwise; item 3 (mTLS material distribution) was resolved in v0.3.7.
+!!! note "Heading retained for stable links; limitations still apply in v0.4.0"
+    This heading and its anchor (`#what-eso-does-not-solve-in-v036`) are retained so existing cross-links keep resolving. The limitations below are **still current in v0.4.0** unless noted otherwise; item 3 (mTLS material distribution) was resolved in v0.3.7.
 
 ESO solves **provisioning** of the K8s Secret. It does **not** solve:
 
-1. **Rotation propagation to the running provider pod.** When ESO refreshes the K8s Secret, the kubelet eventually updates the projected files inside the pod (typically within `syncFrequency`, default 1 minute), but the provider only reads the files at startup. **Rotating a credential requires a provider pod restart** (still the case in v0.3.8). There is no in-process credential reload.
+1. **Rotation propagation to the running provider pod.** When ESO refreshes the K8s Secret, the kubelet eventually updates the projected files inside the pod (typically within `syncFrequency`, default 1 minute), but the provider only reads the files at startup. **Rotating a credential requires a provider pod restart** (still the case in v0.4.0). There is no in-process credential reload.
 
     Workaround: pair the `ExternalSecret` with a deployment-restart hook (e.g. `stakater/Reloader`) keyed on the Secret name. Stakater Reloader's annotation:
 
@@ -420,7 +437,7 @@ ESO solves **provisioning** of the K8s Secret. It does **not** solve:
 
 2. **Provider-side encryption-at-rest of the file.** The provider pod's tmpfs holds the credential plaintext while the pod is running. K8s does not encrypt projected Secret volumes; the cluster-level `EncryptionConfiguration` only protects etcd. A node-level attacker with root on the kubelet host can read the file.
 
-3. **mTLS material distribution to the provider pod — resolved in v0.3.7 (unchanged in v0.3.8).** This was a v0.3.6 gap: the controller did not mount TLS material into the provider pod. Since v0.3.7 the controller mounts the TLS Secret referenced by `spec.runtime.service.tls.secretRef` at `/etc/virtrigaud/tls` and wires mTLS by default. ESO can deliver the `tls.crt` / `tls.key` / `ca.crt` keys into that Secret exactly as it does for credential Secrets. See [mTLS](mtls.md).
+3. **mTLS material distribution to the provider pod — resolved in v0.3.7 (unchanged in v0.4.0).** This was a v0.3.6 gap: the controller did not mount TLS material into the provider pod. Since v0.3.7 the controller mounts the TLS Secret referenced by `spec.runtime.service.tls.secretRef` at `/etc/virtrigaud/tls` and wires mTLS by default. ESO can deliver the `tls.crt` / `tls.key` / `ca.crt` keys into that Secret exactly as it does for credential Secrets. See [mTLS](mtls.md).
 
     !!! note "Keep TLS and credential Secrets separate"
         The TLS Secret and the credential Secret are distinct objects with different keys and mount paths (`/etc/virtrigaud/tls` vs `/etc/virtrigaud/credentials`). If you source both from ESO, produce two `ExternalSecret` resources, not one.
@@ -442,7 +459,7 @@ kubectl get secret vsphere-prod-credentials -n virtrigaud-system \
 # [ "token_id", "token_secret" ]
 ```
 
-If a key is missing or mistyped, the provider pod will fail validation at startup and the `Provider` CR's `Healthy` condition will not flip to true. The provider container logs will tell you which key was missing.
+If a key is missing or mistyped, the provider will fail to authenticate to the hypervisor: VMs on the Provider show `Ready=False` with a provider error, and `virtrigaud_circuit_breaker_state` rises after repeated failures. The provider container logs (length-only diagnostics, never the values) tell you which key was missing. Note that the Provider's `ProviderAvailable` condition only reports that the provider *pod* is ready; it does not validate the credentials.
 
 ## See also
 
