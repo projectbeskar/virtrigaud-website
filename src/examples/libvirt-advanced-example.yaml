@@ -62,19 +62,16 @@ spec:
   # Remote runtime configuration
   runtime:
     mode: Remote
-    image: ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.7
-    version: v0.3.7
+    image: ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0
     replicas: 2
 
     service:
       port: 9443
-      # v0.3.7: a Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
-      # Set tls.enabled: false to keep plaintext (dev/lab only).
+      # TLS configuration for secure communication
       tls:
         enabled: true
         secretRef:
-          name: libvirt-provider-tls   # Secret (kubernetes.io/tls or Opaque) with tls.crt, tls.key, ca.crt
-        insecureSkipVerify: false
+          name: libvirt-provider-tls
 
     resources:
       requests:
@@ -83,11 +80,11 @@ spec:
       limits:
         cpu: "2"
         memory: "1Gi"
-
+    
     # Node selection for provider pods
     nodeSelector:
       virtrigaud.io/provider: "libvirt"
-
+    
     # Security context
     securityContext:
       runAsNonRoot: true
@@ -97,7 +94,7 @@ spec:
       capabilities:
         drop:
         - ALL
-
+    
     # Environment variables for provider
     env:
     - name: PROVIDER_NAMESPACE
@@ -120,8 +117,9 @@ spec:
   cpu: 2
   memory: "2Gi"
   firmware: BIOS
+  # Disk format (qcow2) is set on the VMImage source below, not here:
+  # diskDefaults.type is a provisioning mode (thin/thick/...), not a format.
   diskDefaults:
-    type: qcow2
     size: "20Gi"
   guestToolsPolicy: install
 
@@ -133,11 +131,16 @@ metadata:
   name: ubuntu-22-libvirt
   namespace: default
 spec:
-  libvirt:
-    path: "/var/lib/libvirt/images/ubuntu-22.04-cloudimg.qcow2"
-    format: qcow2
+  source:
+    libvirt:
+      # Must resolve (on the host) to a regular file directly inside an allowed
+      # image directory — VIRTRIGAUD_LIBVIRT_IMAGE_DIRS on the provider, default
+      # /var/lib/libvirt/images — and not be any VM's disk. See
+      # docs/image-preparation.md ("libvirt image paths").
+      path: "/var/lib/libvirt/images/ubuntu-22.04-cloudimg.qcow2"
+      format: qcow2
   prepare:
-    importIfMissing: false
+    onMissing: Fail  # The image must already exist at the path above
 
 ---
 # VM Network for remote provider
@@ -147,10 +150,12 @@ metadata:
   name: libvirt-default
   namespace: default
 spec:
-  libvirt:
-    networkName: "default"
-    model: virtio
-  ipPolicy: dhcp
+  network:
+    libvirt:
+      networkName: "default"
+      model: virtio
+  ipAllocation:
+    type: DHCP
 
 ---
 # Virtual Machine using remote Libvirt provider
@@ -171,8 +176,10 @@ spec:
     name: ubuntu-22-libvirt
   networks:
   - name: libvirt-default
-  
-  powerState: On
+    networkRef:
+      name: libvirt-default
+
+  powerState: "On"
   
   userData:
     cloudInit:

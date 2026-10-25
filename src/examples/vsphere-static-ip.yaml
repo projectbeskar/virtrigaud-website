@@ -12,7 +12,7 @@
 #   The template must contain a boot-time agent that reads guestinfo.network.*
 #   (via `vmware-rpctool "info-get guestinfo.network.ip"`) and configures the
 #   interface. Stock cloud images do NOT do this by default. See
-#   docs/providers/vsphere.md → "Static IP Assignment (guestinfo)" for a ready
+#   the vSphere provider page ("Static IP Assignment (guestinfo)") for a ready
 #   to bake-in systemd unit + netplan generator.
 #
 # Requires an active vSphere environment.
@@ -40,7 +40,7 @@ spec:
     name: standard-vm
   imageRef:
     name: ubuntu-22-04-template
-  powerState: On
+  powerState: "On"
 
   networks:
     - name: app
@@ -48,10 +48,10 @@ spec:
       # only push the static IP settings below into guestinfo.
       networkRef:
         name: app-network
-      ipAddress: "192.168.100.50"    # -> guestinfo.network.ip
+      ipAddress: "198.51.100.50"    # -> guestinfo.network.ip
       prefix: 24                      # -> guestinfo.network.prefix (CIDR length)
-      gateway: "192.168.100.1"        # -> guestinfo.network.gateway
-      dns: "192.168.1.10,8.8.8.8"     # -> guestinfo.network.dns (comma-separated)
+      gateway: "198.51.100.1"        # -> guestinfo.network.gateway
+      dns: "192.0.2.10,8.8.8.8"     # -> guestinfo.network.dns (comma-separated)
 
   # Optional: cloud-init runs alongside the guestinfo network keys. The two are
   # independent — an image may honour either or both.

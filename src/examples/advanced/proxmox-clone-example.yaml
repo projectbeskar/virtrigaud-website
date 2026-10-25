@@ -1,23 +1,24 @@
 # Copyright (c) 2026 VirtRigaud Creators
 # SPDX-License-Identifier: Apache-2.0
 
-# Proxmox VMClone Example (v0.3.8)
+# Proxmox VMClone Example
 #
-# Demonstrates the VMClone CRD (controller MVP shipped in v0.3.8) cloning an
-# existing, provisioned VirtualMachine into a new one on the SAME Proxmox
-# provider. Proxmox implements the Clone RPC (full + linked); libvirt does NOT
-# (its Clone RPC returns Unimplemented as of v0.3.8).
+# Demonstrates the VMClone CRD cloning an existing, provisioned VirtualMachine
+# into a new one on the SAME Proxmox provider. Proxmox implements the Clone RPC
+# (full and linked). libvirt serves full clones only (linked clones are
+# disabled there); vSphere serves both.
 #
-# MVP scope (v0.3.8):
+# Scope:
 #   - source.vmRef only (snapshotRef/templateRef/imageRef -> Phase=Failed)
 #   - same-provider clone (the produced VM lives on the source VM's provider)
-#   - Full and Linked clones (Linked requires the provider to report
+#   - FullClone and LinkedClone (LinkedClone requires the provider to report
 #     SupportsLinkedClones=true)
-# The controller produces a VirtualMachine CR named spec.target.name, seeds its
-# Status.ID with the provider's cloned VM ID, and labels it
+# The controller creates the target VirtualMachine CR named spec.target.name
+# BEFORE the Clone (its UID goes to the provider as the clone's owner stamp),
+# seeds its Status.ID with the provider's cloned VM ID, and labels it
 # virtrigaud.io/adopted=true so the VirtualMachine controller adopts the clone
 # instead of creating a second VM. Deleting the VMClone does NOT delete the
-# produced VM.
+# produced VM. A clone is left powered off unless spec.options.powerOn: true.
 
 ---
 # Provider (Proxmox VE)
@@ -33,9 +34,16 @@ spec:
     name: proxmox-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.8"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0"
     service:
       port: 9443
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-proxmox-tls   # Secret with tls.crt, tls.key, ca.crt
+        insecureSkipVerify: false
 
 ---
 # VMClass for the source/target VMs
@@ -45,7 +53,7 @@ metadata:
   name: small
   namespace: default
 spec:
-  cpus: 2
+  cpu: 2
   memory: "4Gi"
   diskDefaults:
     type: thin
@@ -129,6 +137,8 @@ spec:
 #      kubectl delete vmclone app-clone-full   # app-prod-01 remains
 #
 # Notes:
-# - libvirt does not support Clone in v0.3.8 (Unimplemented). A libvirt VMClone
-#   fails fast with Phase=Failed / ProviderError rather than silently no-op'ing.
-# - Cross-provider cloning is not supported in the MVP (same-provider only).
+# - libvirt: LinkedClone is disabled (Phase=Failed, reason LinkedCloneUnsupported);
+#   a FullClone needs the source VM powered off (it waits Pending with reason
+#   SourceMustBePoweredOff otherwise). See docs/libvirt-clones.md.
+# - Cross-provider cloning is not supported (same-provider only); use a
+#   VMMigration to move a VM between providers.

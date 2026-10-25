@@ -19,10 +19,17 @@ spec:
   insecureSkipVerify: false
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.2.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
     replicas: 1
     service:
       port: 9090
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-vsphere-tls   # Secret with tls.crt, tls.key, ca.crt
+        insecureSkipVerify: false
   defaults:
     datastore: nvme-datastore
     cluster: prod-cluster
@@ -118,11 +125,7 @@ spec:
     vsphere:
       templateName: "ubuntu-22.04-server-template"
   prepare:
-    onMissing: Download
-    customization:
-      timezone: "UTC"
-      network:
-        dns: ["8.8.8.8", "8.8.4.4"]
+    onMissing: Import
 
 ---
 # Network configuration
@@ -132,10 +135,14 @@ metadata:
   name: v021-production-vlan
   namespace: default
 spec:
-  vsphere:
-    portGroup: "Production VLAN 100"
-    vlanId: 100
-    dhcp: true
+  network:
+    vsphere:
+      portgroup: "Production VLAN 100"
+      vlan:
+        type: vlan
+        vlanID: 100
+  ipAllocation:
+    type: DHCP
 
 ---
 # Virtual Machine showcasing all v0.2.1 features
@@ -175,6 +182,8 @@ spec:
   powerState: "On"
   
   # v0.2.1: Enhanced lifecycle management with graceful shutdown
+  # NOTE: spec.lifecycle hooks and gracefulShutdownTimeout are accepted by the API but not
+  # executed or sent to the provider in v0.4.0 (see the "Advanced VM lifecycle" guide).
   lifecycle:
     gracefulShutdownTimeout: "180s"  # 3 minutes for complex applications
     

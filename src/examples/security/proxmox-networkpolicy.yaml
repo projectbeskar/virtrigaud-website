@@ -46,10 +46,10 @@ spec:
     # Allow access to Proxmox VE cluster IPs
     # Replace with your actual Proxmox VE IP ranges
     - ipBlock:
-        cidr: 192.168.1.0/24  # Proxmox VE network
+        cidr: 192.0.2.0/24  # Proxmox VE network
         except:
-        - 192.168.1.0/32      # Network address
-        - 192.168.1.255/32    # Broadcast address
+        - 192.0.2.0/32      # Network address
+        - 192.0.2.255/32    # Broadcast address
     ports:
     - protocol: TCP
       port: 8006  # Proxmox VE API port

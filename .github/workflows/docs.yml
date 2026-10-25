@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'VirtRigaud release tag to document (e.g. v1.2.3). Defaults to latest main.'
+        description: 'VirtRigaud release tag to document (e.g. v1.2.3). Defaults to the tag in VIRTRIGAUD_VERSION.'
         required: false
         type: string
 
@@ -36,51 +36,53 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Select VirtRigaud release to document
+        id: virtrigaud
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          # workflow_dispatch input wins; otherwise the tag pinned in VIRTRIGAUD_VERSION.
+          # Never fall back to the default branch: unreleased behaviour must not reach the site.
+          ref="$INPUT_VERSION"
+          if [ -z "$ref" ]; then ref="$(tr -d '[:space:]' < VIRTRIGAUD_VERSION)"; fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Documenting VirtRigaud $ref"
+
       - name: Checkout VirtRigaud repository
         uses: actions/checkout@v6
         with:
           repository: projectbeskar/virtrigaud
           path: virtrigaud
-          # Pin to the release tag when triggered by the release workflow;
-          # otherwise use the default branch (HEAD).
-          ref: ${{ inputs.version || '' }}
+          # Release tag selected above (input or VIRTRIGAUD_VERSION).
+          ref: ${{ steps.virtrigaud.outputs.ref }}
           fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          # 1.26+ required: virtrigaud's go.mod was bumped to `go 1.26.0`
-          # in PR projectbeskar/virtrigaud#125 (v0.3.6). The crd-ref-docs
-          # step below clones that repo and runs `go` against it, so the
-          # toolchain here must satisfy the require directive. setup-go@v6
-          # defaults GOTOOLCHAIN=local, so we cannot rely on auto-download
-          # of a newer toolchain — pin to a version that meets the floor.
-          go-version: '1.26'
+          # The crd-ref-docs step below runs `go` against the VirtRigaud
+          # checkout, so the toolchain must satisfy its go.mod `go` directive
+          # exactly (setup-go@v6 sets GOTOOLCHAIN=local: no auto-download of a
+          # newer toolchain). Read the version from the release being
+          # documented, as the VirtRigaud CI does, so a patch-level bump there
+          # (v0.4.0 requires go 1.26.10) never breaks this build.
+          go-version-file: virtrigaud/go.mod
 
       - name: Install Go documentation tools
         run: |
-          go install github.com/elastic/crd-ref-docs@latest
-          go install github.com/bufbuild/buf/cmd/buf@latest
-          go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
+          # Tool versions are pinned in tools/tool-versions.env (also used by the Makefile).
+          grep -E '^[A-Z_]+=' tools/tool-versions.env >> "$GITHUB_ENV"
+          . tools/tool-versions.env
+          go install "github.com/elastic/crd-ref-docs@${CRD_REF_DOCS_VERSION}"
+          go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
+          go install "github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@${PROTOC_GEN_DOC_VERSION}"
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
       - name: Generate CRD documentation
-        run: |
-          cd virtrigaud
-          crd-ref-docs \
-            --source-path=api \
-            --config=../tools/crd-ref-docs-config.yaml \
-            --renderer=markdown \
-            --output-path=../src/generated-crd-docs.md
-          cd ..
-          echo "CRD documentation generated at src/generated-crd-docs.md"
+        run: ./tools/gen-crd-docs.sh virtrigaud
 
       - name: Generate proto/gRPC API documentation
-        run: |
-          cd virtrigaud
-          buf generate proto --template ../tools/buf.gen.docs.yaml
-          cd ..
-          echo "Proto documentation generated at src/references/grpc-api.md"
+        run: ./tools/gen-proto-docs.sh virtrigaud
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -106,7 +108,7 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Build documentation
-        run: poetry run mkdocs build
+        run: poetry run mkdocs build --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
@@ -114,7 +116,8 @@ jobs:
           path: ./site
 
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # Deploy only from main: a workflow_dispatch run from another ref builds but does not deploy.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

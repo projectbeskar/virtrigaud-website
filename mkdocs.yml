@@ -5,11 +5,10 @@ site_name: VirtRigaud Documentation
 site_description: Kubernetes operator for managing virtual machines across multiple hypervisors
 site_author: William Rizzo, Erick Bourgeois, VirtRigaud Contributors
 site_url: https://projectbeskar.github.io/virtrigaud/
-copyright: Copyright &copy; 2026 VirtRigaud Creators
 
-repo_name: projectbeskar/virtrigaud
-repo_url: https://github.com/projectbeskar/virtrigaud
-edit_uri: edit/main/docs/
+repo_name: projectbeskar/virtrigaud-website
+repo_url: https://github.com/projectbeskar/virtrigaud-website
+edit_uri: edit/main/src/
 
 theme:
   name: material
@@ -145,9 +144,19 @@ nav:
           - Nested Virtualization: guides/advanced/nested-virtualization.md
           - Graceful Shutdown: guides/advanced/graceful-shutdown.md
           - Remote Providers: guides/advanced/remote-providers.md
+      - Operating VMs:
+          - VM Snapshots and Revert: guides/vm-snapshots.md
+          - VM Status Reference: guides/vm-status.md
+          - Security Model and Multi-Tenancy: guides/security-model.md
+      - Clustered Libvirt (Experimental):
+          - Overview and Setup: guides/clustered/index.md
+          - Placement: guides/clustered/placement.md
+          - Operations and Troubleshooting: guides/clustered/operations.md
+          - Backup, Restore and Re-attach: guides/clustered/backup-restore.md
   - VM Migration:
       - User Guide: migration/user-guide.md
       - Migration Guide: migration/vm-migration-guide.md
+      - Migrating into a Clustered Provider: migration/clustered-target.md
       - API Reference: migration/api-reference.md
   - Operations:
       - Overview: operations/index.md
@@ -169,6 +178,7 @@ nav:
       - Metrics Catalog: api-reference/metrics.md
       - Provider Catalog: references/catalog.md
       - Full CRD Reference: references/generated-crd-docs.md
+      - Provider gRPC API Guide: references/grpc-api-guide.md
       - Provider gRPC API: references/grpc-api.md
   - Development:
       - Overview: development/index.md

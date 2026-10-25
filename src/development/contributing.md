@@ -14,7 +14,7 @@ provides guidelines and information for contributors.
 
 - **Go 1.26+** — required since
   [#125](https://github.com/projectbeskar/virtrigaud/pull/125) (v0.3.6 bumped
-  the toolchain floor from 1.24.0 → 1.26.0; v0.3.8 builds on **1.26.4**). The
+  the toolchain floor from 1.24.0 → 1.26.0; v0.4.0 builds on **1.26.10**). The
   repo's `go.mod` is the source of truth; CI uses `go-version-file: go.mod`
   so locally you should match.
 - Docker
@@ -48,10 +48,11 @@ vim api/infra.virtrigaud.io/v1beta1/virtualmachine_types.go
 # Regenerate deepcopy methods
 make generate
 
-# Regenerate CRDs under config/crd/bases/
+# Regenerate CRDs under config/crd/bases/ (committed)
 make gen-crds          # alias: make manifests
 
-# Regenerate CRDs directly into the Helm chart (charts/virtrigaud/crds/)
+# Regenerate CRDs directly into the Helm chart (charts/virtrigaud/crds/,
+# gitignored: generated on demand, never committed)
 make gen-helm-crds
 
 # Sanity check: the chart must lint with the freshly generated CRDs
@@ -62,6 +63,10 @@ The Go types under `api/infra.virtrigaud.io/v1beta1/*_types.go` are the
 **single source of truth**. Never hand-edit `config/crd/bases/`,
 `charts/virtrigaud/crds/`, or `zz_generated.deepcopy.go` — regenerate them
 instead. v1beta1 is the stable API; breaking changes require an ADR.
+
+If you change `proto/provider/v1/provider.proto`, regenerate the Go bindings with
+`make proto` and check it with `make proto-lint` and `make proto-breaking`;
+the generated files under `proto/rpc/provider/v1/` are committed.
 
 #### Code Changes
 
@@ -79,22 +84,37 @@ below) before opening a PR.
 
 ### 2. CRD Management
 
-Keep CRDs synchronized between `config/crd/bases/` and
-`charts/virtrigaud/crds/`. Both are regenerated from
-`api/infra.virtrigaud.io/v1beta1/*_types.go` — the Go types are the single
-source of truth.
+CRDs are generated from `api/infra.virtrigaud.io/v1beta1/*_types.go` — the
+Go types are the single source of truth — and are not duplicated in git:
+
+- `config/crd/bases/` is **committed**; it is what `kubectl apply -k` and the
+  release use.
+- `charts/virtrigaud/crds/` is **gitignored** (only a `.gitkeep` is tracked);
+  it is generated at package time.
 
 ```bash
-# After API changes, regenerate both locations
-make gen-crds          # writes config/crd/bases/
-make gen-helm-crds     # writes charts/virtrigaud/crds/
+# After ANY change to api/infra.virtrigaud.io/v1beta1/*_types.go
+make generate          # DeepCopy methods
+make gen-crds          # writes config/crd/bases/ (commit the result)
+make gen-helm-crds     # writes charts/virtrigaud/crds/ (not committed)
 
-# Lint the chart with the regenerated CRDs (this is what CI also runs)
+# Lint / render the chart; both regenerate the chart CRDs first
 make helm-lint
+make helm-template
 ```
 
-CI's **Validate Helm Charts** job re-runs `helm lint` / `helm template`
-against the chart, so if you forget to regenerate, the build fails there.
+!!! warning "Installing the chart from a checkout"
+    A fresh checkout has an empty `charts/virtrigaud/crds/`. Run
+    `make gen-helm-crds` (or use `make helm-package`, `make helm-lint` or
+    `make helm-template`, which do) before `helm install` / `helm upgrade`
+    from `charts/virtrigaud`. Otherwise the chart ships no — or stale —
+    CRDs, and on upgrade a stale set can prune fields from the live CRDs.
+
+CI's **Verify Generated Files** job regenerates the code, the CRDs and the
+protobuf bindings and fails if `git diff` is not clean; it also runs
+`make verify-helm-crds`, which asserts that the chart CRDs generated from
+the Go types are byte-identical to `config/crd/bases/` (this trips when a
+new CRD is added but the chart generator does not emit it).
 
 ### 3. Testing
 
@@ -105,11 +125,12 @@ make test
 # Integration tests (cross-package observability tests; no cluster required)
 make test-integration
 
-# End-to-end tests (requires kind cluster; gated behind //go:build e2e
-# since v0.3.6 / #133 so default `go test ./...` no longer fails on TestE2E).
-# NOTE: `make test-e2e` itself does NOT yet pass `-tags=e2e` (see #133
-# follow-up), so until that lands run the explicit form below.
-go test -tags=e2e ./test/e2e/... -v -ginkgo.v
+# go-libvirt integration tests (need a reachable libvirtd; skip otherwise)
+make test-libvirt-integration
+
+# End-to-end tests (requires a running kind cluster; the suite is gated
+# behind //go:build e2e and the make target passes -tags=e2e)
+make test-e2e
 ```
 
 See [Testing Locally](testing-locally.md) for more details.
@@ -144,13 +165,8 @@ git commit -s -m "feat(vsphere): add graceful shutdown support"
 ```
 
 This appends `Signed-off-by: Your Name <your@email>` automatically from your
-`user.name` / `user.email` git config. Without the trailer, the PR will fail
-the DCO check and cannot be merged.
-
-!!! tip "Maintainer workflow"
-    The project maintainer's local clone uses a `prepare-commit-msg` git hook
-    (under `.claude/hooks/`, gitignored) to add sign-off automatically. That
-    setup is personal and not required for contributors — just remember `-s`.
+`user.name` / `user.email` git config. Commits without the trailer are not
+accepted.
 
 ## CHANGELOG entries
 
@@ -175,40 +191,41 @@ is strict:
 - [ ] Documentation only
 ```
 
-Versioned release headers (`## [0.3.6] - 2026-05-25`) sit at the top and
-aggregate the per-PR entries that preceded them. Don't reorganise existing
+Versioned release headers (`## [0.3.6] - 2026-05-25`) aggregate the per-PR
+entries that preceded them. Don't reorganise existing
 release sections.
 
 ## CI on pull requests
 
-Every PR triggers the CI workflow (`.github/workflows/ci.yml`), which runs the
-following jobs:
+Every PR triggers the CI workflow (`.github/workflows/ci.yml`). Most of the jobs
+below run on every PR; two are gated and in practice run on pushes only:
 
 | Job                       | What it checks                                                                 |
 |---------------------------|--------------------------------------------------------------------------------|
-| **Test**                  | `make test` excluding libvirt + e2e packages; uploads coverage to Codecov.    |
-| **Lint**                  | `golangci-lint` v2.12.2 with a 10-minute timeout.                              |
+| **Test**                  | `go vet` over the root, `sdk/` and `proto/` modules, then `make test` (envtest, includes the `examples/` dry-run); uploads coverage to Codecov. |
+| **Libvirt Integration**   | `make test-libvirt-integration` against a `libvirt-daemon-system` `test://` driver. |
+| **Lint**                  | `golangci-lint` v2.12.2 (the version pinned in the Makefile).                  |
 | **Security Scan**         | `gosec` (SARIF upload) + Trivy in repo mode (SARIF upload).                    |
-| **Verify Generated Files**| Regenerates CRDs + checks for drift; fails if `make gen-crds` / `make gen-helm-crds` would diff. |
-| **Build**                 | Compiles manager + all 4 providers + supporting binaries.                      |
-| **Build Tools**           | Compiles `vrtg`, `vrtg-provider`, `vcts`, `virtrigaud-loadgen`.                |
-| **Build Container Images**| Builds (no push) the manager + provider images from `build/Dockerfile.*`.      |
-| **Validate Helm Charts**  | `helm lint` + `helm template` + `chart-testing` against the chart.             |
-| **Conformance Tests**     | Runs `vcts` against the mock provider.                                         |
+| **Supply Chain Vulnerability Scan** | `govulncheck` on the root and `sdk/` modules.                        |
+| **Verify Generated Files**| Runs `make generate`, `make gen-crds` and `make proto`, fails on any `git diff`, and runs `make verify-helm-crds`. |
+| **Build**                 | Compiles the manager and the three hypervisor providers (libvirt, vSphere, Proxmox), `CGO_ENABLED=0`. |
+| **Build Tools**           | Compiles `vrtg`, `vcts`, `virtrigaud-loadgen`, `vrtg-provider`.                |
+| **Build Container Images**| On PRs, builds the manager and provider images without pushing; on `main`, pushes per-arch images and merges the manifests. |
+| **Validate Helm Charts**  | `helm lint`, `helm template`, and the render checks (webhooks, NetworkPolicy, `/tmp` size limits, disk-size ceiling, admission policy). |
+| **Conformance Tests**     | `vcts validate test/conformance/specs/` (spec validation only).                |
 | **Integration Tests**     | `make test-integration` (cross-package observability tests).                   |
-| **Catalog Validation**    | Validates `examples/` YAMLs against the live CRD schemas.                      |
-| **API Conversion Tests**  | Exercises round-trip conversion between API versions.                          |
-| **CI Summary**            | Aggregates the above; the PR is mergeable only if everything green.            |
+| **Catalog Validation**    | Validates `providers/catalog.yaml` against a schema; gated on that file changing (the gate reads `head_commit`, which exists only on push events, so it is skipped on pull requests). |
+| **API Conversion Tests**  | Gated on `api/` or `config/crd/` changing (push events only, as above): single-version CRDs, CRD kustomization in sync, no internal lab names in tracked files, CRD generation drift. |
+| **CI Summary**            | Aggregates most of the above (its `needs:` list is in `ci.yml`).              |
 
-CI uses `go-version-file: go.mod` for the Go version (1.26.4 in v0.3.8).
+CI uses `go-version-file: go.mod` for the Go version (1.26.10 in v0.4.0).
 
-### Lint: CI vs local
+### Lint
 
-The Lint job runs **golangci-lint v2.12.2** (installed by
-`golangci/golangci-lint-action@v9`). The version pinned in the project
-Makefile is older — there's a known drift here. If your `make lint` passes
-locally but CI Lint fails, that's why. **Treat CI Lint as the source of
-truth** until the versions are reconciled.
+`make lint` and the CI Lint job both run **golangci-lint v2.12.2**; the
+version is pinned in the Makefile (`GOLANGCI_LINT_VERSION`) and the CI
+workflow, and the configuration is `.golangci.yml`. Keep the two in lockstep
+when bumping.
 
 ### Branch protection on `main`
 
@@ -221,7 +238,8 @@ The `main` branch has a ruleset enforcing:
 
 Required status checks are **not** currently enforced at the ruleset level
 (they're observable via the **CI Summary** job, which authors and reviewers
-are expected to check before merge).
+are expected to check before merge). Merge, squash and rebase merges are all
+allowed.
 
 ## Contribution Guidelines
 
@@ -232,16 +250,18 @@ are expected to check before merge).
 3. **Test thoroughly**: `make fmt lint test build` locally before pushing.
 4. **Sign off**: Every commit needs `-s` (DCO).
 5. **CHANGELOG**: Add an entry for any code-affecting change.
-6. **CRD sync**: If you touched `api/`, run `make generate gen-crds
-   gen-helm-crds` and commit the regen output. CI's **Verify Generated
-   Files** job will fail otherwise.
+6. **Regenerate**: If you touched `api/`, run `make generate gen-crds` and
+   commit the regenerated `zz_generated.deepcopy.go` and
+   `config/crd/bases/`; if you touched `provider.proto`, run `make proto`
+   and commit the bindings. (`charts/virtrigaud/crds/` is generated and
+   gitignored.) CI's **Verify Generated Files** job fails otherwise.
 7. **Submit PR**: Clear description, linked issue, mention which CI jobs you
    expect to be affected.
 
 ### PR Requirements
 
 - [ ] All CI checks pass (see table above)
-- [ ] CRDs are in sync (Verify Generated Files green)
+- [ ] Generated files are in sync (Verify Generated Files green)
 - [ ] Code is formatted (`make fmt`)
 - [ ] Code is linted (CI Lint green)
 - [ ] Documentation updated if needed (separate PR on the
@@ -352,29 +372,28 @@ make test-integration
 ### End-to-end Tests
 
 ```bash
-# Requires a kind cluster + the manager image loaded.
-# Since #133 the e2e suite is gated behind //go:build e2e; `make test-e2e`
-# does not yet pass `-tags=e2e` so use the explicit `go test` form below:
-go test -tags=e2e ./test/e2e/... -v -ginkgo.v
+# Requires a running kind cluster; the suite is gated behind //go:build e2e
+# and the make target passes -tags=e2e.
+make test-e2e
 ```
 
-### Provider Conformance Tests
+The e2e suite is the kubebuilder scaffold and is not run by CI. See
+[Testing Locally](testing-locally.md#end-to-end-tests-kind) for its caveats.
 
-VCTS (VirtRigaud Conformance Test Suite) lives at `cmd/vcts/`. To run it
-against the mock provider:
+### Provider Conformance Specs
+
+VCTS (VirtRigaud Conformance Test Suite) lives at `cmd/vcts/`, with its runner
+in `internal/conformance/` and its specs in `test/conformance/specs/`. What
+CI runs, and what you should run after editing a spec, is spec validation:
 
 ```bash
-# Build the suite + the mock provider
-make build-provider-mock
 go build -o bin/vcts ./cmd/vcts
-
-# Start the mock provider, then point vcts at it
-./bin/provider-mock &
-./bin/vcts run --endpoint=localhost:9090
+./bin/vcts validate test/conformance/specs/
 ```
 
-CI runs an equivalent flow in the **Conformance Tests** job using the mock
-provider built from the same source tree.
+`vcts validate` exits non-zero when a spec is invalid. `vcts run` exists but
+its step executor is not implemented in v0.4.0, so it cannot pass yet; see the
+[CLI Tools Reference](../references/cli-tools.md#vcts).
 
 ## Release Process
 
@@ -382,10 +401,9 @@ provider built from the same source tree.
 
 1. **Prepare release**:
    ```bash
-   # Regenerate deepcopy methods and both CRD locations
+   # Regenerate deepcopy methods and the committed CRDs
    make generate
    make gen-crds
-   make gen-helm-crds
 
    # Update version in charts
    vim charts/virtrigaud/Chart.yaml
@@ -394,24 +412,30 @@ provider built from the same source tree.
    vim CHANGELOG.md
    ```
 
-2. **Cut an RC, smoke, then promote**:
+2. **Cut a candidate, smoke, then promote** (`X.Y.Z` is the version being released):
    ```bash
-   git tag v0.3.8-rc1
-   git push origin v0.3.8-rc1
-   # ...deploy to lab, run smoke recipe, then:
-   git tag v0.3.8
-   git push origin v0.3.8
+   git tag vX.Y.Z-rc1
+   git push origin vX.Y.Z-rc1
+   # ...deploy to a test cluster, run the smoke recipe, then:
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
    ```
 
-3. **CI handles**:
-   - Building and pushing multi-arch images
-   - Running Trivy on the manager image (release blocker if HIGH/CRITICAL CVE)
-   - Creating GitHub release
-   - Publishing Helm charts
-   - Generating CLI binaries
+3. **The release workflow handles** (any `v*` tag; a tag containing `-` is
+   published as a pre-release):
+   - Building and pushing multi-arch images, signing them with cosign, and
+     generating SBOMs and SLSA provenance
+   - Running Trivy on the images (release blocker if HIGH/CRITICAL CVE)
+   - Creating the GitHub release
+   - Packaging the Helm chart (it runs `make gen-helm-crds` first, since the
+     chart CRDs are not committed)
+   - Building the CLI binaries (`vrtg`, `vcts`, `vrtg-provider`,
+     `virtrigaud-loadgen`) for linux and darwin (amd64, arm64) and windows
+     (amd64)
 
-The project follows an **`rc1 → smoke → final`** pattern; v0.3.5 and v0.3.6
-each shipped on a single RC. A failing Trivy scan on the manager image is a
+The project follows a **release candidate → smoke → final** pattern; v0.3.5
+and v0.3.6 each shipped on a single candidate, while v0.4.0 went through nine
+release candidates. A failing Trivy scan on the manager image is a
 hard release blocker — see the v0.3.6 changelog for the OpenTelemetry CVE
 example.
 
@@ -437,25 +461,35 @@ in the same PR.
 
 ### CRD Sync Issues
 
-If you see "Helm chart CRDs are out of sync" in CI:
+If **Verify Generated Files** fails in CI (generated files out of sync, or
+"Helm chart CRDs drifted"):
 
 ```bash
-make update-crds
-git add config/crd/bases/ charts/virtrigaud/crds/ api/
-git commit -s -m "chore: regen CRDs"
+make generate gen-crds gen-helm-crds
+make proto           # only if provider.proto changed
+git add api/ config/crd/bases/ proto/
+git commit -s -m "chore: regen generated files"
 ```
+
+`charts/virtrigaud/crds/` is gitignored, so it is never added. If
+`make verify-helm-crds` itself fails, `make gen-helm-crds` no longer
+produces the same CRD set as `make gen-crds` (for example a new CRD is not
+emitted into the chart); fix the generator rather than the generated files.
 
 ### Test Failures
 
 ```bash
-# Clean and retry
-make clean
-make test
+# Re-run the failing package verbosely
+go test -v -count=1 ./internal/controller/...
 
-# For libvirt-related failures locally
-export SKIP_LIBVIRT_TESTS=true
-make test
+# The go-libvirt integration tests skip themselves when no libvirtd is
+# reachable; run them against a local libvirtd with
+make test-libvirt-integration
 ```
+
+(`make clean` and `SKIP_LIBVIRT_TESTS` do not exist.) If envtest cannot find
+`etcd` / `kube-apiserver`, see
+[Testing Locally](testing-locally.md#envtest-cannot-find-etcd-kube-apiserver).
 
 ### Development Environment
 
@@ -465,7 +499,7 @@ make dev-cleanup
 make dev-deploy
 
 # Check logs
-kubectl logs -n virtrigaud-system deployment/virtrigaud-manager
+make dev-logs
 ```
 
 ## Documentation Contributions
@@ -486,6 +520,7 @@ cd virtrigaud-website
    ```bash
    make install
    make install-crd-tools
+   make install-proto-tools
    ```
 
 2. Make your changes in the `src/` directory

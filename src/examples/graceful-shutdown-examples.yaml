@@ -1,6 +1,17 @@
 # Copyright (c) 2026 VirtRigaud Creators
 # SPDX-License-Identifier: Apache-2.0
 
+# Cross-namespace references: the VirtualMachines below live in `default` and
+# reference a Provider, VMClass and VMImage in `virtrigaud-system`. Each of
+# those objects must share itself with `default` via
+# spec.consumerNamespaceSelector, or the VMs report Ready=False /
+# ConsumerNotAllowed and nothing is created. On each of them (none is defined
+# here), add for example:
+#   consumerNamespaceSelector:
+#     matchLabels:
+#       kubernetes.io/metadata.name: default
+# See docs/cross-namespace-references.md.
+
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
 metadata:
@@ -8,7 +19,7 @@ metadata:
   namespace: default
 spec:
   # Use graceful shutdown power state
-  powerState: OffGraceful
+  powerState: "OffGraceful"
   
   providerRef:
     name: vsphere-provider
@@ -25,11 +36,13 @@ spec:
   networks:
     - name: default-network
   
-  # Configure graceful shutdown timeout
+  # The lifecycle block below only shows the schema.
+  # NOTE: spec.lifecycle hooks and gracefulShutdownTimeout are accepted by the API but not
+  # executed or sent to the provider in v0.4.0 (see the "Advanced VM lifecycle" guide).
   lifecycle:
     gracefulShutdownTimeout: "90s"  # 90 seconds for graceful shutdown
     
-    # Optional: Pre-stop hook to run before shutdown
+    # Pre-stop hook (accepted by the API, not executed)
     preStop:
       exec:
         command:
@@ -51,7 +64,7 @@ metadata:
   namespace: default
 spec:
   # Regular hard shutdown
-  powerState: Off
+  powerState: "Off"
   
   providerRef:
     name: vsphere-provider

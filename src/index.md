@@ -24,30 +24,34 @@ Hypervisor-specific logic does **not** run inside the manager. Each provider run
                           │  Attachment, VM-       │
                           │  Snapshot, VMMigration,│
                           │  VMClone, VMSet,       │
-                          │  VMPlacementPolicy     │
+                          │  VMPlacementPolicy,    │
+                          │  Host, HostPool        │
                           └───────────┬────────────┘
                                       │ watch / status
                           ┌───────────▼────────────┐
                           │   virtrigaud-manager   │
-                          │  (9 reconcilers)       │
+                          │  (12 reconcilers)      │
                           │                        │
                           │  per-RPC interceptors: │
-                          │   1. metrics (G4)      │
-                          │   2. CircuitBreaker(G6)│
+                          │   1. request-sent      │
+                          │   2. metrics           │
+                          │   3. CircuitBreaker    │
                           └───────────┬────────────┘
-                                      │ gRPC (mTLS optional)
+                                      │ gRPC (mTLS)
         ┌─────────────────────────────┼─────────────────────────────┐
         │                             │                             │
 ┌───────▼──────┐             ┌────────▼─────────┐          ┌────────▼────────┐
 │ provider-    │             │ provider-        │          │ provider-       │
 │ vsphere      │             │ libvirt          │          │ proxmox         │
-│ (govmomi)    │             │ (virsh + libssh) │          │ (REST API)      │
+│ (govmomi)    │             │ (SSH + virsh,    │          │ (REST API)      │
+│              │             │  single host or  │          │                 │
+│              │             │  clustered)      │          │                 │
 └──────────────┘             └──────────────────┘          └─────────────────┘
         │                             │                             │
-   vCenter / ESXi              KVM / QEMU host                Proxmox VE host
+   vCenter / ESXi              KVM / QEMU host(s)             Proxmox VE host
 ```
 
-One manager binary, one manager Dockerfile (consolidated in v0.3.6 — see H1 in that release), and one gRPC client per Provider CR. Each outbound RPC passes through two unary interceptors: a metrics interceptor (per-RPC latency and status-code counter, G4) and a CircuitBreaker interceptor (one breaker per Provider CR, G6).
+One manager binary, one manager Dockerfile (consolidated in v0.3.6), and one gRPC client per Provider CR. Each outbound RPC passes through three unary client interceptors: a request-sent interceptor (tells a call that never left the manager from one whose outcome is unknown), a metrics interceptor (per-RPC latency and status-code counter) and a CircuitBreaker interceptor (one breaker per Provider CR). Provider connections require mTLS unless the Provider CR explicitly opts out.
 
 ## Quick Navigation
 
@@ -61,6 +65,8 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6 — see H1 in
 - [Provider Guides](guides/index.md) - Overview and provider setup
 - [Provider Capabilities Matrix](providers/providers-capabilities.md) - Feature comparison
 - [Advanced Topics](guides/advanced/advanced-lifecycle.md) - Advanced VM operations
+- [Security Model and Multi-Tenancy](guides/security-model.md) - Ownership, cross-namespace grants, admission policy
+- [VM Status Reference](guides/vm-status.md) - Phases, conditions, reasons and held provider calls
 
 ### Provider-Specific Guides
 - [vSphere Provider](providers/vsphere.md) - VMware vCenter/ESXi integration
@@ -73,7 +79,8 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6 — see H1 in
 - [VM Lifecycle Management](guides/advanced/advanced-lifecycle.md) - Advanced VM operations
 - [Nested Virtualization](guides/advanced/nested-virtualization.md) - Run hypervisors in VMs
 - [Graceful Shutdown](guides/advanced/graceful-shutdown.md) - Proper VM shutdown handling
-- [VM Snapshots](guides/advanced/advanced-lifecycle.md#snapshot-management) - Backup and restore
+- [VM Snapshots and Revert](guides/vm-snapshots.md) - Take a snapshot and revert a VM to it
+- [Clustered Libvirt (Experimental)](guides/clustered/index.md) - One Provider in front of several libvirt hosts: [placement](guides/clustered/placement.md), [operations](guides/clustered/operations.md), [backup and restore](guides/clustered/backup-restore.md)
 - [Remote Providers](guides/advanced/remote-providers.md) - Provider architecture
 
 ### Operations
@@ -96,6 +103,9 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6 — see H1 in
 - [CLI API Reference](api-reference/cli.md) - Detailed CLI documentation
 - [Metrics Catalog](api-reference/metrics.md) - Available metrics
 - [Provider Catalog](references/catalog.md) - Available providers
+- [Full CRD Reference](references/generated-crd-docs.md) - Generated field-level schema
+- [Provider gRPC API Guide](references/grpc-api-guide.md) - How the manager uses the contract and what changed in v0.4.0
+- [Provider gRPC API](references/grpc-api.md) - Generated manager-to-provider contract
 
 ### Development
 - [Overview](development/index.md) - Development guide
@@ -105,40 +115,53 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6 — see H1 in
 
 ### Examples Directory
 - [Example README](examples/index.md) - Overview of all examples
-- [Complete Examples](examples/) - Working configuration files
-- [Advanced Examples](examples/advanced/) - Complex scenarios
-- [Security Examples](examples/security/) - Security configurations
+- [Advanced Examples](examples/advanced/index.md) - Snapshots, reconfigure, cloning, task tracking
+- [Clustered libvirt example](guides/clustered/index.md#complete-first-setup) - Provider, HostPool, Hosts and a first VM
+- [Shared Provider example](examples/shared-provider-consumer-namespaces.yaml) - `consumerNamespaceSelector` for multi-tenant clusters
+- [Security configuration](operations/security.md) - Credentials, mTLS and network policy examples
 
 ## Custom Resources
 
-VirtRigaud v0.3.9 ships **10 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
+VirtRigaud v0.4.0 ships **12 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
 
 | Kind | Purpose |
 |---|---|
-| `VirtualMachine` | Desired state of a single VM (image, class, networks, disks, power state). |
-| `Provider` | Connection details for a hypervisor (vSphere / Libvirt / Proxmox / Mock) and its provider-server Deployment. |
-| `VMClass` | Reusable sizing template (CPU, memory, firmware). |
-| `VMImage` | Reference to a hypervisor template / OVA / cloud image. |
+| `VirtualMachine` | Desired state of a single VM (image, class, networks, disks, power state). `spec.snapshot.revertToRef` reverts it to a `VMSnapshot`. |
+| `Provider` | Connection details for a hypervisor (vSphere / Libvirt / Proxmox) and its provider-server Deployment. `spec.topology: cluster` (libvirt only) fronts several hosts; `spec.consumerNamespaceSelector` shares it with other namespaces. |
+| `VMClass` | Reusable sizing template (CPU, memory, firmware). Can be shared with other namespaces through `spec.consumerNamespaceSelector`. |
+| `VMImage` | Reference to a hypervisor template / OVA / cloud image. Can be shared with other namespaces through `spec.consumerNamespaceSelector`. |
 | `VMNetworkAttachment` | Logical network the VM attaches to (resolved per-provider). |
 | `VMSnapshot` | A point-in-time snapshot of a VirtualMachine. |
-| `VMMigration` | Inter-provider VM migration (export → import). |
-| `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.3.9. |
-| `VMPlacementPolicy` | Placement / anti-affinity rules. Applied via `VirtualMachine.spec.placementRef`; no standalone controller. |
-| `VMClone` | One-shot full or linked clone of an existing VM (vSphere, Proxmox, and Libvirt as of v0.3.9). |
+| `VMMigration` | Inter-provider VM migration (export → import) through S3 or NFS staging (a legacy PVC backend also exists). |
+| `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.4.0. |
+| `VMPlacementPolicy` | Placement / anti-affinity rules. Applied via `VirtualMachine.spec.placementRef`; the clustered libvirt scheduler uses it as its constraint language. There is no standalone controller. |
+| `VMClone` | One-shot clone of an existing VM (vSphere, Proxmox and Libvirt). libvirt supports full clones only; linked clones are not supported there. |
+| `Host` | One hypervisor host behind a clustered libvirt Provider, with its live capacity and health in `status`. |
+| `HostPool` | A group of `Host`s under one clustered Provider, with scheduling strategy and overcommit policy. `status` counts total, ready and schedulable hosts. |
 
-The manager also runs a `VMAdoption` reconciler (not a CRD — it reconciles `Provider` resources annotated with `virtrigaud.io/adopt-vms: "true"`, discovers VMs the hypervisor already owns, and creates `VirtualMachine` CRs labelled `virtrigaud.io/adopted=true` for them, plus an `adopted-Ncpu-Nmb` `VMClass` per unique sizing). See the [generated CRD reference](references/generated-crd-docs.md) for the full schema.
+The manager also runs a `VMAdoption` reconciler (not a CRD — it reconciles `Provider` resources annotated with `virtrigaud.io/adopt-vms: "true"`, discovers VMs the hypervisor already owns, and creates `VirtualMachine` CRs labelled `virtrigaud.io/adopted=true` for them, plus an `adopted-Ncpu-Nmb` `VMClass` per unique sizing). Adoption skips templates and image artifacts, and, since v0.4.0, VMs whose owner stamp names no `VirtualMachine` in this cluster. See the [generated CRD reference](references/generated-crd-docs.md) for the full schema.
 
 ## Version Information
 
-This documentation covers **VirtRigaud v0.3.11**.
+This documentation covers **VirtRigaud v0.4.0**.
+
+!!! warning "Upgrading from v0.3.11"
+    v0.4.0 is a security-hardening release with breaking changes (cross-namespace references need a grant, `spec.providerRef` is immutable once bound, vSphere needs a new vCenter privilege, libvirt hosts need a seed directory, and more). Read the [Upgrade Guide](operations/upgrade.md) and [Helm CRD Upgrades](getting-started/helm-crd-upgrades.md) before upgrading.
 
 ### Recent Releases
 
+- **v0.4.0** — *Security hardening, clustered libvirt providers and snapshot revert.*
+    - **Clustered libvirt providers (experimental, opt-in).** `Provider.spec.topology: cluster` fronts several libvirt hosts registered as `Host` resources in a `HostPool`. A placement scheduler (using `VMPlacementPolicy`) picks a host per VM, and every later call is routed to that VM's host and checked against its owner stamp. Create, describe, delete, power, reconfigure, snapshot, full clone and S3/NFS export work across hosts; a `VMMigration` can target a clustered Provider. Host-to-host migration is not implemented. A clustered Provider runs one replica, so a rollout is a short outage.
+    - **Snapshot revert.** `VirtualMachine.spec.snapshot.revertToRef` now reverts the VM (before, the field was accepted and ignored). The VM must be powered off; progress is in `status.snapshotRevert` and the `SnapshotReverted` condition. On libvirt a revert needs a snapshot taken with the VM powered off.
+    - **Security hardening.** VM ownership stamps and fail-closed ownership checks on vSphere, libvirt and Proxmox; cross-namespace `Provider`/`VMClass`/`VMImage` references need `spec.consumerNamespaceSelector`; cross-namespace clone and migration targets need a grant; a `ValidatingAdmissionPolicy` (Kubernetes 1.30+) reserves the manager-owned annotations; a `Provider` that is still in use is not deleted from under its VMs (ADR-0010); identity-safe image preparation (ADR-0009); private libvirt cloud-init seeds; a `VMMigration` acts only on the target VM it created; pod `/tmp` size limits; an opt-in administrator disk-size limit (`manager.maxDiskSize`); shell-quoted and XML-escaped libvirt commands and definitions.
+    - **Behaviour changes.** `spec.providerRef` is immutable once a VM is bound (use `virtrigaud.io/orphan-on-delete: "true"` to detach); a libvirt VM without `spec.userData` gets no default login; libvirt linked clones are disabled; `powerOn` on `VMClone` and `VMMigration` is honored (default `false`); libvirt `Reconfigure` reports a change that needs a restart as such (`Reconfiguring=True/RestartRequired`); `status.ips` lists only reachable addresses; `status.phase` is set on every VM.
+    - **Proxmox.** The bridge, VLAN tag, NIC model and static IP of a VM's networks are applied; the cloud-init drive is placed on the VM's disk storage; imports of a migrated disk are accepted only from the VM's own verified migration stage.
+    - **Operations.** A provider call whose outcome is unknown is held for an operator instead of being re-sent blindly (`SnapshotOutcomeUnknown`, `ExportOutcomeUnknown`, `ImportOutcomeUnknown`); a delete held for an unreachable clustered host says so (`DeleteBlocked`/`HostUnreachable`); new metrics `virtrigaud_host_committed_cpu` and `virtrigaud_host_committed_memory_mib`; the gRPC contract gains host inventory (`ListHosts`, `GetHostInfo`), `TransferOwner`, `DeleteStagedDisk` and `DeleteLandedDisk` (see [Provider gRPC API](references/grpc-api.md)).
 - **v0.3.11** — *NFS cross-hypervisor migration staging backend (ADR-0006 Slice 4).*
-    - **Second storage-agnostic `VMMigration` backend: NFS (#236).** Alongside the S3 backend, the disk can now be staged on an **NFS export** and moved with `qemu-img`'s native transport — no PVC, no relay, no S3 credentials. Lab-validated across all three providers (vSphere, libvirt, Proxmox VE) in **both directions** against a real OpenMediaVault server.
+    - **Second storage-agnostic `VMMigration` backend: NFS (#236).** Alongside the S3 backend, the disk can now be staged on an **NFS export** and moved with `qemu-img`'s native transport — no PVC, no relay, no S3 credentials. Lab-validated for libvirt ⇄ libvirt, libvirt ⇄ vSphere and libvirt ⇄ Proxmox VE; vSphere ⇄ Proxmox VE over NFS was not run.
     - **Per-provider NFS transport.** libvirt (host-side) and vSphere (pod-side) use qemu-img's `nfs://` libnfs driver; **Proxmox kernel-mounts** the export because `pve-qemu-kvm` ships no libnfs driver.
     - **`nfs.uid` / `nfs.gid` are effectively mandatory for cross-provider migrations** (AUTH_SYS authorizes by the numeric uid/gid each leg presents); set them to the export owner. The staged object is a single flat file in the export root.
-    - **Proxmox now advertises `s3` *and* `nfs`** (not PVC: its disks live on the node, unreachable by a pod-mounted PVC). The full 3-hypervisor matrix is now validated in both directions over **both** staging backends. See the [VM Migration User Guide](migration/user-guide.md).
+    - **Proxmox now advertises `s3` *and* `nfs`** (not PVC: its disks live on the node, unreachable by a pod-mounted PVC). Every pair among the three hypervisors was validated over S3, and five pairs over NFS. See the [VM Migration User Guide](migration/user-guide.md).
 - **v0.3.9** — *Libvirt online operations + clone + image-prepare + memory snapshots on all three providers.*
     - **Libvirt online CPU/memory reconfigure (#203).** `virsh setvcpus/setmem --live` with no power-cycle for VMs created with `cpuHotAddEnabled`/`memoryHotAddEnabled` on the VMClass (4× headroom, 64-vCPU cap). Lab-proven.
     - **Libvirt online disk expansion (#201).** `virsh blockresize` + best-effort in-guest FS grow. Grow-only; no power-cycle. Lab-proven.
@@ -164,7 +187,8 @@ See [CHANGELOG.md](https://github.com/projectbeskar/virtrigaud/blob/main/CHANGEL
 | Provider | Status | Maturity | Documentation |
 |----------|--------|----------|---------------|
 | vSphere | Production Ready | Stable | [Guide](providers/vsphere.md) |
-| Libvirt/KVM | Production Ready | Stable | [Guide](providers/libvirt.md) |
+| Libvirt/KVM (single host) | Production Ready | Stable | [Guide](providers/libvirt.md) |
+| Libvirt/KVM (clustered, `topology: cluster`) | Opt-in | Experimental | [Guide](guides/clustered/index.md) |
 | Proxmox VE | Production Ready | Beta | [Guide](providers/proxmox.md) |
 | Mock | Complete | Testing | [providers/tutorial.md](providers/tutorial.md) |
 

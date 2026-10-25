@@ -7,17 +7,46 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Overview
 
-VirtRigaud Helm chart now supports **automatic CRD upgrades** during `helm upgrade`. This eliminates the need for manual CRD management and provides a seamless upgrade experience.
+The VirtRigaud Helm chart applies its CRDs on `helm install` **and** `helm upgrade` with a hook Job, so you do not manage CRDs by hand. Helm itself never upgrades CRDs from a chart's `crds/` directory; this hook closes that gap.
 
-## What changes on upgrade to v0.3.8
+!!! warning "Upgrading from v0.3.11"
+    v0.4.0 has a required order (CRDs, then cross-namespace grants, then the manager, then the providers) and several breaking changes. Read the [Upgrade Guide](../operations/upgrade.md) and the [release notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md) before running `helm upgrade`.
 
-The CRD-upgrade hook automatically applies the following additive changes when you run `helm upgrade ... --version 0.3.11`:
+## What changes on upgrade from v0.3.11 to v0.4.0
 
-- **`vmclones.infra.virtrigaud.io`** — new CRD (VMClone MVP). Adds `status.targetVMID` field.
-- **`vmsets.infra.virtrigaud.io`** — new CRD (VMSet stub). The controller emits `Ready=False / Reason=ControllerNotImplemented`; no existing resources are affected.
-- New RBAC rules for the VMClone and VMSet reconcilers land alongside the CRDs.
+The CRD-upgrade hook applies these changes when you run `helm upgrade ... --version 0.4.0`:
 
-CRD upgrades are additive (no fields removed). Existing `VirtualMachine`, `Provider`, `VMSnapshot`, and `VMMigration` resources are unaffected.
+- **New CRDs:** `hosts.infra.virtrigaud.io` and `hostpools.infra.virtrigaud.io` (clustered libvirt providers). The chart now installs 12 CRDs.
+- **`spec.consumerNamespaceSelector`** on `Provider`, `VMClass` and `VMImage`. A reference to one of these in another namespace is refused (`ConsumerNotAllowed`) unless this field selects the referencing namespace.
+- **`VirtualMachine`:** `status.boundProvider`, `status.placement` (clustered placement), `status.snapshotRevert` (snapshot revert), the `Suspended` and `Unknown` values of `status.powerState`, and an admission rule that makes `spec.providerRef` immutable once the VM is bound.
+- **`Provider`:** `spec.topology` (`single` or `cluster`), `status.reportedCapabilities.supportsHonestReconfigure` and `supportsImageArtifactIdentity`, and immutable `spec.type` and `spec.topology` (CEL rules).
+- **`VMImage`:** `status.providerStatus["<namespace>/<name>"]` gains `providerUID`, `sourceDigest` and `taskRef` (prepare state is now per Provider).
+- **`VMMigration`:** `status.targetVMUID`, `status.targetVMClaim`, `status.sourceVMUID`, `status.storagePVCUID`, and `status.storageInfo.importTarget`, `stagingDigest` and `stagingLayout`; `spec.importedDisk` accepts an empty `diskID` while `migrationRef` is set (migration into a clustered Provider).
+- **`VMClone`:** `status.targetUID`. **`VMSnapshot`:** `status.boundProvider` and `status.vmUID`.
+- New RBAC rules for the manager: `get` on the `virtualmachines`, `providers`, `vmclasses`, `vmimages` and `vmsnapshots` CRDs, `get;list;watch` on `namespaces`, and `get;patch;update` on `hostpools/status`. The chart applies them with the manager; a Kustomize install must reapply `config/rbac/role.yaml`.
+
+No field is removed. The admission rules (`spec.providerRef` and `spec.type` immutability) can reject updates that earlier releases accepted; see the Upgrade Guide. Existing `VirtualMachine`, `Provider`, `VMSnapshot` and `VMMigration` resources are kept.
+
+!!! danger "Order matters: set `consumerNamespaceSelector` before the new manager runs"
+    The new manager fails closed on cross-namespace references. If any `VirtualMachine`,
+    `VMClone` or `VMMigration` uses a `Provider`, `VMClass` or `VMImage` from another
+    namespace, apply the new CRDs first, set `spec.consumerNamespaceSelector` on those objects,
+    and only then roll the manager. The field does not exist until the CRDs are upgraded, and the
+    helm hook applies the CRDs in the same `helm upgrade` that rolls the manager. Apply the CRDs yourself first:
+
+    ```bash
+    kubectl apply --server-side --force-conflicts -f config/crd/bases   # from the v0.4.0 release checkout
+    # set spec.consumerNamespaceSelector on the shared objects, then:
+    helm upgrade virtrigaud virtrigaud/virtrigaud --version 0.4.0 -n virtrigaud-system --reset-then-reuse-values
+    ```
+
+    The manager's readiness probe fails while the `VirtualMachine`, `Provider`, `VMClass` or `VMImage`
+    CRD lacks a field it needs, so `helm upgrade --wait` times out instead of running against an old schema.
+
+!!! tip "Carry custom values with `--reset-then-reuse-values`"
+    `--reuse-values` reuses the **old** chart's defaults, so settings added in a newer chart are
+    missing and old defaults linger. Use `--reset-then-reuse-values` (Helm 3.14+), which applies the
+    new chart's defaults and then your own values.
 
 ## The Problem
 
@@ -118,7 +147,7 @@ crdUpgrade:
   
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl  # VirtRigaud kubectl image
-    tag: "v0.3.8"  # Auto-updated to match release version
+    tag: "v0.4.0"  # Set by the release to match the VirtRigaud version
   
   backoffLimit: 3
   ttlSecondsAfterFinished: 300
@@ -183,7 +212,7 @@ metadata:
 spec:
   source:
     chart: virtrigaud
-    targetRevision: 0.3.8
+    targetRevision: 0.4.0
     helm:
       values: |
         crdUpgrade:
@@ -199,7 +228,7 @@ spec:
 ### Flux
 
 ```yaml
-apiVersion: helm.toolkit.fluxcd.io/v2beta1
+apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: virtrigaud
@@ -207,7 +236,7 @@ spec:
   chart:
     spec:
       chart: virtrigaud
-      version: 0.3.8
+      version: 0.4.0
   values:
     crdUpgrade:
       enabled: true  # Automatic upgrades work!
@@ -241,15 +270,13 @@ kubectl describe job -n virtrigaud-system -l app.kubernetes.io/component=crd-upg
 
     **Symptom**: The CRD-upgrade-job starts, applies an empty ConfigMap, and exits without error, but `kubectl get crd` shows no VirtRigaud CRDs. Or, if the job runs before the CRDs exist at all, it may reach `BackoffLimitExceeded`.
 
-    This bit operators on the v0.3.3-rc2 deploy of the lab cluster.
-
     **Workaround**: Install from the published Helm chart rather than rebuilding from source:
 
     ```bash
     helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
     helm repo update
     helm install virtrigaud virtrigaud/virtrigaud \
-      --version 0.3.11 \
+      --version 0.4.0 \
       --namespace virtrigaud-system \
       --create-namespace
     ```
@@ -290,7 +317,7 @@ kubectl describe clusterrole <role-name>
 crdUpgrade:
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl
-    tag: "v0.3.8"  # Use matching VirtRigaud version
+    tag: "v0.4.0"  # Use matching VirtRigaud version
     pullPolicy: IfNotPresent
 ```
 
@@ -432,11 +459,11 @@ resources:
 
 ### Q: How do I roll back?
 
-**A**: Use `helm rollback`. CRDs are not rolled back (Kubernetes limitation).
+**A**: Use `helm rollback`. CRDs are not rolled back, and rolling the manager back has side effects (for example a `Provider` deleted afterwards keeps its in-use finalizer). Read the rollback caveats in the [Upgrade Guide](../operations/upgrade.md) first.
 
 ### Q: Can I customize the kubectl image?
 
-**A**: Yes, via `crdUpgrade.image.repository` and `crdUpgrade.image.tag`. The default uses the official Kubernetes kubectl image from `registry.k8s.io`.
+**A**: Yes, via `crdUpgrade.image.repository` and `crdUpgrade.image.tag`. The default is VirtRigaud's own `ghcr.io/projectbeskar/virtrigaud/kubectl` image, whose tag the release sets to the VirtRigaud version.
 
 ## References
 

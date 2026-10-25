@@ -30,7 +30,9 @@ spec:
     virtualizationBasedSecurity: false  # May conflict with some nested hypervisors
     cpuHotAddEnabled: true
     memoryHotAddEnabled: true
-    latencySensitivity: low  # Better performance for nested workloads
+    # latencySensitivity and hyperThreadingPolicy are accepted by the API but not
+    # applied by any provider in v0.4.0.
+    latencySensitivity: low
     hyperThreadingPolicy: prefer
   
   # Security profile configuration
@@ -41,10 +43,11 @@ spec:
     # TPM can be enabled if needed by nested VMs
     tpmEnabled: false
     
-    # Enable VT-d/AMD-Vi for better I/O performance
+    # Expose an IOMMU to the guest (vSphere vvtd.enable; libvirt adds an intel iommu device)
     vtdEnabled: true
   
-  # Resource limits and reservations
+  # Resource limits and reservations: accepted by the API but not applied by any
+  # provider in v0.4.0.
   resourceLimits:
     # Reserve CPU for consistent performance
     cpuReservation: 4000  # 4GHz reserved
@@ -241,10 +244,9 @@ spec:
   # Network configuration
   networks:
     - name: default-network
-      ipPolicy: dhcp
-  
+
   # Power on the VM
-  powerState: On
+  powerState: "On"
   
   # Tags for organization
   tags:
@@ -300,7 +302,7 @@ spec:
           - virt-host-validate qemu
           - echo "Test environment ready for nested virtualization"
   
-  powerState: On
+  powerState: "On"
   
   tags:
     - testing
@@ -323,13 +325,18 @@ spec:
     vsphere:
       portgroup: "Nested-Lab-PG"
       vlan:
-        vlanId: 100
-  
-  ipPolicy: dhcp
-  
+        vlanID: 100
+
+  ipAllocation:
+    type: DHCP
+
   # Optional: Static IP configuration
-  # staticIP: "192.168.100.10"
-  # gateway: "192.168.100.1"
-  # dns:
-  #   - "8.8.8.8"
-  #   - "8.8.4.4"
+  # ipAllocation:
+  #   type: Static
+  #   staticConfig:
+  #     address: "198.51.100.10/24"
+  #     gateway: "198.51.100.1"
+  #   dnsConfig:
+  #     servers:
+  #       - "8.8.8.8"
+  #       - "8.8.4.4"

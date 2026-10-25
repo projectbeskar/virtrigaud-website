@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # Development
 
 Reference for contributors and external provider authors working against
-**VirtRigaud v0.3.8**.
+**VirtRigaud v0.4.0**.
 
 ## Where to go from here
 
@@ -19,32 +19,39 @@ Reference for contributors and external provider authors working against
 | Internal provider deep dives (vSphere, Libvirt, Proxmox) | [Provider docs](../providers/vsphere.md) |
 | API surface — CRDs, gRPC contract, metrics catalog | [References section](../references/generated-crd-docs.md) |
 
-## Prerequisites (v0.3.8)
+## Prerequisites (v0.4.0)
 
 The toolchain floor first moved in v0.3.6 (PR
-[#125](https://github.com/projectbeskar/virtrigaud/pull/125)); v0.3.8 builds
-on **Go 1.26.4**:
+[#125](https://github.com/projectbeskar/virtrigaud/pull/125)); v0.4.0 builds
+on **Go 1.26.10**:
 
-- **Go 1.26+** (v0.3.8 builds on **1.26.4**) — `go.mod` is the source of
+- **Go 1.26+** (v0.4.0 builds on **1.26.10**) — `go.mod` is the source of
   truth; CI uses `go-version-file: go.mod` so you should match locally.
-  Source builders must upgrade; **binary consumers via released container
-  images are unaffected**.
-- Docker — for image builds and the libvirt provider's CGO toolchain.
+  `sdk/go.mod` and `proto/go.mod` carry the same `go` line. Source builders
+  must match it; **binary consumers via released container images are
+  unaffected**.
+- Docker — for image builds.
 - Kubernetes cluster — `kind`, `k3d`, or a real cluster. `kind` is what
   the `make test-e2e` target expects.
 - `kubectl`.
 - Helm 3.x.
 - `make`.
 
-Optional, depending on what you're building:
+Optional, depending on what you're doing:
 
-- `libvirt-dev` (Debian/Ubuntu) or `libvirt-devel` (Fedora) — required to
-  compile the libvirt provider locally (`make build-provider-libvirt`).
-  The libvirt provider is `CGO_ENABLED=1`; the other providers are pure
-  Go.
-- `golangci-lint` — pinned via `make lint`; will be installed locally
-  under `bin/` on first invocation.
-- `setup-envtest` — `make test` bootstraps this for you.
+- `golangci-lint` — pinned by the Makefile (`GOLANGCI_LINT_VERSION`, v2.12.2,
+  the same version CI runs); `make lint` installs it under `bin/` on first
+  invocation.
+- `setup-envtest` — `make test` bootstraps this for you. The Kubernetes
+  version it downloads is derived from the `k8s.io/api` version in
+  `go.mod` (v0.32.x, so envtest **1.32**).
+- `buf` (v1.46.0, installed under `bin/` on demand) — for `make proto`,
+  `make proto-lint` and `make proto-breaking`.
+- `libvirtd` — only to run the go-libvirt integration tests
+  (`make test-libvirt-integration`, which skips itself when none is
+  reachable). Since the libvirt provider became pure Go, **no `libvirt-dev`
+  headers or CGO toolchain are needed** to build it: every provider binary is
+  built with `CGO_ENABLED=0`.
 
 ## One-time bootstrap
 
@@ -52,8 +59,9 @@ Optional, depending on what you're building:
 git clone https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
 
-# Bootstraps controller-gen, envtest, and produces bin/manager.
-# Subsequent invocations are incremental.
+# Bootstraps controller-gen, regenerates CRDs and deepcopy code, runs
+# fmt and vet, and produces bin/manager. Subsequent invocations are
+# incremental.
 make build
 ```
 
@@ -72,11 +80,20 @@ make test         # all packages pass
 make build        # must succeed
 ```
 
-If `*_types.go` changed, additionally:
+`make test`, `make build` and `make run` already depend on `gen-crds`,
+`generate`, `fmt` and `vet`, so the generated files are refreshed as a side
+effect. If `api/infra.virtrigaud.io/v1beta1/*_types.go` changed, regenerate
+explicitly and commit the result:
 
 ```bash
-make update-crds       # alias: make generate manifests sync-helm-crds
+make generate          # DeepCopy methods (zz_generated.deepcopy.go)
+make gen-crds          # config/crd/bases/ (committed); `make manifests` is an alias
+make gen-helm-crds     # charts/virtrigaud/crds/ (gitignored, generated on demand)
 ```
+
+If `proto/provider/v1/provider.proto` changed, run `make proto` (regenerate the
+Go bindings) and `make proto-lint`; `make proto-breaking` checks for
+breaking changes against `main`.
 
 Then add or update tests and a CHANGELOG entry. The full mandate is on the
 [Contributing](contributing.md) page; the **CHANGELOG entry is not
@@ -88,27 +105,34 @@ optional** for any change in `api/`, `cmd/`, `internal/`, `charts/`,
 ```text
 api/infra.virtrigaud.io/v1beta1/  CRD Go types — source of truth
 cmd/                              manager, providers, CLI
-  manager/                        canonical manager entrypoint (v0.3.6+; #119)
-  provider-{vsphere,libvirt,proxmox,mock}/
+  manager/                        canonical manager entrypoint
+  provider-{vsphere,libvirt,proxmox,mock}/   provider binaries (+ Dockerfile each)
+  vrtg/ vcts/ vrtg-provider/ virtrigaud-loadgen/ alpha-to-beta-dryrun/   CLIs
+build/                            Dockerfile.manager, Dockerfile.kubectl
 internal/
   controller/                     reconcilers (flat package, not subpackages)
   providers/{vsphere,libvirt,proxmox,mock}/   gRPC server implementations
   transport/grpc/                 manager-side gRPC client + CB interceptor
+  scheduler/ clustered/           placement scheduler and clustered-provider helpers
+  conformance/                    vcts runner and spec validator
   obs/                            metrics, logging, tracing
-  resilience/                     CircuitBreaker primitive (G6 / #112)
+  resilience/                     CircuitBreaker primitive
   runtime/                        remote.Resolver, manager runtime helpers
-  scaffold/                       boilerplate helpers
-proto/                            separate Go module: provider.proto + bindings
+  scaffold/                       vrtg-provider init templates
+  storage/ imageartifact/ diskutil/   migration storage, prepared images, disk helpers
+proto/                            separate Go module: provider.proto + generated bindings (proto/rpc)
 sdk/                              separate Go module: provider SDK for external authors
-charts/virtrigaud/                Helm chart with synced CRDs
+charts/virtrigaud/                Helm chart (crds/ is generated, not committed)
 config/                           Kustomize CRDs + RBAC + samples
+docs/                             design notes, ADRs, release notes
 examples/                         operator-facing YAML examples
-test/{e2e,integration,conformance}/   out-of-tree test suites
-fieldTesting/                     scratch workspace, NOT part of the build
+providers/catalog.yaml            provider catalog
+test/{e2e,integration,conformance,utils,performance}/   out-of-tree test suites
+hack/                             dev and CI helper scripts
 ```
 
 A few legacy paths that appear in older docs **do not exist** in
-v0.3.8 — ignore any reference to them:
+v0.4.0 — ignore any reference to them:
 
 - `api/v1beta1/` (the old kubebuilder default — use
   `api/infra.virtrigaud.io/v1beta1/`).
@@ -121,13 +145,14 @@ v0.3.8 — ignore any reference to them:
 # Manager image (uses build/Dockerfile.manager; unified path since v0.3.6)
 make docker-build
 
-# Provider images
-make docker-buildx-provider-vsphere
-make docker-buildx-provider-libvirt
-make docker-buildx-provider-proxmox
-make docker-buildx-provider-mock
+# Provider images (libvirt, vsphere and proxmox have image targets;
+# the mock provider has a Dockerfile but no make target)
+make docker-provider-vsphere
+make docker-provider-libvirt
+make docker-provider-proxmox
+make docker-providers                       # all three
 
-# All providers
+# Build and push multi-arch provider images
 make docker-buildx-providers
 
 # Multi-arch
@@ -139,7 +164,8 @@ The manager and provider Dockerfiles accept the same set of build args
 (documented in `build/Dockerfile.manager` and the per-provider
 `cmd/provider-<name>/Dockerfile`) — `BUILDER_IMAGE`, `BASE_IMAGE`,
 `GOPROXY`, CA-cert handling — useful for corporate / banking deployments
-that need a private builder image or an internal proxy.
+that need a private builder image or an internal proxy. The default builder
+image is `golang:1.26.10`.
 
 ## Documentation
 
@@ -149,12 +175,14 @@ repository owns them. To preview the site locally:
 
 ```bash
 # In the virtrigaud-website repo
-make install     # pip install -r requirements.txt
-make serve       # mkdocs serve on :8000
+make install     # poetry install
+make serve       # build (with generated CRD and gRPC reference pages) and serve on :8000
 ```
 
-CRD reference pages under `src/references/generated-crd-docs.md` are
-regenerated from the actual CRDs; do not hand-edit them.
+The CRD and gRPC reference pages (`src/references/generated-crd-docs.md` and
+`src/references/grpc-api.md`) are generated from the API types and
+`provider.proto`; do not hand-edit them. See
+[Building Locally](building-locally.md#building-documentation).
 
 ## Provider development
 
@@ -162,7 +190,9 @@ There are two paths to add a provider:
 
 1. **In-tree** (`internal/providers/<name>/`). Used by vSphere, Libvirt,
    Proxmox, and Mock. Has the most direct access to the manager's helpers
-   but lives inside the main module.
+   but lives inside the main module. A new in-tree provider needs every RPC
+   implemented (or answered `Unimplemented` and declared through its
+   capabilities) and a `cmd/provider-<name>/` binary.
 2. **Out-of-tree using the SDK** (`sdk/provider/`). For provider authors
    who want to ship their own gRPC server and image without forking the
    manager. See [Provider Development](providers.md).
@@ -173,17 +203,20 @@ case is documented at [Provider Development](providers.md).
 
 ## Release process
 
-Tagged via `rc → smoke → final`:
+Tagged via release candidate → smoke → final:
 
-1. `git tag v<X.Y.Z>-rc1`; push.
-2. The release workflow builds rc1 container images and runs Trivy scans
-   (which has caught real CVEs pre-promotion — see
-   [v0.3.6 release notes](../operations/upgrade.md#v035-v036)).
-3. Deploy rc1 to a lab cluster (`vr1.lab.k8` is the canonical one);
-   smoke-test.
+1. `git tag vX.Y.Z-rc1` (`X.Y.Z` is the version being released); push. Any tag matching `v*` starts the release
+   workflow, and a tag containing `-` is published as a pre-release.
+2. The release workflow builds multi-arch container images, signs them with
+   cosign, generates SBOMs and SLSA provenance, packages the Helm chart,
+   builds the CLI binaries, and runs Trivy scans (which has caught real CVEs
+   pre-promotion — see
+   [v0.3.6 release notes](../operations/upgrade.md#v035-v036)). A HIGH or
+   CRITICAL finding blocks promotion.
+3. Deploy the release candidate to a test cluster and smoke-test it.
 4. If clean, tag `v<X.Y.Z>` from the same commit; the final release
    automation runs.
-5. Update the Helm chart repo and announce.
+5. Announce.
 
 The CHANGELOG entries for each release have authoring attribution per the
 project rules — that is also the audit-trail mechanism for regulated

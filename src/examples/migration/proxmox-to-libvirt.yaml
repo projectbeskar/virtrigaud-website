@@ -1,0 +1,99 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
+# Example: Migrate a VM from Proxmox VE to Libvirt/KVM over S3 (ADR-0006 Slice 3).
+#
+# Proxmox → Libvirt is validated end-to-end over the S3/relay path. The disk is
+# staged through an S3-compatible object store and the provider pod is the S3
+# client, so bytes flow PVE node → pod → S3 → pod → libvirt host and NEVER
+# traverse a CSI PVC. (The Proxmox provider advertises S3 and NFS, not PVC or
+# `direct`; applying a `storage.type: pvc` migration against a Proxmox source
+# fails capability validation.)
+#
+# Data path: the Proxmox SOURCE runs `qemu-img convert -O qcow2` on the PVE node
+# over SSH and streams the result up to S3; the libvirt TARGET streams the object
+# down and imports it into its storage pool.
+#
+# The Proxmox provider is a HYBRID: an API-token control plane (REST) plus an SSH
+# data plane to the PVE node. The Proxmox Provider's Secret therefore carries BOTH
+# an API token (token_id/token_secret) AND SSH credentials (ssh_user + ssh_password
+# and/or ssh_privatekey) plus a pinned known_hosts. This VMMigration only
+# references the S3 credentials below.
+#
+# Prerequisites:
+# - Source VM "postgres-db" managed by a Proxmox provider
+# - Target Libvirt/KVM provider configured
+# - An S3-compatible bucket reachable from both provider pods
+---
+# S3 credentials Secret (same namespace as the VMMigration). Required keys:
+# accessKeyID, secretAccessKey. Optional: sessionToken (STS / temporary creds).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: s3-migration-credentials
+  namespace: databases
+type: Opaque
+stringData:
+  accessKeyID: "REPLACE_WITH_ACCESS_KEY_ID"
+  secretAccessKey: "REPLACE_WITH_SECRET_ACCESS_KEY"
+  # sessionToken: "REPLACE_WITH_SESSION_TOKEN"   # only for temporary/STS creds
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMMigration
+metadata:
+  name: postgres-proxmox-to-kvm
+  namespace: databases
+  labels:
+    app: postgresql
+    tier: database
+    migration-type: infrastructure-change
+spec:
+  source:
+    vmRef:
+      name: postgres-db
+    createSnapshot: false
+    powerOffBeforeMigration: true   # Stop writes for a consistent disk image
+    deleteAfterMigration: false     # Keep source DB until validated
+  target:
+    name: postgres-db-kvm
+    providerRef:
+      name: kvm-host1
+      namespace: default
+    classRef:
+      name: database-8cpu-32gb
+    # false (the default) leaves the migrated VM off; true powers it on.
+    powerOn: false
+  # S3-compatible object storage staging. Swap the endpoint below for AWS S3 / MinIO / Ceph
+  # RGW as needed; both provider pods must reach this endpoint.
+  storage:
+    type: s3
+    transferMode: relay             # relay (implemented) | auto→relay
+    s3:
+      bucket: virtrigaud
+      endpoint: http://s3.example.com:9000   # http:// ⇒ plaintext; omit for AWS
+      region: us-east-1
+      prefix: postgres-db/
+      usePathStyle: true            # true for MinIO/Ceph RGW/self-hosted S3; false for AWS
+      credentialsSecretRef:
+        name: s3-migration-credentials
+  options:
+    # The SOURCE exports its native format and the TARGET converts on import
+    # (ADR-0006 D4); diskFormat is advisory. NOTE: `compress` is honored only for
+    # qcow2 exports — raw/vmdk exports are not compressed even if set true.
+    diskFormat: qcow2
+    compress: false
+    verifyChecksums: true           # SHA256 of the transferred object (ADR-0006 D5)
+    timeout: "6h"
+    retryPolicy:
+      maxRetries: 5
+      retryDelay: "10m"
+      backoffMultiplier: 2
+    cleanupPolicy: OnSuccess
+  metadata:
+    purpose: "provider-change"
+    environment: "prod"
+    createdBy: "platform-team"
+
+# Monitor progress:
+#   kubectl get vmmigration postgres-proxmox-to-kvm -w
+#   kubectl describe vmmigration postgres-proxmox-to-kvm

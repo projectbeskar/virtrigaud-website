@@ -38,15 +38,15 @@ spec:
     folder: virtrigaud-vms
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.7"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
     service:
       port: 9090
-      # v0.3.7: a Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
-      # Set tls.enabled: false to keep plaintext (dev/lab only).
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
       tls:
         enabled: true
         secretRef:
-          name: provider-vsphere-tls   # Secret (kubernetes.io/tls or Opaque) with tls.crt, tls.key, ca.crt
+          name: provider-vsphere-tls   # Secret with tls.crt, tls.key, ca.crt
         insecureSkipVerify: false
 
 ---
@@ -124,6 +124,8 @@ spec:
   powerState: "On"
   
   # v0.2.1: Enhanced lifecycle management
+  # NOTE: spec.lifecycle hooks and gracefulShutdownTimeout are accepted by the API but not
+  # executed or sent to the provider in v0.4.0 (see the "Advanced VM lifecycle" guide).
   lifecycle:
     gracefulShutdownTimeout: "90s"  # 90 seconds for graceful shutdown
     preStop:
@@ -181,7 +183,7 @@ spec:
 ---
 # v0.2.1 Usage Examples:
 
-# 1. Graceful shutdown (uses preStop hook + VMware Tools):
+# 1. Graceful shutdown (VMware Tools; the preStop hook above is not executed):
 # kubectl patch virtualmachine demo-web-server --type='merge' -p='{"spec":{"powerState":"OffGraceful"}}'
 
 # 2. Regular hard shutdown:
