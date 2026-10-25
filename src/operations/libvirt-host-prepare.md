@@ -21,7 +21,8 @@ experimental) one.
 
 ## How the libvirt provider talks to the host
 
-The provider pod does **not** link `libvirt.so` and does **not** ship `virsh`.
+The provider pod does **not** link `libvirt.so`. (Its image still contains a `virsh`
+binary, kept for a local-connection fallback; remote hosts do not use it.)
 It opens an **in-process SSH connection** (`golang.org/x/crypto/ssh`, no `ssh`,
 `scp` or `sshpass` binary) to the host and runs `virsh` and ordinary host
 commands (`qemu-img`, `mktemp`, `realpath`, `stat`, `sudo`, ...) **on the host**
