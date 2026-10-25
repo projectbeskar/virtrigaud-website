@@ -113,12 +113,12 @@ Details: [Libvirt provider](libvirt.md) and [`clustered-provider-inventory.md`](
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
 | **Template Deployment** | ✅ | ✅ | ✅ | ✅ | Deploy from templates |
-| **Clone Operations** | ✅ | ✅[^clone] | ✅ | ✅ | Full VM duplication; libvirt: same-provider full or linked (qcow2 overlay) |
-| **Linked Clones** | ✅ | ✅[^clone] | ✅ | ✅ | COW-based clones; libvirt: qcow2 overlay via `backing_file` |
-| **Full Clones** | ✅ | ✅[^clone] | ✅ | ✅ | Independent copies; libvirt: full volume clone |
+| **Clone Operations** | ✅ | ✅[^clone] | ✅ | ✅ | Full VM duplication through `VMClone`; same provider only |
+| **Linked Clones** | ✅ | ❌[^clone] | ✅ | ✅ | COW-based clones; disabled on libvirt since v0.4.0 |
+| **Full Clones** | ✅ | ✅[^clone] | ✅ | ✅ | Independent copies; libvirt: full volume copy, source VM must be powered off |
 | **VM Reconfiguration** | ✅ | ✅[^reconfigure] | ✅ | ✅ | Online resource modification |
 
-[^clone]: As of v0.3.9 (#153/#208/#221), libvirt's `Clone` RPC is fully implemented and `GetCapabilities` reports `SupportsLinkedClones=true`. Linked clone = qcow2 overlay (`backing_file`); full clone = volume copy. Same-provider only. Clone hardening (#208/#221) ensures the per-VM UEFI `<nvram>` varstore is re-pointed to an independent copy (no shared nvram between source and clone), and hot-add headroom is preserved across a class-override clone. Earlier documentation (including v0.3.8 footnotes) stated libvirt clone was `Unimplemented` — that is reversed in v0.3.9.
+[^clone]: libvirt `Clone` is implemented for **full clones** (#153/#208/#221): the per-VM UEFI `<nvram>` varstore is copied to an independent file, hot-add headroom is preserved across a class-override clone, and a clone gets its own cloud-init instance id and SSH host keys. **Linked clones are disabled since v0.4.0**: a linked clone reads its source VM's live disk, and powering the source on corrupts the clone. `GetCapabilities` reports `SupportsLinkedClones=false` and a `VMClone` with `options.type: LinkedClone` fails with `LinkedCloneUnsupported`. Linked clones made by earlier releases keep working, but their source cannot be deleted, reverted or snapshotted while they exist. A libvirt full clone needs its source VM powered off. Earlier documentation (including v0.3.9 footnotes) listed libvirt linked clones as supported — that is reversed in v0.4.0.
 
 [^reconfigure]: As of v0.3.9 (#203), libvirt advertises `SupportsReconfigureOnline=true`. Online CPU/memory reconfigure via `virsh setvcpus --live` / `virsh setmem --live` works **only on VMs created with the hot-add flags** (`VMClass.spec.performanceProfile.cpuHotAddEnabled` and/or `memoryHotAddEnabled` set at create time). Headroom is provisioned at create (4× ceiling, vCPU hard-capped at 64). VMs created without these flags — including all pre-v0.3.9 VMs — still require a power-cycle for CPU/memory changes. Lab-verified: `virsh setvcpus … 4 --live` and `virsh setmem … --live` both succeeded with no power-cycle on a properly configured UEFI VM.
 
@@ -318,7 +318,7 @@ The capability builder lives at `sdk/provider/capabilities/` in the main repo an
 - **Host Device Passthrough**: Hardware device assignment
 - **Online Reconfiguration** (#203): Live CPU/memory changes via `virsh setvcpus/setmem --live` for VMs created with `cpuHotAddEnabled`/`memoryHotAddEnabled` on the VMClass (headroom provisioned at create, 4× ceiling, vCPU max 64). Power-cycle required for VMs without the flags.
 - **Online Disk Expansion** (#201): Live grow via `virsh blockresize` + best-effort in-guest FS grow. Grow-only.
-- **Clone Support** (#153/#208/#221): Full and linked (qcow2 overlay) clones, same-provider. UEFI nvram re-pointed per clone; hot-add headroom preserved across class-override clones.
+- **Clone Support** (#153/#208/#221): Full clones, same-provider (linked clones are disabled since v0.4.0). UEFI nvram re-pointed per clone; hot-add headroom preserved across class-override clones; a clone gets its own cloud-init identity and SSH host keys. The source VM must be powered off.
 - **Image Preparation** (#154): `VMImage.spec.prepare` drives lazy VM-create-time image import into a storage pool.
 - **Memory Snapshots** (#202): RAM-inclusive checkpoints on running VMs; disk-only downgrade with WARN for stopped VMs.
 - **VNC Console Access**: Direct VNC console URL generation for remote viewers
@@ -371,9 +371,9 @@ Reflects each provider's `GetCapabilities.SupportedNetworkTypes` response.
 
 All provider images are available from the GitHub Container Registry:
 
-- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.11`
-- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.11`
-- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.3.11`
+- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0`
+- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0`
+- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0`
 
 The mock provider (`provider-mock`) is a development/conformance-testing image only.
 It is **not** published under release tags and is **not** part of the multi-arch
@@ -475,6 +475,7 @@ the container runtime selects the correct layer automatically.
 
 ## Version History
 
+- **v0.4.0**: **Clustered libvirt providers (experimental)** — `topology: cluster` with `Host`/`HostPool`, a placement scheduler and routed per-host calls; libvirt reports `SupportsHonestReconfigure` (a change that only reaches the persistent definition is reported `RestartRequired`); **libvirt linked clones are disabled** (`SupportsLinkedClones=false`, `LinkedCloneUnsupported`); **snapshot revert** (`spec.snapshot.revertToRef`) on all providers; `spec.disks` is reported as not attached on libvirt and Proxmox (`DisksApplied=False`); Proxmox applies bridge, VLAN, NIC model and static IP and places the cloud-init drive on the VM's storage; identity-safe image preparation (`SupportsImageArtifactIdentity`) on vSphere, libvirt and Proxmox; the owner-stamp, staged/landed disk delete, resend-safe backend and import size-limit flags (see [Provider capability flags](#provider-capability-flags-for-clustered-and-security-contracts)).
 - **v0.3.11**: **NFS cross-hypervisor migration staging backend (ADR-0006 Slice 4, #236)** — a second storage-agnostic `VMMigration` backend alongside S3, lab-validated across all three providers (vSphere, libvirt, Proxmox VE) in both directions against a real OpenMediaVault server. The disk is staged on an NFS export and moved with `qemu-img`'s native transport (no PVC, no relay, no S3 credentials): libvirt (host-side) and vSphere (pod-side) use the `nfs://` libnfs driver; **Proxmox kernel-mounts** the export (`pve-qemu-kvm` ships no libnfs). `nfs.uid`/`nfs.gid` are effectively mandatory for cross-provider migrations (AUTH_SYS identity). With the S3 matrix (Slices 1–3) this completes #236's backend-agnostic, any-direction goal. Proxmox now advertises **s3 and nfs** (not PVC).
 - **v0.3.9**: Libvirt online CPU/memory reconfigure (#203) — `SupportsReconfigureOnline=true`; hot-add headroom provisioned at create via VMClass flags; lab-verified live. Libvirt online disk expansion (#201) — `SupportsDiskExpansionOnline=true`; `virsh blockresize` + best-effort in-guest FS grow; lab-verified. Libvirt memory snapshots (#202) — `SupportsMemorySnapshots=true`; RAM-inclusive checkpoints on running VMs. Libvirt Clone (#153) — `SupportsLinkedClones=true`; qcow2 overlay (linked) + full copy, same-provider. Libvirt clone hardening (#208/#221) — UEFI nvram re-pointed per clone; hot-add headroom preserved across class-override clones. End-to-end image preparation (#154) — `SupportsImageImport=true`; `VMImage.spec.prepare` drives lazy import on libvirt/vSphere/Proxmox. Proxmox export compression (#219) — honors `Compress` for qcow2 targets. vSphere memory snapshots (#200) — `SupportsMemorySnapshots=true`; `CreateSnapshot(memory=true)`.
 - **v0.3.8**: Capability negotiation surfaced on `Provider.status.reportedCapabilities` + `CapabilitiesReported` condition, with opt-in `--enforce-provider-capabilities` (default off, fail-open) (#176); vSphere `GetCapabilities` now advertises disk export **and** import + `vmdk`/`qcow2`/`raw` formats + export compression (#178); libvirt implements `ExportDisk`/`GetDiskInfo` (#177); VMClone controller MVP (same-provider full/linked, vSphere+Proxmox) (#179); vSphere vCenter session keepalive + live-probe reconnect (#190); libvirt transient-SSH retry with bounded backoff (#191); Helm templated providers disabled by default (#173).
@@ -490,4 +491,4 @@ the container runtime selects the correct layer automatically.
 
 ---
 
-*This document reflects VirtRigaud v0.3.11 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*
+*This document reflects VirtRigaud v0.4.0 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*
