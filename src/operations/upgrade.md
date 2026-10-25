@@ -35,8 +35,8 @@ version is `0.4.0` and every image tag is `v0.4.0`
 the [older-version notes](#older-versions) below.
 
 What is new in this window, in one paragraph: clustered libvirt providers
-(experimental; `Provider.spec.topology: cluster` and the `Host`, `HostPool` and
-`VMPlacementPolicy` CRDs), VM ownership stamps and fail-closed ownership checks on
+(experimental; `Provider.spec.topology: cluster`, the new `Host` and `HostPool`
+CRDs, and the scheduler that uses `VMPlacementPolicy`), VM ownership stamps and fail-closed ownership checks on
 every provider, consumer grants for shared `Provider`/`VMClass`/`VMImage`, an
 admission policy for manager-owned keys, identity-safe image preparation
 (ADR-0009), a `Provider` in-use finalizer (ADR-0010), migration staging cleanup
@@ -169,8 +169,8 @@ providers. Roll the providers promptly after the manager.
    kubectl apply --server-side --force-conflicts -f virtrigaud/crds/
    ```
 
-   Three new CRDs are created (`Host`, `HostPool`, `VMPlacementPolicy`) and the
-   existing ones change. The new manager reads the installed `VirtualMachine`,
+   Two new CRDs are created (`Host` and `HostPool`; `VMPlacementPolicy` already
+   existed in v0.3.11) and the existing ones change. The new manager reads the installed `VirtualMachine`,
    `Provider`, `VMClass`, `VMImage` and `VMSnapshot` CRDs and **fails readiness**
    if they lack the new fields (it does not crash and does not stop managing
    existing VMs, but `helm upgrade --wait` times out and the rolling update does

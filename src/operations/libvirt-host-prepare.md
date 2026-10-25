@@ -189,7 +189,7 @@ Host-key verification is **on by default** (since v0.3.7). The provider checks
 the host key on every connection against the `known_hosts` file mounted at
 `/etc/virtrigaud/credentials/known_hosts`. A missing or empty file, or an entry
 for another host, is a hard failure: there is no trust-on-first-use. The error
-names the problem and `ProviderAvailable` reports it. See
+names the problem in the provider pod log and in `Ready=False` / `ProviderError` on the VMs that use the Provider. `ProviderAvailable` does not show it: it only reflects whether the provider Deployment has a ready replica. See
 [ADR-0004](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0004-libvirt-ssh-host-key-verification.md).
 
 Collect the key from a trusted network path and add it as the `known_hosts` key

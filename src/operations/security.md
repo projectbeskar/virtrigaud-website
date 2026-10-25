@@ -88,7 +88,7 @@ Credentials are **never** placed in env vars by the controller. They are mounted
 | **Libvirt** | `username`, and `password` (password SSH) or `ssh-privatekey` (key SSH); `known_hosts` (SSH host-key trust, required unless the audit-flagged opt-out is set) |
 | **Proxmox** | `token_id`, `token_secret` (preferred), or `username`, `password` (fallback). For the SSH **data plane** (migration disk import/export, `qemu-img`): `ssh_user`, `ssh_password` or `ssh_privatekey`, and `known_hosts` |
 
-For Proxmox, **API tokens MUST be used in production**. See the [Proxmox provider page](../providers/proxmox.md#authentication) for the rationale and the [bearer-token page](../providers/security/bearer-token.md) for the privileges the token needs. Password auth is retained for development/CI parity only.
+For Proxmox, **API tokens are strongly recommended for production** (the code accepts both). See the [Proxmox provider page](../providers/proxmox.md#authentication) for the rationale and the [bearer-token page](../providers/security/bearer-token.md) for the privileges the token needs. Username/password is for development and CI only.
 
 A **clustered** libvirt Provider's hosts use the Secret named by `Host.spec.credentialSecretRef` (else the Provider's own credentials Secret), always read from the Provider's namespace; the manager renders the SSH material of every host into a per-Provider Secret it owns (`<provider>-hosts`) that the provider pod mounts read-only. See the [clustered libvirt guide](../guides/clustered/index.md).
 
@@ -438,31 +438,20 @@ Provider-side name checks reject names that tooling would resolve as something o
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Email `security@virtrigaud.io` with:
+Report vulnerabilities privately through GitHub Security Advisories for
+[projectbeskar/virtrigaud](https://github.com/projectbeskar/virtrigaud/security/advisories/new)
+(the repository's **Security** tab, **Report a vulnerability**). Include:
 
 - A description of the vulnerability
 - Steps to reproduce
 - Potential impact
 - Any mitigations you have already identified
 
-You should receive a response within 48 hours.
-
-### Severity classification
-
-- **Critical**: patch within 24 hours; out-of-band release if needed.
-- **High**: patch within 7 days.
-- **Medium**: patch within 30 days.
-- **Low**: patch in the next regular release.
-
-We coordinate disclosure on a 90-day default timeline.
+The repository publishes no response-time, patch-time or disclosure-timeline commitment.
 
 ## Supported versions
 
-| Version | Supported |
-|---------|-----------|
-| 0.4.x   | yes       |
-| 0.3.x   | security fixes only on request; upgrade to 0.4.x |
-| < 0.3   | no        |
+Fixes land on the latest minor (`0.4.x`) on a best-effort basis; the project keeps no long-term-support branches. See [Versioning](../providers/versioning.md#support-window).
 
 ## v0.3.6 security gap inventory
 

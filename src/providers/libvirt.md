@@ -223,7 +223,7 @@ TLS material mounts at `/etc/virtrigaud/tls` inside the provider pod. Both manag
 
 ## SSH host-key verification
 
-Host-key verification is **on by default** (since v0.3.7). A missing `known_hosts` entry is a hard failure: the provider will not connect and the `ProviderAvailable` condition reports it. The check runs again on every reconnect, so a rotated key is honoured on the next dial.
+Host-key verification is **on by default** (since v0.3.7). A missing `known_hosts` entry is a hard failure: the provider will not connect. The failure shows in the provider pod log and as `Ready=False` / `ProviderError` on the VMs that use the Provider; `ProviderAvailable` only reflects whether the provider Deployment has a ready replica, so it stays `True`. The check runs again on every reconnect, so a rotated key is honoured on the next dial.
 
 Seed the file on the operator workstation:
 

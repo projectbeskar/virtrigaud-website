@@ -80,7 +80,7 @@ The key name is `ssh-privatekey` (hyphen, no underscore) for libvirt. **`known_h
 
 For a **clustered** libvirt Provider, each `Host` uses the Secret named by its own `spec.credentialSecretRef` if set, otherwise the Provider's `spec.credentialSecretRef`; both are read from the Provider's namespace and carry the same `ssh-privatekey` / `known_hosts` keys. See the [clustered libvirt guide](../../guides/clustered/index.md).
 
-### Proxmox (API token — required for production)
+### Proxmox (API token — strongly recommended for production)
 
 ```yaml
 apiVersion: v1
@@ -116,7 +116,7 @@ data:
   password: <base64>
 ```
 
-See the [Proxmox provider page](../proxmox.md#authentication) for why API tokens are required in production.
+See the [Proxmox provider page](../proxmox.md#authentication) for why API tokens are strongly recommended in production.
 
 ## Installing ESO
 
@@ -465,5 +465,5 @@ If a key is missing or mistyped, the provider will fail to authenticate to the h
 
 - [Operations -> Security: Provider credentials](../../operations/security.md#provider-credentials) — full flow diagram.
 - [Bearer token authentication](bearer-token.md) — separate authentication path for the gRPC channel (not via Secrets).
-- [Proxmox provider](../proxmox.md#authentication) — why API tokens are required in production.
+- [Proxmox provider](../proxmox.md#authentication) — why API tokens are strongly recommended in production.
 - [Libvirt provider](../libvirt.md) — SSH credential options.

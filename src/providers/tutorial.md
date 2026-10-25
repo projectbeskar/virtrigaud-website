@@ -153,7 +153,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
         mode: Remote
         image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
         service:
-          port: 9090
+          port: 9443
           tls:
             enabled: true
             secretRef:
@@ -262,7 +262,7 @@ spec:
   memory: "4Gi"
   firmware: UEFI
   diskDefaults:
-    type: thin            # use qcow2 for libvirt/proxmox
+    type: thin            # DiskType: thin, thick, eagerzeroedthick, ssd, hdd or nvme
     size: "20Gi"
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -359,17 +359,17 @@ curl -s http://localhost:8080/metrics | grep 'circuit_breaker_state.*vsphere-lab
 
 # 4. RPC counter shows real traffic
 curl -s http://localhost:8080/metrics | grep virtrigaud_provider_rpc_requests_total | head
-# virtrigaud_provider_rpc_requests_total{method="Create", provider="vsphere-lab", ...} 1
-# virtrigaud_provider_rpc_requests_total{method="Describe", provider="vsphere-lab", ...} 12
+# virtrigaud_provider_rpc_requests_total{provider_type="vsphere", method="Create", code="OK"} 1
+# virtrigaud_provider_rpc_requests_total{provider_type="vsphere", method="Describe", code="OK"} 12
 
 # 5. VM operations counter populated
 curl -s http://localhost:8080/metrics | grep virtrigaud_vm_operations_total | head
-# virtrigaud_vm_operations_total{operation="create", provider="vsphere-lab"} 1
-# virtrigaud_vm_operations_total{operation="describe", provider="vsphere-lab"} 12
+# virtrigaud_vm_operations_total{operation="Create", provider_type="vsphere", provider="vsphere-lab", outcome="success"} 1
+# virtrigaud_vm_operations_total{operation="Describe", provider_type="vsphere", provider="vsphere-lab", outcome="success"} 12
 
 # 6. IP-discovery histogram populated
 curl -s http://localhost:8080/metrics | grep virtrigaud_ip_discovery_duration_seconds_count
-# virtrigaud_ip_discovery_duration_seconds_count{provider="vsphere-lab"} 1
+# virtrigaud_ip_discovery_duration_seconds_count{provider_type="vsphere"} 1
 ```
 
 SSH into the guest with the IP from step 1 to verify the cloud-init applied:

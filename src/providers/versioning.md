@@ -48,7 +48,7 @@ The `infra.virtrigaud.io/v1beta1` API is the **stable** CRD surface in the Kuber
 - Removing or renaming fields requires an ADR and an upgrade path. None have been removed on the public release line.
 - Validation tightening (new `kubebuilder:validation:*` markers) is meant not to reject objects that were valid in a prior release. v0.4.0 is a deliberate exception for security: `spec.providerRef` of a bound `VirtualMachine`, `Provider.spec.type` and `Provider.spec.topology` are immutable, and a reference to another namespace's `Provider`, `VMClass` or `VMImage` needs `spec.consumerNamespaceSelector`. Each is called out in the [Upgrade Guide](../operations/upgrade.md).
 
-The v1beta1 contract is enforced project-wide via the `CLAUDE.md` rule that breaking changes need an ADR (see [`development/contributing.md`](../development/contributing.md)).
+The project rule is that a breaking change to the v1beta1 contract needs an ADR (see [Contributing](../development/contributing.md)).
 
 There is no `v1alpha*` and no `v1` for the `infra.virtrigaud.io` group — operators target `v1beta1` for all CRs.
 
@@ -147,7 +147,7 @@ The project does **not** maintain long-term-support branches. Support is best-ef
 - **Prior minor** — community-only. No proactive backports; fixes accepted via PR.
 - **Older** — not supported. Upgrade.
 
-If you operate VirtRigaud in a regulated environment (the project is documented as deployable in regulated banking environments — see the field-testing notes), pin to a specific patch and upgrade on a schedule rather than chasing latest. Each release tag is reproducible: the manager binary emits `virtrigaud_build_info{version="v0.4.0"}` on `/metrics`, and the container image digest is signed and published to ghcr.io.
+If you operate VirtRigaud in a regulated environment, pin to a specific patch and upgrade on a schedule rather than chasing latest. Each release tag is reproducible: the manager binary emits `virtrigaud_build_info{version="v0.4.0"}` on `/metrics`, and the container image digest is signed and published to ghcr.io.
 
 ## Where to track releases
 

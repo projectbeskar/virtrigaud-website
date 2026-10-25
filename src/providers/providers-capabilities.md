@@ -108,7 +108,7 @@ Legend: ✅ supported through VirtRigaud CRs; ⚠️ partial (see the note in th
 | **Static IP** | ⚠️ | ❌ | ✅ | ✅ | vSphere: first NIC, through `guestinfo.network.*` keys the guest must consume. libvirt ignores `spec.networks[].ipAddress`. Proxmox: `ipconfigN` (needs `prefix`; needs a cloud-init drive) |
 | **DHCP** | ✅ | ✅ | ✅ | ✅ | |
 | **Bridge Networks** | ❌ | ✅ | ✅ | ✅ | libvirt `bridge`, Proxmox `vmbrN`. Proxmox also applies the NIC model |
-| **Distributed Switches** | ❌ | ❌ | ❌ | ❌ | vSphere NICs use standard port-group backing |
+| **Distributed Switches** | ✅ | ❌ | ❌ | ✅ | vSphere attaches a NIC to a port group by name and reports `standard` and `distributed` network types, so a distributed port group works. VirtRigaud does not create or manage switches |
 
 ### VM Lifecycle
 
@@ -258,7 +258,8 @@ A new manager flag **`--enforce-provider-capabilities`** gates snapshot and migr
 - **When ON**, the manager refuses to dispatch snapshot/migration work to a provider whose `reportedCapabilities` do not advertise support, returning a clear `NotSupported`-style failure on the relevant CR instead of letting it fail deep in the hypervisor.
 
 ```yaml
-# manager Deployment args (Helm values: manager.extraArgs)
+# manager Deployment args: patch the manager Deployment's container args
+# (the chart has no value for this flag)
 args:
   - --enforce-provider-capabilities
 ```
@@ -304,7 +305,7 @@ These are the features VirtRigaud exposes for each provider. Hypervisor-native f
 - **Templates and OVA/OVF import**: `VMImage.source.vsphere.templateName` (a real template) or `ovaURL`; prepared templates are stamped and reused by identity.
 - **Reconfigure**: CPU and memory (online with hot-add enabled on the VM), growth of additional disks; refuses a change a running VM cannot take until it is powered off.
 - **Clones**: full and linked, with automatic snapshot handling. Template and prepared-image artifacts are never deleted, powered, resized or snapshotted through a `VirtualMachine`.
-- **Datastore cluster (StoragePod) selection**, SCSI controller specs, hardware version upgrade.
+- **Datastore cluster (StoragePod) selection** and SCSI controller specs. The `HardwareUpgrade` RPC exists but no controller calls it (see [vSphere hardware version](../operations/vsphere-hardware-version.md)).
 - **Memory snapshots** (VM powered on) and **snapshot revert**.
 - **Disk export/import** (`vmdk`, `qcow2`, `raw`) and cross-provider migration over **S3 and NFS**. Disk I/O streams through the provider pod; the image bundles `qemu-img` and the libnfs driver. Imports land per namespace at `[<datastore>] <namespace>_<vm name>-migrated/...`.
 - **Required privileges** include `VirtualMachine.Config.AdvancedConfig` (owner stamps) and `System.Read` on the root folder. One replica, `Recreate` strategy.
@@ -394,8 +395,8 @@ the container runtime selects the correct layer automatically.
 
 ### Use vSphere When:
 - You have existing VMware infrastructure
-- You need enterprise features (HA, DRS, vMotion)
-- You require advanced networking (NSX, distributed switches)
+- You want VMs created from vSphere templates or OVA/OVF images
+- You attach VMs to standard or distributed port groups
 - You need centralized management (vCenter)
 
 ### Use Libvirt/KVM When:
@@ -406,8 +407,7 @@ the container runtime selects the correct layer automatically.
 
 ### Use Proxmox VE When:
 - You need both VMs and containers
-- You want integrated backup solutions
-- You need cluster management
+- You want to drive VMs through the Proxmox API with API tokens
 - You want web-based management
 
 ### Use Mock Provider When:
@@ -422,7 +422,6 @@ the container runtime selects the correct layer automatically.
 - **Best for**: Large-scale enterprise deployments
 - **Scalability**: Hundreds to thousands of VMs
 - **Overhead**: Higher due to feature richness
-- **Resource Efficiency**: Excellent with DRS
 
 ### Libvirt/KVM
 - **Best for**: Linux-based deployments
@@ -436,36 +435,14 @@ the container runtime selects the correct layer automatically.
 - **Overhead**: Moderate
 - **Resource Efficiency**: Good with clustering
 
-## Future Roadmap
-
-### Planned Enhancements
-
-#### vSphere
-- vSphere 8.0 support
-- Enhanced NSX integration
-- GPU passthrough support
-- vSAN policy automation
-- URL-based cloud-image import (currently OVA/OVF + content library only)
-
-#### Libvirt
-- Live migration support
-- SR-IOV networking
-- NUMA topology optimization
-- Enhanced performance monitoring
-
-#### Proxmox
-- HA configuration
-- Storage replication
-- Performance optimizations
-
 ## Support Matrix
 
 | Feature Category | vSphere | Libvirt | Proxmox | Mock |
 |-----------------|---------|---------|---------|------|
 | **Production Ready** | ✅ | ✅ | ✅ Beta | ✅ Testing |
 | **Documentation** | Complete | Complete | Complete | Complete |
-| **Community Support** | Active | Active | Growing | N/A |
-| **Enterprise Support** | Available | Available | Available | N/A |
+
+Support is best-effort and there is no long-term-support line; see [Versioning](versioning.md) for which releases receive fixes.
 
 ## Version History
 

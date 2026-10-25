@@ -54,7 +54,7 @@ Targets: `vsphere`, `libvirt` (single host), `proxmox`, and a libvirt Provider w
     | rc5 | `s3` | clustered libvirt -> Proxmox |
     | rc5 | `nfs` | Proxmox -> clustered libvirt; vSphere -> clustered libvirt |
     | rc7 | `s3` | vSphere -> clustered libvirt, onto a bridged network |
-    | after rc2 (build `main-73e08e8`) | `s3`, `nfs` | single-host libvirt -> clustered libvirt (two hosts, shared NFS pool) |
+    | after rc2 (a post-rc2 `main` build) | `s3`, `nfs` | single-host libvirt -> clustered libvirt (two hosts, shared NFS pool) |
 
     **Not repeated on a v0.4.0 build in a recorded lab run:** vSphere -> single-host
     libvirt over `s3`, vSphere <-> libvirt and libvirt <-> libvirt over NFS, and

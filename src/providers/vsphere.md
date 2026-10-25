@@ -155,7 +155,7 @@ For full mTLS details see [Security — mTLS](security/mtls.md).
 | `secretRef.name` | string | Name of a `kubernetes.io/tls` or `Opaque` Secret containing `tls.crt`, `tls.key`, and `ca.crt`. |
 | `insecureSkipVerify` | bool | Skip server certificate verification. Dev-only; never set in regulated environments. |
 
-TLS material mounts at `/etc/virtrigaud/tls` inside the provider pod. Both manager and provider pin TLS 1.3. A missing Secret with `tls.enabled: true` sets `TLSConfigured=False, Reason=SecretRefMissing`.
+TLS material mounts at `/etc/virtrigaud/tls` inside the provider pod. Both manager and provider pin TLS 1.3. `tls.enabled: true` without a `secretRef` sets `TLSConfigured=False, Reason=SecretRefMissing` and the Deployment is not created. A `secretRef` that names a Secret that does not exist is not detected: `TLSConfigured` stays `True` / `Enabled` and the provider pod fails to mount the Secret and does not start.
 
 The `TLSConfigured` status condition reasons are:
 
@@ -163,7 +163,7 @@ The `TLSConfigured` status condition reasons are:
 |--------|---------|
 | `TLSBlockMissing` | No `tls` block at all in the Provider CR. |
 | `ExplicitlyDisabled` | `tls.enabled: false` — plaintext acknowledged. |
-| `SecretRefMissing` | `tls.enabled: true` but `secretRef.name` not specified or Secret not found. |
+| `SecretRefMissing` | `tls.enabled: true` but `secretRef` is not set or its name is empty. A named Secret that does not exist is not checked here. |
 | `Enabled` | mTLS wired; Deployment proceeds. |
 
 ### Example Secret

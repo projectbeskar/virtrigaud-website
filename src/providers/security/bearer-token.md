@@ -117,7 +117,7 @@ Libvirt authentication is SSH-based (key or password), with the host key verifie
 
 ### Proxmox SSH data plane
 
-Migration disk transfer and `qemu-img` on the PVE node use SSH, not the API token. Add `ssh_user` and `ssh_password` or `ssh_privatekey`, and `known_hosts`, to the same credentials Secret (see [External Secrets](external-secrets.md#proxmox-api-token-required-for-production)). Host-key verification is on by default; `PROXMOX_INSECURE_SKIP_HOST_KEY_VERIFICATION=true` is an audit-flagged lab opt-out.
+Migration disk transfer and `qemu-img` on the PVE node use SSH, not the API token. Add `ssh_user` and `ssh_password` or `ssh_privatekey`, and `known_hosts`, to the same credentials Secret (see [External Secrets](external-secrets.md#proxmox-api-token-strongly-recommended-for-production)). Host-key verification is on by default; `PROXMOX_INSECURE_SKIP_HOST_KEY_VERIFICATION=true` is an audit-flagged lab opt-out.
 
 ## Scope 2: gRPC-channel bearer auth (SDK, external providers)
 

@@ -168,11 +168,6 @@ This appends `Signed-off-by: Your Name <your@email>` automatically from your
 `user.name` / `user.email` git config. Commits without the trailer are not
 accepted.
 
-!!! tip "Maintainer workflow"
-    The project maintainer's local clone uses a `prepare-commit-msg` git hook
-    (under `.claude/hooks/`, gitignored) to add sign-off automatically. That
-    setup is personal and not required for contributors — just remember `-s`.
-
 ## CHANGELOG entries
 
 Every code change in `api/`, `cmd/`, `internal/`, `charts/`, `proto/`, or

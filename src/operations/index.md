@@ -85,14 +85,15 @@ to the page that actually covers it.
       complementing the now-wired mTLS. See [Bearer Token](../providers/security/bearer-token.md)
       and [Network Policies](../providers/security/network-policies.md).
 - [ ] **Provider credentials reviewed** — for **Proxmox**, API tokens
-      (`token_id` / `token_secret`) **must** be used; password fallback is for
-      development parity only. See [Bearer Token Authentication](../providers/security/bearer-token.md).
+      (`token_id` / `token_secret`) are strongly recommended; username/password
+      is for development and CI only. See [Bearer Token Authentication](../providers/security/bearer-token.md).
 - [ ] **Secrets backend chosen** — at minimum, kube-apiserver
       `EncryptionConfiguration` for etcd-at-rest encryption. For multi-cluster /
       regulated deployments, External Secrets Operator (Vault, AWS Secrets
       Manager, etc.) per [External Secrets](../providers/security/external-secrets.md).
-- [ ] **Manager HA** — manager Deployment with at least 2 replicas and leader
-      election (controller-runtime enables it by default).
+- [ ] **Manager HA** — the chart passes `--leader-elect` to the manager (the
+      flag itself defaults to false) but `manager.replicaCount` defaults to 1;
+      set `manager.replicaCount: 2` for a standby manager.
 - [ ] **Audit trail** — K8s audit logging enabled at the cluster level, and the
       release notes / CHANGELOG reviewed for each upgrade (regulated-deployment
       posture).
