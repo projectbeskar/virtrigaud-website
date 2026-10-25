@@ -78,7 +78,7 @@ data:
 
 The key name is `ssh-privatekey` (hyphen, no underscore) for libvirt. **`known_hosts` is required** unless you set the audit-flagged `LIBVIRT_INSECURE_SKIP_HOST_KEY_VERIFICATION=true`: without it the connection hard-fails (there is no trust-on-first-use). The same applies to the password variant above. See [Security](../../operations/security.md#libvirt-ssh-host-key-verification).
 
-For a **clustered** libvirt Provider, each `Host` uses the Secret named by its own `spec.credentialSecretRef` if set, otherwise the Provider's `spec.credentialSecretRef`; both are read from the Provider's namespace and carry the same `ssh-privatekey` / `known_hosts` keys. See the [clustered libvirt guide](../../guides/clustered-libvirt.md).
+For a **clustered** libvirt Provider, each `Host` uses the Secret named by its own `spec.credentialSecretRef` if set, otherwise the Provider's `spec.credentialSecretRef`; both are read from the Provider's namespace and carry the same `ssh-privatekey` / `known_hosts` keys. See the [clustered libvirt guide](../../guides/clustered/index.md).
 
 ### Proxmox (API token — required for production)
 

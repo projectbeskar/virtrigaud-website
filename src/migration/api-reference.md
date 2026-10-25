@@ -628,7 +628,7 @@ Extra conditions and reasons you can meet are in the [reasons table](#condition-
 ...). The target is never moved off its host automatically: a host that fails after
 placement is **waited for, not replaced**. The disk-space check is a filter, not a
 reservation. Summary, prerequisites and limits: the
-[clustered libvirt guide](../guides/clustered-libvirt.md); every condition and what to
+[clustered libvirt guide](../guides/clustered/index.md); every condition and what to
 do about it:
 [Migration into a clustered provider](https://github.com/projectbeskar/virtrigaud/blob/main/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
 
@@ -1020,7 +1020,7 @@ another namespace or provider: grant it only to people trusted with that data.
 - [VM Migration User Guide](user-guide.md) - operator-facing how-to.
 - [VM Migration Guide](vm-migration-guide.md) - architecture and internals.
 - [Full CRD Reference](../references/generated-crd-docs.md#vmmigration) - generated field reference.
-- [Clustered libvirt](../guides/clustered-libvirt.md) - migrating into a clustered Provider.
+- [Clustered libvirt](../guides/clustered/index.md) - migrating into a clustered Provider.
 - [Resilience](../operations/resilience.md) - how the circuit breaker interacts with the many provider RPCs a migration issues.
 - [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) - storage-backend-agnostic migration.
 - [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0011-migration-staging-cleanup.md) - staging and landed-disk cleanup.

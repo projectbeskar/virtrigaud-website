@@ -50,7 +50,7 @@ See [Provider Architecture](advanced/remote-providers.md) for the details.
 | Provider | Setup guide | Notes |
 |----------|-------------|-------|
 | **vSphere** | [vSphere provider](../providers/vsphere.md) | VMware vSphere through govmomi |
-| **libvirt** | [Libvirt provider](../providers/libvirt.md) | KVM/QEMU over SSH; single host, or a [clustered Provider](clustered-libvirt.md) (experimental) |
+| **libvirt** | [Libvirt provider](../providers/libvirt.md) | KVM/QEMU over SSH; single host, or a [clustered Provider](clustered/index.md) (experimental) |
 | **Proxmox VE** | [Proxmox provider](../providers/proxmox.md) | PVE REST API plus SSH for disk transfer |
 
 Each setup guide covers prerequisites, credentials, the Provider configuration, a first VM and troubleshooting. Not all providers support the same features: see the [Provider capabilities matrix](../providers/providers-capabilities.md) for the authoritative comparison.
@@ -59,7 +59,7 @@ Each setup guide covers prerequisites, credentials, the Provider configuration, 
 
 | Guide | Covers |
 |-------|--------|
-| [Clustered libvirt](clustered-libvirt.md) | `topology: cluster`: one Provider in front of several libvirt hosts, with `Host` and `HostPool`, a placement scheduler and routed per-host lifecycle (experimental in v0.4.0) |
+| [Clustered libvirt](clustered/index.md) | `topology: cluster`: one Provider in front of several libvirt hosts, with `Host` and `HostPool`, a placement scheduler and routed per-host lifecycle (experimental in v0.4.0) |
 | [Advanced VM lifecycle](advanced/advanced-lifecycle.md) | Phases and conditions, reconfiguration results (`RestartRequired`, `ResizePendingPowerOff`), snapshots and `spec.snapshot.revertToRef`, `spec.disks` and `DisksApplied`, `status.ips`, image preparation, `orphan-on-delete`, adoption, `providerRef` immutability |
 | [VM cloning](advanced/vm-cloning.md) | `VMClone`: scope, per-provider rules (libvirt full clones need a powered-off source; libvirt linked clones are disabled), new cloud-init identity, owner stamping, cross-namespace targets |
 | [Graceful shutdown](advanced/graceful-shutdown.md) | `powerState: OffGraceful`: what each provider does and how it falls back |

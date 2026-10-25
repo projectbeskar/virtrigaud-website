@@ -730,7 +730,7 @@ vSphere (over S3 and NFS), and a Proxmox source; see the validation tables above
 made unreachable after the disk landed, a retry after an import and a held target of a
 previous incarnation were not run in the lab.
 
-Full guide: [Clustered libvirt](../guides/clustered-libvirt.md). Prerequisites, every
+Full guide: [Clustered libvirt](../guides/clustered/index.md). Prerequisites, every
 condition and how to clear it: [Migration into a clustered
 provider](https://github.com/projectbeskar/virtrigaud/blob/main/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
 Example: [`examples/vmmigration-into-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmmigration-into-clustered.yaml).
@@ -819,7 +819,7 @@ Example manifests are in the main repository, in
   and reason.
 - [VM Migration Guide](vm-migration-guide.md) - architectural deep dive (phase machine,
   controller orchestration, storage sequencing).
-- [Clustered libvirt](../guides/clustered-libvirt.md) - migrating into a clustered Provider.
+- [Clustered libvirt](../guides/clustered/index.md) - migrating into a clustered Provider.
 - [Resilience](../operations/resilience.md) - what happens when a provider flaps during a long migration.
 - [Libvirt Host Preparation](../operations/libvirt-host-prepare.md) - host setup for libvirt migrations.
 - [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) -

@@ -328,7 +328,7 @@ the VM:
    the migration (`TargetHostMoved`, `TargetDiskMismatch`).
 5. A retry or deletion before the target is created deletes the unbound target first.
 
-Summary and limits: [Clustered libvirt](../guides/clustered-libvirt.md); every reason:
+Summary and limits: [Clustered libvirt](../guides/clustered/index.md); every reason:
 [Migration into a clustered provider](https://github.com/projectbeskar/virtrigaud/blob/main/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
 
 ## Reconciler instrumentation
@@ -513,7 +513,7 @@ Key properties:
 - [VM Migration User Guide](user-guide.md) - practical how-to.
 - [VM Migration API Reference](api-reference.md) - every spec field, status field,
   condition and reason.
-- [Clustered libvirt](../guides/clustered-libvirt.md) - migrating into a clustered Provider.
+- [Clustered libvirt](../guides/clustered/index.md) - migrating into a clustered Provider.
 - [Resilience](../operations/resilience.md) - circuit breaker behaviour during long migrations.
 - [Full CRD Reference](../references/generated-crd-docs.md#vmmigration) - generated CRD documentation.
 - [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) -

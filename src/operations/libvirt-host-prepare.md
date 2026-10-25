@@ -226,7 +226,7 @@ files.
 mounts, and the same policy applies **per host**: a host without a `known_hosts`
 entry cannot be dialled. The `Host` may name its own `credentialSecretRef`;
 otherwise the Provider's is used. Both must be in the Provider's namespace. See
-the [clustered libvirt guide](../guides/clustered-libvirt.md).
+the [clustered libvirt guide](../guides/clustered/index.md).
 
 If you must bypass verification temporarily (lab or migration window only; the
 provider logs an audit-flagged `WARN`):
@@ -679,7 +679,7 @@ spec:
 
 Everything else a clustered host needs (the `HostPool`, placement policies, the
 `default` pool and seed directory on each host, restore and re-attach
-procedures) is in the [clustered libvirt guide](../guides/clustered-libvirt.md).
+procedures) is in the [clustered libvirt guide](../guides/clustered/index.md).
 
 ## SELinux / AppArmor
 
@@ -898,7 +898,7 @@ network-configuration defaults injected into cloud-init meta-data, see
 
 - [Providers / Libvirt](../providers/libvirt.md): provider configuration,
   capability flags and the Provider CR spec.
-- [Clustered libvirt guide](../guides/clustered-libvirt.md): `Host`, `HostPool`,
+- [Clustered libvirt guide](../guides/clustered/index.md): `Host`, `HostPool`,
   placement and the clustered host prerequisites.
 - [Upgrade Guide](upgrade.md): the order and the host changes needed for v0.4.0.
 - [Operations / Security](security.md): credential flow and the STRIDE-style

@@ -74,7 +74,7 @@ spec:
     net.virtrigaud.io/default: "true"
 ```
 
-Placement, the `Host` and `HostPool` fields, restore guards, the re-attach runbook and migration into a clustered Provider are covered in the [Clustered libvirt guide](../guides/clustered-libvirt.md). A clustered Provider serves a subset of the single-host features; the differences are marked in the tables below.
+Placement, the `Host` and `HostPool` fields, restore guards, the re-attach runbook and migration into a clustered Provider are covered in the [Clustered libvirt guide](../guides/clustered/index.md). A clustered Provider serves a subset of the single-host features; the differences are marked in the tables below.
 
 ## Capabilities at a glance
 

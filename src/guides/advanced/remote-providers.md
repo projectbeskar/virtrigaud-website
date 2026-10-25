@@ -202,7 +202,7 @@ A reference from a namespace the selector does not match is refused with `Ready=
 
 ## Clustered topology (experimental)
 
-`spec.topology` is `single` (the default: one provider process bound to one host) or `cluster` (one provider fronting N libvirt hosts registered as `Host` objects under a `HostPool`). `cluster` is accepted for `type: libvirt` only (the validating webhook rejects it for other types), is opt-in and experimental in v0.4.0. In a clustered Provider every `Host`, `HostPool` and per-host credential Secret must live in the Provider's namespace; the controller renders the hosts into the Secret `<name>-hosts`, which **contains the hosts' SSH credentials**, and mounts it read-only at `/etc/virtrigaud/hosts`. See the [Clustered libvirt guide](../clustered-libvirt.md) and [`provider-libvirt-clustered.yaml`](../../examples/provider-libvirt-clustered.yaml).
+`spec.topology` is `single` (the default: one provider process bound to one host) or `cluster` (one provider fronting N libvirt hosts registered as `Host` objects under a `HostPool`). `cluster` is accepted for `type: libvirt` only (the validating webhook rejects it for other types), is opt-in and experimental in v0.4.0. In a clustered Provider every `Host`, `HostPool` and per-host credential Secret must live in the Provider's namespace; the controller renders the hosts into the Secret `<name>-hosts`, which **contains the hosts' SSH credentials**, and mounts it read-only at `/etc/virtrigaud/hosts`. See the [Clustered libvirt guide](../clustered/index.md) and [`provider-libvirt-clustered.yaml`](../../examples/provider-libvirt-clustered.yaml).
 
 ## Deleting a Provider: the in-use finalizer
 

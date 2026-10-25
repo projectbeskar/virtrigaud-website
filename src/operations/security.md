@@ -90,7 +90,7 @@ Credentials are **never** placed in env vars by the controller. They are mounted
 
 For Proxmox, **API tokens MUST be used in production**. See the [Proxmox provider page](../providers/proxmox.md#authentication) for the rationale and the [bearer-token page](../providers/security/bearer-token.md) for the privileges the token needs. Password auth is retained for development/CI parity only.
 
-A **clustered** libvirt Provider's hosts use the Secret named by `Host.spec.credentialSecretRef` (else the Provider's own credentials Secret), always read from the Provider's namespace; the manager renders the SSH material of every host into a per-Provider Secret it owns (`<provider>-hosts`) that the provider pod mounts read-only. See the [clustered libvirt guide](../guides/clustered-libvirt.md).
+A **clustered** libvirt Provider's hosts use the Secret named by `Host.spec.credentialSecretRef` (else the Provider's own credentials Secret), always read from the Provider's namespace; the manager renders the SSH material of every host into a per-Provider Secret it owns (`<provider>-hosts`) that the provider pod mounts read-only. See the [clustered libvirt guide](../guides/clustered/index.md).
 
 ### What is logged
 

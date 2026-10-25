@@ -48,7 +48,7 @@ A transient provider error (`Ready=False` / `ProviderError`) on a VM that exists
 | `Deleting` | The delete is in progress |
 | `SnapshotReverted` | Present only while `spec.snapshot.revertToRef` is set ([below](#reverting-to-a-snapshot)) |
 | `DisksApplied` | `False` / `NotSupportedByProvider` when `spec.disks` is set on a libvirt or Proxmox Provider ([below](#additional-disks-specdisks)) |
-| `Placed`, `DeleteBlocked`, `ForceDeleteRefused` | Clustered libvirt Providers: placement, a held delete, and a refused force-delete ([clustered guide](../clustered-libvirt.md)) |
+| `Placed`, `DeleteBlocked`, `ForceDeleteRefused` | Clustered libvirt Providers: placement, a held delete, and a refused force-delete ([clustered guide](../clustered/index.md)) |
 | `LinkedClonesDependOnDisk` | libvirt: other VMs use this VM's disk as a backing file (linked clones made by an earlier release); see [VM cloning](vm-cloning.md#linked-clones-and-the-source-vm) |
 
 ## Lifecycle hooks
@@ -257,7 +257,7 @@ Adoption brings existing hypervisor VMs under management. It is a controller in 
 !!! warning "VMSet has no controller"
     `VMSet` is accepted by the API server, but its controller is a stub: it reports `Ready=False` with reason `ControllerNotImplemented` and manages no replicas. Manage individual `VirtualMachine` resources, optionally created with [VMClone](vm-cloning.md).
 
-**VMPlacementPolicy.** Attach a policy with `spec.placementRef`. It is **used by the scheduler of clustered libvirt Providers** (`topology: cluster`) as its input: hard host filters (`hard.hosts`, `hard.excludedHosts`, `hard.nodeSelector`, resource constraints, strict host and VM (anti-)affinity) and soft scores. A `placementRef` that names a missing policy leaves the VM `Provisioning=False` with reason `PlacementPolicyNotFound`. The vSphere-style constructs (`clusters`, `datastores`, `folders`, `resourcePools`, zone and datastore anti-affinity) are documented as deferred and **not enforced**, and a policy attached to a single-host, vSphere or Proxmox VM is not enforced at all. See the [clustered libvirt guide](../clustered-libvirt.md).
+**VMPlacementPolicy.** Attach a policy with `spec.placementRef`. It is **used by the scheduler of clustered libvirt Providers** (`topology: cluster`) as its input: hard host filters (`hard.hosts`, `hard.excludedHosts`, `hard.nodeSelector`, resource constraints, strict host and VM (anti-)affinity) and soft scores. A `placementRef` that names a missing policy leaves the VM `Provisioning=False` with reason `PlacementPolicyNotFound`. The vSphere-style constructs (`clusters`, `datastores`, `folders`, `resourcePools`, zone and datastore anti-affinity) are documented as deferred and **not enforced**, and a policy attached to a single-host, vSphere or Proxmox VM is not enforced at all. See the [clustered libvirt guide](../clustered/index.md).
 
 ## Provider capabilities
 

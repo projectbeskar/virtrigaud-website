@@ -45,7 +45,7 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 
 ## Clustered libvirt (experimental)
 
-`topology: cluster` is opt-in and experimental in v0.4.0. See the [Clustered libvirt guide](../guides/clustered-libvirt.md).
+`topology: cluster` is opt-in and experimental in v0.4.0. See the [Clustered libvirt guide](../guides/clustered/index.md).
 
 | File | What it shows |
 |------|---------------|

@@ -291,7 +291,7 @@ A provider image older than v0.4.0 does not report the re-send capabilities, so 
 
 ## A clustered host that stops answering
 
-A clustered libvirt Provider (`spec.topology: cluster`, see the [clustered libvirt guide](../guides/clustered-libvirt.md)) runs every per-VM call on one host. The rules below keep one unreachable host from affecting the rest of the Provider:
+A clustered libvirt Provider (`spec.topology: cluster`, see the [clustered libvirt guide](../guides/clustered/index.md)) runs every per-VM call on one host. The rules below keep one unreachable host from affecting the rest of the Provider:
 
 - **It never opens the Provider's breaker.** Host-scoped answers are excluded from the breaker ([above](#what-does-not-count-as-a-failure)), so the VMs on the healthy hosts keep working.
 - **It is answered in time.** Before a command of a routed call runs, the call waits for the host: for a command slot, for the SSH dial and handshake, and for an SSH session. These waits end **5 seconds before the call's deadline** (or a quarter of the time the call has left, when that is shorter), and a wait that ends there is treated as a host that did not answer, instead of letting the call run into the manager's own deadline and end with an unclassified error. The TCP connect of a dial stops after 30 s. A dial that another call already has in flight is waited for under the same bound. The single-host provider is unchanged. (`internal/providers/libvirt/host_answer.go`)
@@ -301,7 +301,7 @@ A clustered libvirt Provider (`spec.topology: cluster`, see the [clustered libvi
 - **A disk check that cannot run fails closed.** Before a clustered create, clone or delete touches a disk, the provider checks that no other domain on **any** host of the Provider uses it. A host that cannot be checked fails the operation (`VM_DISK_CHECK_FAILED` or `HOST_UNAVAILABLE`): nothing is written or removed on a partial answer, so a delete may wait until every host of the Provider answers.
 - **Migration into a clustered Provider** never moves the target off its landing host automatically: a landing host that cannot be reached shows `Importing=False/TargetHostUnavailable` and is retried at 15 s doubling to 5 min.
 
-The per-RPC behaviour, the restore guard (`RestorePending`) and the re-attach runbook are in the [clustered libvirt guide](../guides/clustered-libvirt.md) and in the main repository's [`docs/clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/clustered-provider-inventory.md) and [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/provider-call-outcomes.md).
+The per-RPC behaviour, the restore guard (`RestorePending`) and the re-attach runbook are in the [clustered libvirt guide](../guides/clustered/index.md) and in the main repository's [`docs/clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/clustered-provider-inventory.md) and [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/main/docs/provider-call-outcomes.md).
 
 ## CircuitBreaker — programmatic API
 
