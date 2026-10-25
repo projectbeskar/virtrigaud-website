@@ -42,10 +42,10 @@ Targets: `vsphere`, `libvirt` (single host), `proxmox`, and a libvirt Provider w
     | | libvirt -> Proxmox |
     | | Proxmox -> libvirt |
 
-    **Repeated on v0.4.0 release candidates** (the lab runs recorded in the release
-    notes), single-node Proxmox VE 9.2, vCenter and libvirt 10.0:
+    **Repeated during the v0.4.0 release candidates** (the lab runs recorded in the release
+    notes; the first column names the candidate build), single-node Proxmox VE 9.2, vCenter and libvirt 10.0:
 
-    | Run | Backend | Direction |
+    | Candidate | Backend | Direction |
     |-----|---------|-----------|
     | rc2 | `s3` | libvirt -> vSphere |
     | rc2 | `pvc` | vSphere -> libvirt |
@@ -54,7 +54,7 @@ Targets: `vsphere`, `libvirt` (single host), `proxmox`, and a libvirt Provider w
     | rc5 | `s3` | clustered libvirt -> Proxmox |
     | rc5 | `nfs` | Proxmox -> clustered libvirt; vSphere -> clustered libvirt |
     | rc7 | `s3` | vSphere -> clustered libvirt, onto a bridged network |
-    | after rc2 (a post-rc2 `main` build) | `s3`, `nfs` | single-host libvirt -> clustered libvirt (two hosts, shared NFS pool) |
+    | a build between rc2 and v0.4.0 (unreleased `main`) | `s3`, `nfs` | single-host libvirt -> clustered libvirt (two hosts, shared NFS pool) |
 
     **Not repeated on a v0.4.0 build in a recorded lab run:** vSphere -> single-host
     libvirt over `s3`, vSphere <-> libvirt and libvirt <-> libvirt over NFS, and

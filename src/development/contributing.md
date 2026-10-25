@@ -412,13 +412,13 @@ its step executor is not implemented in v0.4.0, so it cannot pass yet; see the
    vim CHANGELOG.md
    ```
 
-2. **Cut an RC, smoke, then promote**:
+2. **Cut a candidate, smoke, then promote** (`X.Y.Z` is the version being released):
    ```bash
-   git tag v0.4.0-rc1
-   git push origin v0.4.0-rc1
+   git tag vX.Y.Z-rc1
+   git push origin vX.Y.Z-rc1
    # ...deploy to a test cluster, run the smoke recipe, then:
-   git tag v0.4.0
-   git push origin v0.4.0
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
    ```
 
 3. **The release workflow handles** (any `v*` tag; a tag containing `-` is
@@ -433,9 +433,9 @@ its step executor is not implemented in v0.4.0, so it cannot pass yet; see the
      `virtrigaud-loadgen`) for linux and darwin (amd64, arm64) and windows
      (amd64)
 
-The project follows an **`rc1 → smoke → final`** pattern; v0.3.5 and v0.3.6
-each shipped on a single RC, while v0.4.0 went through nine release
-candidates. A failing Trivy scan on the manager image is a
+The project follows a **release candidate → smoke → final** pattern; v0.3.5
+and v0.3.6 each shipped on a single candidate, while v0.4.0 went through nine
+release candidates. A failing Trivy scan on the manager image is a
 hard release blocker — see the v0.3.6 changelog for the OpenTelemetry CVE
 example.
 

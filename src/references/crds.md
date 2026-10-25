@@ -158,7 +158,7 @@ spec:
 
 ### Snapshot revert
 
-`spec.snapshot.revertToRef` names a `VMSnapshot` (same namespace) to revert the VM to. The snapshot must be `Ready` and taken of this VM. **A revert discards what was written to the VM's disks since the snapshot.** The revert is sent only while the provider reports the VM `Off` and `spec.powerState` is `Off` or `OffGraceful`; VirtRigaud never powers a VM off for a revert and does not power it on afterwards. It is sent at most once per request; to revert to the same snapshot again, remove the field, wait for `status.snapshotRevert` to disappear, and set it again. In v0.4.0-rc5 and earlier the field was accepted and ignored.
+`spec.snapshot.revertToRef` names a `VMSnapshot` (same namespace) to revert the VM to. The snapshot must be `Ready` and taken of this VM. **A revert discards what was written to the VM's disks since the snapshot.** The revert is sent only while the provider reports the VM `Off` and `spec.powerState` is `Off` or `OffGraceful`; VirtRigaud never powers a VM off for a revert and does not power it on afterwards. It is sent at most once per request; to revert to the same snapshot again, remove the field, wait for `status.snapshotRevert` to disappear, and set it again. Before v0.4.0 the field was accepted and ignored.
 
 ```bash
 kubectl patch vm web-server --type merge -p '{"spec":{"powerState":"Off"}}'

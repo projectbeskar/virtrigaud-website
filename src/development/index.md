@@ -203,9 +203,9 @@ case is documented at [Provider Development](providers.md).
 
 ## Release process
 
-Tagged via `rc → smoke → final`:
+Tagged via release candidate → smoke → final:
 
-1. `git tag v<X.Y.Z>-rc1`; push. Any tag matching `v*` starts the release
+1. `git tag vX.Y.Z-rc1` (`X.Y.Z` is the version being released); push. Any tag matching `v*` starts the release
    workflow, and a tag containing `-` is published as a pre-release.
 2. The release workflow builds multi-arch container images, signs them with
    cosign, generates SBOMs and SLSA provenance, packages the Helm chart,

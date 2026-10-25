@@ -145,7 +145,7 @@ Legend: ✅ supported through VirtRigaud CRs; ⚠️ partial (see the note in th
 | Revert (`VirtualMachine.spec.snapshot.revertToRef`, VM powered off) | `RevertToSnapshot_Task`; a memory snapshot powers the VM on, then `spec.powerState` is applied | External snapshots need libvirt 9.9+. Refused for a snapshot that stored the cloud-init CD-ROM: take the snapshot **with the VM powered off** to be able to revert it. Refused while a linked clone depends on the VM's disk | Rollback task, polled by the manager |
 | Delete | Refuses a template or prepared-image artifact (`VM_IS_IMAGE_ARTIFACT`) | Deleting a disk-only snapshot is refused while a memory snapshot of the VM is stored in its overlay: delete the memory snapshot first (`Ready=False/DeleteBlocked`) | Refused when the VM's owner stamp cannot be read |
 
-A revert discards what was written to the disks since the snapshot. Walkthrough, rules and troubleshooting: [VM snapshots and revert](../guides/vm-snapshots.md). The revert was accepted but ignored in v0.4.0-rc5 and earlier. Full rules: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md) and the [VM CRD reference](../references/crds.md#snapshot-revert).
+A revert discards what was written to the disks since the snapshot. Walkthrough, rules and troubleshooting: [VM snapshots and revert](../guides/vm-snapshots.md). The revert was accepted but ignored before v0.4.0. Full rules: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md) and the [VM CRD reference](../references/crds.md#snapshot-revert).
 
 ### Image Management
 

@@ -647,7 +647,7 @@ virsh net-autostart default
 
 NAT gives guests outbound connectivity but no L2 reachability from your network
 to the VM. libvirt runs the DHCP server, so the lease shows in `status.ips`
-without the guest agent (v0.4.0-rc8 and later). Not suitable for guests that
+without the guest agent (v0.4.0 and later). Not suitable for guests that
 must be reachable.
 
 ### Clustered `Host`s: placement labels and identical networks
@@ -699,7 +699,7 @@ sudo aa-status | grep libvirt
   rejected at start-up.
 - **Snapshots and reverts.** A revert that rewrites the cloud-init CD-ROM into a
   `root`-owned overlay inside the seed directory is a path QEMU's profile does
-  not let it open and the VM no longer starts. Since v0.4.0-rc7 the provider
+  not let it open and the VM no longer starts. Since v0.4.0 the provider
   takes snapshots of a powered-off VM with the CD-ROM ejected, and refuses to
   revert to a snapshot that stored it. Take snapshots of VMs you want to be able
   to revert with the VM powered off. See
