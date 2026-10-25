@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Capabilities Matrix
 
-This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.3.11**.
+This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.4.0**.
 
 Cells marked ✅ / ❌ in this matrix are cross-referenced against each provider's `GetCapabilities` gRPC response (`internal/providers/{vsphere,libvirt,proxmox}/server.go`) and the capability builder registrations in `internal/providers/{proxmox}/capabilities.go` / `sdk/provider/capabilities/`. Where a feature is implemented in code but not yet exposed through the capability flag (or vice versa), the cell carries a footnote rather than being silently changed.
 
@@ -31,9 +31,29 @@ All providers implement these core operations:
 | Provider | Status | Implementation | Maturity |
 |----------|--------|---------------|----------|
 | **vSphere** | Production Ready | govmomi-based | Stable |
-| **Libvirt/KVM** | Production Ready | virsh + libssh-based | Stable |
+| **Libvirt/KVM** (single host) | Production Ready | virsh over SSH | Stable |
+| **Libvirt/KVM** (clustered, `topology: cluster`) | Opt-in, experimental | virsh over SSH to N hosts, placement in the operator | Experimental |
 | **Proxmox VE** | Production Ready | REST API-based | Beta |
 | **Mock** | Complete | In-memory simulation | Testing |
+
+## Clustered libvirt (experimental)
+
+A libvirt `Provider` with `spec.topology: cluster` fronts several libvirt hosts registered as `Host` resources in a `HostPool`. The matrix below describes the single-host libvirt provider. A clustered Provider differs as follows (from its `GetCapabilities` answer, `internal/providers/libvirt/server.go`):
+
+| Area | Clustered libvirt |
+|------|-------------------|
+| Create, delete, power, reconfigure, describe | Yes, routed to the VM's host and checked against its owner stamp |
+| Online CPU/memory reconfigure, disk expansion | Yes (same as single host). Shrinking a running VM waits until it is powered off (`ShrinkPendingPowerOff`) |
+| Snapshots (including memory) and revert | Yes, routed to the VM's host |
+| Full clone | Yes, onto the source VM's own host, admitted against that host's free capacity. Linked clones: no |
+| `ImagePrepare` (`VMImage` with a download `url`) | **No** (not implemented; image import and artifact identity are not reported). Use a `path` image present on the hosts |
+| Disk export | Yes, host-side, `s3` and `nfs` only, `qcow2` only |
+| Disk import (migration target) | Yes, `s3` and `nfs`; a clustered Provider is accepted as a `VMMigration` target only when it reports `supports_routed_import` (experimental) |
+| Adoption (`virtrigaud.io/adopt-vms`) | Yes, keyed on (host, domain); a domain left by a deleted or restored VM is not adopted |
+| Host-to-host (live or offline) migration | **Not implemented** |
+| Replicas | One, with the `Recreate` strategy: a rollout is a short outage |
+
+Details: [Libvirt provider](libvirt.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md).
 
 ## Comprehensive Capability Matrix
 
@@ -114,6 +134,16 @@ All providers implement these core operations:
 | **Snapshot Trees** | ✅ | ✅ | ✅ | ✅ | Hierarchical snapshots |
 
 [^memsnap]: All three providers support RAM-inclusive snapshots as of v0.3.9. **vSphere** (#200): `CreateSnapshot(memory=true)`; requires the VM powered on (vSphere rejects memory snapshots of a powered-off VM). **Libvirt** (#202): `virsh snapshot-create-as` without `--disk-only`; running VM captures disk + RAM state; stopped VM honestly downgrades to disk-only with a WARN logged. **Proxmox**: PVE-native RAM-inclusive snapshots. Set `spec.memory: true` on the `VMSnapshot` CR to request a memory snapshot. An earlier v0.3.6/v0.3.8 footnote stated vSphere and libvirt both advertised `SupportsMemorySnapshots=false` — that is reversed in v0.3.9 for both providers.
+
+### Snapshots and revert
+
+| Topic | vSphere | Libvirt | Proxmox |
+|-------|---------|---------|---------|
+| Memory snapshot (`snapshotConfig.includeMemory: true`) | VM must be powered on | Running VM: internal snapshot with RAM. Powered-off VM: disk-only (a warning is logged) | PVE-native |
+| Revert (`VirtualMachine.spec.snapshot.revertToRef`, VM powered off) | `RevertToSnapshot_Task`; a memory snapshot powers the VM on, then `spec.powerState` is applied | External snapshots need libvirt 9.9+. Refused for a snapshot that stored the cloud-init CD-ROM: take the snapshot **with the VM powered off** to be able to revert it. Refused while a linked clone depends on the VM's disk | Rollback task, polled by the manager |
+| Delete | Refuses a template or prepared-image artifact (`VM_IS_IMAGE_ARTIFACT`) | Deleting a disk-only snapshot is refused while a memory snapshot of the VM is stored in its overlay: delete the memory snapshot first (`Ready=False/DeleteBlocked`) | Refused when the VM's owner stamp cannot be read |
+
+A revert discards what was written to the disks since the snapshot. The revert was accepted but ignored in v0.4.0-rc5 and earlier. Full rules: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md) and the [VM CRD reference](../references/crds.md#snapshot-revert).
 
 ### Image Management
 
@@ -228,6 +258,27 @@ args:
 ```
 
 Enable enforcement once you have confirmed (via `status.reportedCapabilities`) that your providers advertise the operations your workloads depend on.
+
+### Provider capability flags for clustered and security contracts
+
+Beyond the flags shown on `Provider.status.reportedCapabilities`, `GetCapabilities` carries flags the manager reads at runtime to decide whether it may send a call or must hold an operation. The table shows what each provider reports in v0.4.0 (source: each provider's `GetCapabilities`). A manager holds the matching operation when the flag is missing, rather than sending a call the provider would not honour.
+
+| Flag | vSphere | Libvirt (single) | Libvirt (clustered) | Proxmox | Mock |
+|------|:---:|:---:|:---:|:---:|:---:|
+| `supports_clustering` | no | no | **yes** | no | no |
+| `supports_image_artifact_identity` (ADR-0009; import-style `ImagePrepare` is held without it) | yes | yes | no | yes | yes |
+| `supports_honest_reconfigure` (a clustered Provider's resizes are held without it) | no | yes | yes | no | no |
+| `supports_routed_clone`, `supports_routed_adoption`, `supports_list_owner_filter`, `supports_routed_import` | no | no | **yes** | no | no |
+| `supports_owner_transfer` (single-host adoption stamps the VM) | yes | yes | no (uses routed adoption) | yes | yes |
+| `supports_owner_rebind` (a re-sent Create/Clone returns the earlier VM) | yes | yes | yes | yes | yes |
+| `supports_import_size_limit` (enforces `manager.maxDiskSize` at import) | yes | yes | yes | yes | no |
+| `supports_landed_disk_delete` | yes | yes | yes | yes | no |
+| `supported_staged_disk_delete_backends` | s3, nfs | s3, nfs | s3, nfs | s3, nfs | none |
+| `resend_safe_export_backends` | s3, nfs | s3 | s3, nfs | s3 | none |
+| `resend_safe_import_backends` | s3, nfs | pvc, s3, nfs | s3, nfs | s3 | none |
+| `supported_export_backends` / `supported_import_backends` | pvc, s3, nfs | pvc, s3, nfs | s3, nfs | s3, nfs | pvc |
+
+`resend_safe_*` lists the staging backends on which the manager may send an `ExportDisk` or `ImportDisk` again on its own after its outcome was lost; on any other backend the `VMMigration` waits for an operator (`ExportOutcomeUnknown`, `ImportOutcomeUnknown`). The flags are defined in [Provider gRPC API](../references/grpc-api.md#changes-since-v0311).
 
 ### Adding a capability
 
