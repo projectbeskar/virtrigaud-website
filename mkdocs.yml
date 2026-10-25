@@ -6,9 +6,10 @@ site_description: Kubernetes operator for managing virtual machines across multi
 site_author: William Rizzo, Erick Bourgeois, VirtRigaud Contributors
 site_url: https://projectbeskar.github.io/virtrigaud/
 
-repo_name: projectbeskar/virtrigaud-website
-repo_url: https://github.com/projectbeskar/virtrigaud-website
-edit_uri: edit/main/src/
+repo_name: projectbeskar/virtrigaud
+repo_url: https://github.com/projectbeskar/virtrigaud
+# The pages live in the website repository, not in repo_url (the project).
+edit_uri: https://github.com/projectbeskar/virtrigaud-website/edit/main/src/
 
 theme:
   name: material
