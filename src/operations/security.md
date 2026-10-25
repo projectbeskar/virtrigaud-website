@@ -248,7 +248,7 @@ These v0.4.0 controls apply inside the providers and are on by default unless no
 
 ### Manager RBAC
 
-The chart's `manager-rbac.yaml` grants the manager's ServiceAccount a `ClusterRole` (`rbac.scope: cluster`, the default) or, with `rbac.scope: namespace`, a namespaced `Role` with the same rules. **There are no wildcard verbs or resources and no `cluster-admin`.** The rules, by purpose:
+The chart's `manager-rbac.yaml` grants the manager's ServiceAccount a `ClusterRole` (`rbac.scope: cluster`, the default) or, with `rbac.scope: namespace`, a namespaced `Role` with the same rules except the two cluster-scoped grants (`storageclasses` and the CRD `get`). **There are no wildcard verbs or resources and no `cluster-admin`.** The rules, by purpose:
 
 | Resources | Verbs | Why |
 |---|---|---|

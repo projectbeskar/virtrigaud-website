@@ -56,9 +56,9 @@ Targets: `vsphere`, `libvirt` (single host), `proxmox`, and a libvirt Provider w
     | rc7 | `s3` | vSphere -> clustered libvirt, onto a bridged network |
     | after rc2 (build `main-73e08e8`) | `s3`, `nfs` | single-host libvirt -> clustered libvirt (two hosts, shared NFS pool) |
 
-    **Not repeated on a v0.4.0 build in a recorded lab run:** vSphere <-> libvirt and
-    libvirt <-> libvirt over NFS, and vSphere <-> Proxmox over NFS (never validated at
-    all). **Never run:** a Proxmox cluster of more than one node, and migration between
+    **Not repeated on a v0.4.0 build in a recorded lab run:** vSphere -> single-host
+    libvirt over `s3`, vSphere <-> libvirt and libvirt <-> libvirt over NFS, and
+    vSphere <-> Proxmox over NFS (never validated at all). **Never run:** a Proxmox cluster of more than one node, and migration between
     two Kubernetes clusters (the staging backends would allow it; it is not
     validated). The Proxmox import-stage delete of a failed migration, staged-disk
     deletion after a fault, landed-disk deletion after a failed import (apart from the
@@ -147,10 +147,13 @@ In order, all driven by the migration controller:
   `spec.consumerNamespaceSelector`.
 - Set `options.retryPolicy` if you want automatic retries.
 - Think about the disk size: each `ExportDisk` and `ImportDisk` call has a **30-minute
-  deadline** in the manager's gRPC client. A disk whose export or import cannot finish
-  within it is not migrated in v0.4.0: the call ends without a known outcome and the
-  migration is held (see [Held provider calls](#a-migration-held-with-outcomeunknown)).
-  This is derived from the code, not a measured limit; test with a representative disk.
+  deadline** in the manager's gRPC client. A call that hits it ends without a known
+  outcome, so the migration is not failed but held (see
+  [Held provider calls](#a-migration-held-with-outcomeunknown)); where the backend is
+  re-send safe the call is sent again 35 minutes after the request, at most 3 times, and
+  each attempt has the same deadline. A disk that cannot be exported or imported within
+  30 minutes therefore does not complete in v0.4.0. This is derived from the code, not a
+  measured limit; test with a representative disk.
 
 ## Quick start: libvirt to vSphere over NFS
 
@@ -179,7 +182,7 @@ spec:
     vmRef:
       name: app-on-libvirt
     createSnapshot: false
-    powerOffBeforeMigration: true   # required for a vSphere source; a clean cold copy otherwise
+    powerOffBeforeMigration: true   # a clean cold copy (required only for a vSphere source)
   target:
     name: app-on-vsphere
     providerRef:
@@ -440,7 +443,7 @@ Size an auto-created PVC at 1.5x to 2x the source disk. Field detail:
 | `deleteAfterMigration: true` | After `Ready`, the source `VirtualMachine` is **deleted** (and with it the hypervisor VM). Only the object the migration validated (UID in `status.sourceVMUID`) is deleted; a VM re-created under the same name is kept (Warning `SourceDeletionRefused`). It does not run for a failed migration. With `powerOn: false` the workload then runs nowhere until you power the target on (Warning `SourceDeletedTargetNotStarted`). |
 | `createSnapshot: true` (default), `snapshotRef` unset | A snapshot of the source is taken first (a task-backed snapshot on vSphere or Proxmox is polled until it finishes) and exported. The migration deletes it at `Ready`, on final failure and on deletion unless `cleanupPolicy: Never`. |
 | `createSnapshot: false` | Export without a snapshot. Typical with `powerOffBeforeMigration`. |
-| `snapshotRef: { name: ... }` | Skips the snapshot step. The name is passed to the source provider as the provider-side snapshot ID (no `VMSnapshot` is looked up). The migration never deletes it. |
+| `snapshotRef: { name: ... }` | With `createSnapshot: true` (the default), skips the snapshot step. The name is passed to the source provider as the provider-side snapshot ID (no `VMSnapshot` is looked up). The migration never deletes it. With `createSnapshot: false` the `snapshotRef` is not read and the export has no snapshot. |
 | `powerOffBeforeMigration: true` | The migration sets the source VM's `spec.powerState` to `Off` and **waits** (condition `SourcePowerOff`) up to 10 minutes until the provider reports it `Off`; a longer wait fails the migration. Required for a vSphere source. The source is **not** powered back on. |
 | `powerOffBeforeMigration: false` (default) | The source runs throughout. The migration is still cold (it copies a snapshot of a running disk, or the disk as it is). There is no live migration. |
 
@@ -557,8 +560,8 @@ Ready=False  reason: SnapshotOutcomeUnknown | ExportOutcomeUnknown | ImportOutco
   again **35 minutes** after the marker (the call's deadline is 30 minutes), at most 3
   times. So a manager restart during an import costs about 35 minutes, as documented.
   A `SnapshotCreate` through a clustered Provider is re-sent after a minute.
-- Everything else is held for you (every single-host `SnapshotCreate`, a Proxmox `nfs`
-  import, and any call through a provider image older than v0.4.0). Look at what the call
+- Everything else is held for you (for example every single-host `SnapshotCreate`, a
+  Proxmox `nfs` import, and any call through a provider image older than v0.4.0). Look at what the call
   may have made (the snapshot named in the Warning event, the target's `-migrated` disk),
   remove it, then confirm the attempt:
 
@@ -648,7 +651,7 @@ kubectl get events --field-selector involvedObject.name=my-vm-to-libvirt
 | vSphere pod `/tmp` | An import stages about twice the disk in the pod's `/tmp`, which has an `emptyDir` `sizeLimit` (512Gi by default for vSphere providers). A pod that writes more is evicted. See the chart README. |
 | Per-call deadline | 30 minutes per `ExportDisk` and per `ImportDisk` call. |
 | `options.compress` | Asks the source to compress a `qcow2` export. Only worth it on slow networks. |
-| `options.timeout` | In v0.4.0 it bounds only the wait for a source snapshot task (2 hours when unset), not the migration. |
+| `options.timeout` | In v0.4.0 it bounds only the wait for a source snapshot task, not the migration. The 2-hour default applies only when `options` is omitted; once `options` exists the schema defaults `timeout` to `4h`. |
 
 ## Disk-size limit
 

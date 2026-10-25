@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 !!! note "In v0.4.0 the gRPC channel is secured by mTLS, not bearer tokens. This page is primarily about hypervisor API tokens."
     As of v0.4.0 (unchanged since v0.3.7) the manager↔provider gRPC channel is authenticated by **mutual TLS with a client-cert SAN allow-list** (see [mTLS](mtls.md)), not by a bearer token. A bearer token is unnecessary when the manager is the only legitimate caller, so the in-tree manager does **not** attach an `Authorization: Bearer <token>` metadata header on outbound RPCs.
 
-    The provider SDK still exposes `middleware.AuthConfig.BearerTokenAuth` and an operator-supplied `ValidateToken` callback (`sdk/provider/middleware`) for **external** provider authors who want it in addition to (or instead of) mTLS. If you enable Bearer-token auth on a provider that the in-tree manager dials, the manager will get back `codes.Unauthenticated` and reconciles will fail — so treat gRPC-channel bearer auth as an external-provider feature, not an in-tree production path.
+    The provider SDK still exposes `middleware.AuthConfig.BearerTokenAuth` and an operator-supplied `ValidateToken` callback (`sdk/provider/middleware`) for **external** provider authors who want it in addition to (or instead of) mTLS. If you enable Bearer-token auth on a provider that the in-tree manager dials, the manager will get back `codes.PermissionDenied` and reconciles will fail — so treat gRPC-channel bearer auth as an external-provider feature, not an in-tree production path.
 
     This page therefore covers two distinct scopes:
 
@@ -148,7 +148,7 @@ When `BearerTokenAuth: true`, the SDK installs unary and stream interceptors tha
 1. Extract the `authorization` metadata header from every incoming gRPC call.
 2. Strip the `Bearer ` prefix.
 3. Call your `ValidateToken` callback with the token string and request context.
-4. Reject with `codes.Unauthenticated` if `ValidateToken` returns an error or the header is missing/malformed.
+4. Reject with `codes.PermissionDenied` (`token authentication failed`) if `ValidateToken` returns an error or the header is missing/malformed.
 
 ### External-provider example
 
@@ -184,7 +184,7 @@ The in-tree manager's gRPC client does not attach a bearer token to outbound cal
 2. `providerRPCMetricsInterceptor`
 3. `providerCircuitBreakerInterceptor` (when the Provider has a breaker)
 
-There is no `authorization`-header-injecting interceptor. If you enable `BearerTokenAuth: true` on the server side, every RPC from the in-tree manager will fail with `codes.Unauthenticated`.
+There is no `authorization`-header-injecting interceptor. If you enable `BearerTokenAuth: true` on the server side, every RPC from the in-tree manager will fail with `codes.PermissionDenied`.
 
 !!! note "The in-tree channel is authenticated by mTLS, not bearer tokens"
     In v0.4.0 the manager authenticates to providers with a **client certificate** verified against a configured CA and a SAN allow-list (see [mTLS](mtls.md)). That is the in-tree authentication path; there is no plan to also send a bearer token from the in-tree manager. SDK bearer-token auth remains an optional control for external provider authors who want an additional or alternative gate on top of (or instead of) mTLS.

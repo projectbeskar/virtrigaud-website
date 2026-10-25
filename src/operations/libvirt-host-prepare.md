@@ -424,8 +424,9 @@ install -d -m 0711 -o <ssh user> -g <ssh user> /var/lib/libvirt/virtrigaud-seeds
   that is not owned by `root` or the SSH user or that is group/other-writable
   without the sticky bit, is refused. Every create on that host, and every clone
   of a VM that has a seed, then fails with the retryable error `refusing to stage
-  cloud-init data`, and resumes once the host is fixed. A create without
-  `spec.userData` is refused too.
+  cloud-init data`, and resumes once the host is fixed. This includes a create
+  without `spec.userData`: every create builds a seed (a default one when none is
+  given).
 - **Mode `0711`**, not `0700`, unless QEMU runs as the SSH user or `root`: the
   QEMU user must traverse the directory to open the ISO.
 - **Keep it local.** Not on NFS or other shared storage: libvirt hands the ISO to

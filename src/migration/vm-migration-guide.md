@@ -385,7 +385,7 @@ providers with the manager**.
 The Proxmox provider is a hybrid: a REST API control plane (API token) plus an SSH data
 plane to the PVE node. The provider `Secret` must carry the API token (`token_id`,
 `token_secret`) **and** SSH credentials (`ssh_user` with `ssh_password` and/or
-`ssh_privatekey`) plus a pinned `known_hosts`; without the SSH data plane no migration
+`ssh_privatekey`) plus a pinned `known_hosts` (host-key verification is on by default); without the SSH data plane no migration
 disk can be staged or cleaned up. The create of the target VM accepts only the exact
 stage `/var/lib/virtrigaud/import-stage/<namespace>_<vm>-migrated.<format>` for a
 `VMMigration` in the VM's own namespace, which is why a Proxmox target in another
@@ -456,7 +456,7 @@ metadata:
     virtrigaud.io/migrated-from: applications/my-vsphere-vm
     virtrigaud.io/migration: applications/my-vm-to-libvirt
     virtrigaud.io/migration-claim: <one-time token>      # set by the manager
-    virtrigaud.io/imported-disk-id: my-vm-libvirt-migrated
+    virtrigaud.io/imported-disk-id: applications.my-vm-libvirt-migrated
     virtrigaud.io/migration-completed: "true"            # set at Ready
     virtrigaud.io/migration-completed-at: "2026-06-21T11:14:35Z"
 spec:
@@ -467,7 +467,7 @@ spec:
     namespace: applications
   powerState: "Off"
   importedDisk:
-    diskID: my-vm-libvirt-migrated
+    diskID: applications.my-vm-libvirt-migrated
     path: /var/lib/libvirt/images/applications.my-vm-libvirt-migrated.qcow2
     format: qcow2
     source: migration

@@ -453,7 +453,7 @@ kubectl get secret vsphere-prod-credentials -n virtrigaud-system \
 # [ "password", "username" ]
 
 # For libvirt SSH key:
-# [ "ssh-privatekey", "username" ]
+# [ "known_hosts", "ssh-privatekey", "username" ]
 
 # For Proxmox API token:
 # [ "token_id", "token_secret" ]

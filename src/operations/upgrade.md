@@ -1042,8 +1042,8 @@ The `virtrigaud_queue_depth{kind}` gauge and the
 `(*ReconcileMetrics).SetQueueDepth` helper are **deprecated in v0.3.6**
 ([#132](https://github.com/projectbeskar/virtrigaud/pull/132)). They are
 redundant with controller-runtime's `workqueue_depth{name=<controller-name>}`,
-which has been on `/metrics` since v0.3.0 and ships with 8 sibling workqueue
-metrics for free.
+which has been on `/metrics` since v0.3.0 and comes with sibling workqueue
+metrics (adds, retries, queue and work durations) for free.
 
 The metric family is still registered in v0.4.0 (no breakage), and the `# HELP`
 line begins with `[DEPRECATED v0.3.6 — use workqueue_depth{name} instead]` so the
@@ -1235,8 +1235,7 @@ kubectl apply -f virtrigaud-backup.yaml
 The chart's CRD hook applies the CRDs in the same sync that rolls the manager. For
 v0.3.11 to v0.4.0 you need a pause between the CRDs and the manager (the
 consumer grants of step 3), so apply the CRDs and the selectors **before** you
-bump the chart revision, for example from a separate Application or an earlier
-sync wave.
+bump the chart revision (the CRD command of step 2 works from any workstation).
 
 ### ArgoCD
 

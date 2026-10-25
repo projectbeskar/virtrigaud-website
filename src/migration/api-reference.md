@@ -97,8 +97,8 @@ namespace.
 |-------|------|---------|-------------|
 | `vmRef.name` | string | required | Name of the source `VirtualMachine`, in the migration's namespace. It must have a provider ID (`status.id`); until then `Validating` waits (`SourceVMNotReady`). |
 | `providerRef` | `ObjectRef` | the source VM's Provider | Optional. **Must name the Provider the source VM runs on** (its `spec.providerRef`; an empty namespace means the VM's namespace). Any other Provider fails the migration, because it would export an unrelated VM that happens to share the source's provider ID. Leave it empty. |
-| `snapshotRef.name` | string | unset | Skips snapshot creation. The controller passes this name to the source provider **as the provider-side snapshot ID**; it does not look up a `VMSnapshot` object. The migration never deletes a snapshot named here. |
-| `createSnapshot` | bool | `true` | Create a snapshot of the source before exporting (ignored when `snapshotRef` is set). Set `false` to export without a snapshot (typical with `powerOffBeforeMigration`). |
+| `snapshotRef.name` | string | unset | Skips snapshot creation, but only while `createSnapshot` is `true` (the default): with `createSnapshot: false` the `snapshotRef` is not read and the export has no snapshot. The controller passes this name to the source provider **as the provider-side snapshot ID**; it does not look up a `VMSnapshot` object. The migration never deletes a snapshot named here. |
+| `createSnapshot` | bool | `true` | Create a snapshot of the source before exporting (the `Snapshotting` phase uses `snapshotRef` instead when it is set). Set `false` to export without a snapshot (typical with `powerOffBeforeMigration`); a `snapshotRef` is then ignored. |
 | `powerOffBeforeMigration` | bool | `false` | Set the source `VirtualMachine`'s `spec.powerState` to `Off` and wait until the provider reports it `Off`. **Required for a vSphere source** (a running VM's disk is locked). The migration never powers the source back on. |
 | `deleteAfterMigration` | bool | `false` | After `Ready`, delete the source `VirtualMachine` (and so, through its own finalizer, the hypervisor VM). Only the object the migration validated is deleted (UID precondition on `status.sourceVMUID`). Not run for a failed migration. |
 
@@ -154,7 +154,7 @@ spec:
 | `diskFormat` | `qcow2`, `vmdk`, `raw` | `qcow2` | Format hint passed to the source provider's `ExportDisk`. The staged object is the source provider's native flattened format for `s3` (`vmdk` from vSphere, `qcow2` from libvirt and Proxmox) and always `qcow2` for `nfs`; the **target provider** converts on import. |
 | `compress` | bool | `false` | Asks the source provider to compress the export. Honoured for `qcow2` by providers that advertise export compression. |
 | `verifyChecksums` | bool | `true` | The import verifies the checksum the export reported. On `s3` that is an end-to-end SHA-256. On `nfs` no byte checksum exists (`qemu-img` computes none): integrity rests on the target's `qemu-img` check of the converted image. |
-| `timeout` | duration | `4h` in the schema | In v0.4.0 it **only bounds the wait for a source snapshot task** (2 h when unset). It is not a limit on the whole migration. Each `ExportDisk` and `ImportDisk` call has its own 30-minute deadline in the manager's gRPC client. |
+| `timeout` | duration | `4h` in the schema | In v0.4.0 it **only bounds the wait for a source snapshot task**. It is not a limit on the whole migration. The schema defaults it to `4h` whenever `options` exists; the 2 h built-in default applies only when `options` is omitted. Each `ExportDisk` and `ImportDisk` call has its own 30-minute deadline in the manager's gRPC client. |
 | `retryPolicy` | `MigrationRetryPolicy` | unset | **Without a `retryPolicy` a failed migration is final.** See [Retry](#retry). |
 | `cleanupPolicy` | `Always`, `OnSuccess`, `Never` | `OnSuccess` | What happens to the staged disk, the landed disk, the source snapshot and the PVC. See [Cleanup](#cleanup). |
 | `validationChecks` | | | **Not used.** |
@@ -576,6 +576,8 @@ kubectl annotate vmmigration <name> -n <ns> virtrigaud.io/operation-outcome=not-
 | libvirt (clustered) | `s3`, `nfs` | `s3`, `nfs` |
 | Proxmox | `s3` | `s3` (an `nfs` import copies to completion on the node after a cancelled call, so it is held) |
 
+Remote host commands can outlive a cancelled call: single-host libvirt's flatten, `qemu-img convert` and `dd` run without `timeout(1)`, so an orphan can still be running after the 35-minute settle time.
+
 Alert on migrations stuck in a phase and on the three `...OutcomeUnknown` reasons. Full
 semantics, including which failures each provider treats as definite:
 [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/main/docs/provider-call-outcomes.md).
@@ -657,7 +659,7 @@ means the v0.4.0 controller never sets the field.
 | `storagePVCName` | string | The PVC used (`pvc` only). |
 | `storagePVCUID` | string | UID of the PVC the migration created (`pvc`, no `storage.pvc.name`). Only that PVC is mounted and deleted. |
 | `conditions` | `[]metav1.Condition` | [Conditions](#condition-types). |
-| `observedGeneration` | int64 | Set only when a hold condition is written (`TargetNamespaceNotAllowed`, `ConsumerNotAllowed`, `ProviderDeleting`). |
+| `observedGeneration` | int64 | Set only when a hold condition is written or cleared (`TargetNamespaceNotAllowed`, `ConsumerNotAllowed`, `ProviderDeleting`). |
 | `retryCount` | int32 | Retries done. |
 | `lastRetryTime` | time | When the last retry started. |
 | `validationResults` | `ValidationResults` | Not written. |

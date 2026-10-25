@@ -16,7 +16,7 @@ VirtRigaud serves Prometheus metrics from **two kinds of process**:
 
 | Endpoint | Process | Default | What is on it |
 |---|---|---|---|
-| `:8080/metrics` on the **manager** | The manager Deployment | Plain HTTP. `--metrics-secure=true` switches the same port to HTTPS with Kubernetes authn/authz (see [Securing the manager endpoint](#securing-the-manager-endpoint)) | Every `virtrigaud_*` family except the three that are emitted inside provider processes (below), plus `workqueue_*`, `controller_runtime_*`, `go_*` and `process_*`. |
+| `:8080/metrics` on the **manager** | The manager Deployment | Plain HTTP. `--metrics-secure=true` switches the same port to HTTPS with Kubernetes authn/authz (see [Securing the manager endpoint](#securing-the-manager-endpoint)) | Every `virtrigaud_*` family except the five that are emitted inside provider processes (below), plus `workqueue_*`, `controller_runtime_*`, `go_*` and `process_*`. |
 | `:8080/metrics` on each **provider pod** | The Deployment the manager creates for each `Provider` (libvirt, vSphere and Proxmox providers) | Plain HTTP, on the provider's health port (`--health-port`, default `8080`); the provider `Service` exposes it as port `metrics` | The `virtrigaud_*` families that are emitted by provider code: [`virtrigaud_provider_host_guard_refusals_total`](#provider-process-metrics), [`virtrigaud_provider_image_prepare_legacy_requests_total`](#provider-process-metrics) and the three [libvirt driver-transition metrics](#libvirt-driver-transition-metrics), plus `go_*` and `process_*`. |
 
 The chart's `ServiceMonitor` and `PrometheusRule` cover the **manager** only. To scrape provider pods, add a `ServiceMonitor` or `PodMonitor` of your own that selects the `metrics` port of the provider `Service` (labels `app.kubernetes.io/component: provider`, `app.kubernetes.io/managed-by: virtrigaud`). Provider pods do not carry `virtrigaud_build_info`, and the provider metrics endpoint is not authenticated.
@@ -498,7 +498,7 @@ How these are produced, how long they are retried and how to release them is in 
 
 ### Helm values (ServiceMonitor, alerts, dashboard)
 
-The chart renders all three only when `observability.prometheus.enabled` is `true` **and** the matching flag is set, and the `ServiceMonitor` and `PrometheusRule` additionally only when the `monitoring.coreos.com/v1` API exists in the cluster (for `helm template`, pass `--api-versions monitoring.coreos.com/v1`).
+The `ServiceMonitor` and the `PrometheusRule` are rendered only when `observability.prometheus.enabled` is `true` **and** their own `enabled` flag is set, and only when the `monitoring.coreos.com/v1` API exists in the cluster (for `helm template`, pass `--api-versions monitoring.coreos.com/v1`). The Grafana dashboard ConfigMap needs `observability.grafana.enabled` and `observability.grafana.dashboards.enabled` (it does not depend on `observability.prometheus.enabled` or on the Prometheus Operator).
 
 ```yaml
 observability:

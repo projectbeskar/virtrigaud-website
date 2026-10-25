@@ -52,7 +52,7 @@ provider-vsphere / provider-libvirt / provider-proxmox
 
 Important properties:
 
-- **One breaker per Provider**, created lazily the first time the resolver builds a client for it (which needs the Provider's runtime to be `Running`). The key is `(provider type, Provider name)`: the **namespace is not part of it**, so two Providers of the same type and name in different namespaces share one breaker and one set of metric series. Breakers live in memory for the life of the manager process; a restart starts every breaker Closed.
+- **One breaker per Provider**, created lazily the first time the resolver builds a client for it (which needs the Provider's runtime to be `Running`). The key is `(provider type, Provider name)`: the **namespace is not part of it**, so two Providers of the same type and name in different namespaces share one breaker and one set of metric series. Breakers live in memory: a breaker is dropped (with its metric series) when its `Provider` is deleted, and a manager restart starts every breaker Closed.
 - **Interceptor order matters.** The metrics interceptor runs *before* the breaker interceptor, so every RPC (including breaker fast-fails, which surface as `code=Unavailable`) shows up in `virtrigaud_provider_rpc_requests_total`. Operators see breaker-rejected RPCs as `Unavailable` — not as silent drops.
 - **The outermost interceptor records whether a request was ever sent.** A call that failed before its request left the manager (no connection was made before its deadline, or the breaker refused it) is known to have done nothing. A call that failed after the request headers were sent (the connection dropped, a deadline passed mid-call) may have been processed. That distinction drives [the outcome-unknown protocol](#calls-whose-outcome-is-unknown).
 - **The calls wait for a connection.** The client dials with gRPC `WaitForReady`, so while a provider pod is down an RPC does not fail at once: it waits up to its own deadline ([Timeouts](#timeouts)) and then fails with `DeadlineExceeded`, which counts toward the breaker.
@@ -99,7 +99,7 @@ The breaker fires when "the provider as a whole is in trouble", not when "one re
 
 Since v0.4.0 some `Unavailable`, `Unknown` and `DeadlineExceeded` answers are **also** kept out of the breaker, because the provider answered and the cause is local to one host, one VM or one tenant. Counting them would let one dead host or one tenant's failing request fast-fail every VM of the Provider:
 
-- A clustered libvirt provider's host-scoped answers: `HOST_UNAVAILABLE` (a host is unknown, draining, cannot be dialled or did not answer in time), `VM_OPERATION_FAILED` (a per-VM operation reached its host and failed there, or was not performed), `VM_DISK_CHECK_FAILED` (a disk-dependency check could not run), and `VM_OUTCOME_UNKNOWN_RETRY` (the outcome could not be told after the host stopped answering). This also covers a single-host libvirt provider's "not performed" answers for `SnapshotCreate`, `ExportDisk` and `ImportDisk` when the host cannot be reached.
+- A clustered libvirt provider's host-scoped answers: `HOST_UNAVAILABLE` (a host is unknown, draining, cannot be dialled or did not answer in time), `VM_OPERATION_FAILED` (a per-VM operation reached its host and failed there, or was not performed), `VM_DISK_CHECK_FAILED` (a disk-dependency check could not run), and `VM_OUTCOME_UNKNOWN_RETRY` (the outcome could not be told after the host stopped answering). `VM_OPERATION_FAILED` also covers a single-host libvirt provider's `SnapshotCreate`, `ExportDisk` and `ImportDisk` failures that prove nothing was done (a step that only reads, validates or writes in a private area that is removed).
 - On `ImagePrepare` only: `IMAGE_ARTIFACT_IN_PROGRESS` (another import is still running), `IMAGE_SOURCE_UNAVAILABLE` (one tenant's image source failed), and a `DeadlineExceeded` or `Canceled` caused by the manager's own prepare timeout. A long legitimate import must not open the breaker of every Provider that shares its image location. On every other RPC a `DeadlineExceeded` still counts.
 - The breaker's own fast-fail: a call it refused never reaches the recording step, so it cannot extend an open breaker.
 
@@ -252,7 +252,8 @@ The manager has no generic retry loop around provider calls. A failed call is re
 | A create the provider refused because it cannot prove it owns an existing VM (`ProviderConflict`) | 2 min |
 | A create refused as an invalid spec or an unsafe name (`ValidationError`) | 30 s |
 | A create held by `CreateBackoff` or `CreateRefused`; a clustered create or delete held for an unreachable host (`HostUnavailable`, `DeleteBlocked`), a failed disk check or a restore guard (`RestorePending`) | Backoff of **15 s doubling to 5 min**, counted from when the hold began |
-| A clustered VM that cannot be placed (`Unschedulable`, `NoHostPool`, …) | 30 s |
+| A clustered VM that cannot be placed because no host can take it (`Unschedulable`) | 30 s, doubling to 2 min |
+| A clustered VM blocked by a placement misconfiguration (`NoHostPool`, a dangling `VMPlacementPolicy`, …) | 30 s |
 | A bound clustered VM whose host is unavailable (`Describe`, `Power`, `Reconfigure`) | 30 s |
 | A `VMSnapshot` delete the provider refused or could not complete | Backoff of 15 s doubling to 5 min |
 | A held `VMSnapshot` or `VMMigration` call with an unknown outcome | Re-checked every minute; a confirmation by an operator re-drives it at once |

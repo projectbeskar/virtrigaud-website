@@ -22,7 +22,7 @@ VirtRigaud uses a **single CA per install** (ADR-0003 decision #5):
 
 One Secret serves both ends: the manager reads the Secret named by the Provider's `spec.runtime.service.tls.secretRef` (in the Provider's namespace) and presents its `tls.crt` / `tls.key` as its **client** certificate, while the provider pod mounts the same Secret and serves with the same key pair. The certificate must therefore be valid for **both** server and client authentication.
 
-The TLS Secret is **provisioned by the operator**. VirtRigaud reads a Kubernetes Secret containing `tls.crt` / `tls.key` / `ca.crt`; how those bytes are minted — manual `openssl`, an internal PKI pipeline, Vault, External Secrets, or cert-manager — is the operator's choice. **The Helm chart ships no cert-manager `Certificate` or issuer scaffolding**; it only references a Secret you provide. A worked cert-manager example for *producing* that Secret is given [below](#producing-the-secret-with-cert-manager).
+The TLS Secret is **provisioned by the operator**. VirtRigaud reads a Kubernetes Secret containing `tls.crt` / `tls.key` / `ca.crt`; how those bytes are minted — manual `openssl`, an internal PKI pipeline, Vault, External Secrets, or cert-manager — is the operator's choice. **The Helm chart ships no cert-manager `Certificate` or issuer scaffolding for provider mTLS** (its only `Certificate` is the optional admission-webhook serving certificate); it only references a Secret you provide. A worked cert-manager example for *producing* that Secret is given [below](#producing-the-secret-with-cert-manager).
 
 !!! note "Per-provider trust roots are deferred"
     The `tls` block is per-Provider, so the data path can already carry a per-Provider CA bundle, but the manager side is currently single-CA. Per-provider trust roots and SPIFFE/SPIRE identity are not implemented.
@@ -213,7 +213,7 @@ Chart behaviour:
 | empty | `true` | No mount; `VIRTRIGAUD_PROVIDER_INSECURE=true` is set; provider boots in audit-flagged plaintext. |
 | empty | `false` | No TLS env wiring rendered; the provider's own startup check **hard-exits** (secure-by-default). |
 
-The chart ships **no cert-manager `Certificate` or issuer template**. Provision the Secret yourself; cert-manager is a fine way to produce it (see below).
+The chart ships **no cert-manager `Certificate` or issuer template for provider TLS**. Provision the Secret yourself; cert-manager is a fine way to produce it (see below).
 
 ## Producing the Secret with cert-manager
 
