@@ -524,7 +524,7 @@ Every long-running PVE operation returns a UPID. The provider returns it as a `T
 
 ## Cross-hypervisor migration
 
-Proxmox participates in VirtRigaud's storage-backend-agnostic, any-direction cross-hypervisor migration (ADR-0006). It is validated as both a **source** and a **target**, in both directions, against vSphere and libvirt, over **S3** and **NFS**. The disk is staged on the backend and moved with `qemu-img`; it **never traverses a CSI PVC**.
+Proxmox participates in VirtRigaud's storage-backend-agnostic, any-direction cross-hypervisor migration (ADR-0006). Lab-validated as both a **source** and a **target** against vSphere and libvirt over **S3** (v0.3.11), and against libvirt over **NFS**; Proxmox with vSphere over NFS was not run. See the [migration user guide](../migration/user-guide.md#what-virtrigaud-v040-supports) for the full matrix. The disk is staged on the backend and moved with `qemu-img`; it **never traverses a CSI PVC**.
 
 !!! info "Proxmox advertises `s3` and `nfs`, never `pvc`"
     A Proxmox VM's disk lives on PVE node storage, which a Kubernetes pod-mounted PVC can never reach. A `storage.type: pvc` migration with a Proxmox source or target is rejected at capability validation.
