@@ -289,7 +289,7 @@ Same semantics, labels and lifecycle as `virtrigaud_host_committed_cpu`, in MiB.
 | Type | Counter |
 | Help | `Total ImagePrepare requests without an image identity (from a manager older than ADR-0009), served in deprecated legacy mode or refused, by provider type. Non-zero means a manager must be upgraded.` |
 | Labels | `provider_type` |
-| Exposed by | provider (vSphere, libvirt, Proxmox, mock) |
+| Exposed by | provider (vSphere, libvirt, Proxmox) |
 | Added | v0.4.0 |
 
 Incremented once per `ImagePrepare` request that carries no image identity, that is, a request from a manager older than v0.4.0. Each such request is also logged at WARN. Any non-zero value means the manager must be upgraded to match the provider.

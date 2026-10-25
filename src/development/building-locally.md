@@ -23,7 +23,7 @@ This guide covers building VirtRigaud from source and building the documentation
 |---------------------|--------------------------------------|
 | Manager entrypoint  | `cmd/manager/main.go`                |
 | Manager Dockerfile  | `build/Dockerfile.manager`           |
-| Builder image       | `docker.io/golang:1.26.4` (override via `BUILDER_IMAGE`) |
+| Builder image       | `docker.io/golang:1.26.10` (override via `BUILDER_IMAGE`) |
 | Runtime base image  | `gcr.io/distroless/static:nonroot` (override via `BASE_IMAGE`) |
 
 `make build`, `make run`, `make docker-build`, `make docker-build-multiplatform`,
@@ -35,9 +35,10 @@ Dockerfile.
 ### Prerequisites
 
 - **Go 1.26+** - [Download](https://go.dev/dl/) — the Go toolchain floor
-  was raised to **1.26.3** in v0.3.7 and to **1.26.4** in v0.3.8. Binary
-  consumers via released images are unaffected; only source builders need to
-  upgrade. `go.mod` is the source of truth.
+  was raised to **1.26.3** in v0.3.7, to **1.26.4** in v0.3.8, and is
+  **1.26.10** in v0.4.0. Binary consumers via released images are unaffected;
+  only source builders need to upgrade. `go.mod` is the source of truth (the
+  `sdk/` and `proto/` modules use the same version).
 - **Docker** - [Install](https://docs.docker.com/get-docker/)
 - **Kubernetes cluster** - kind, k3s, or remote
 - **kubectl** - [Install](https://kubernetes.io/docs/tasks/tools/)
@@ -66,9 +67,10 @@ make test
 # Build manager (from cmd/manager/main.go → bin/manager)
 make build
 
-# Build a specific provider
+# Build a specific provider (CGO_ENABLED=0; binaries land in bin/).
+# The libvirt provider is pure Go: no libvirt-dev headers are needed.
 make build-provider-vsphere
-make build-provider-libvirt    # requires CGO + libvirt-dev headers
+make build-provider-libvirt
 make build-provider-proxmox
 make build-provider-mock
 
@@ -79,11 +81,21 @@ make build-providers
 make run
 ```
 
+`make build` and the provider targets regenerate what they depend on: `make build`
+runs `gen-crds generate fmt vet` first, and the `build-provider-libvirt`,
+`build-provider-vsphere` and `build-provider-proxmox` targets run `make proto`
+(which needs `buf`; it is installed under `bin/` on demand and fetches its
+plugins from the Buf Schema Registry, so it needs network access).
+
+The CLI tools (`vrtg`, `vcts`, `vrtg-provider`, `virtrigaud-loadgen`) have no
+`make` target; build them with `go build -o bin/<tool> ./cmd/<tool>`.
+
 ### Container Images
 
 ```bash
-# Build the manager image (uses build/Dockerfile.manager)
-make docker-build
+# Build the manager image (uses build/Dockerfile.manager).
+# The image tag comes from CONTROLLER_IMG (default controller:latest).
+make docker-build CONTROLLER_IMG=example.com/virtrigaud/manager:dev
 
 # Build for multiple platforms (loads locally; no push)
 make docker-build-multiplatform
@@ -91,7 +103,14 @@ make docker-build-multiplatform
 # Build + push multi-arch via buildx
 make docker-buildx BUILD_PLATFORMS=linux/amd64,linux/arm64
 
-# Build + push providers
+# Build the provider images (PROVIDER_{LIBVIRT,VSPHERE,PROXMOX}_IMG set the tags;
+# the mock provider has a Dockerfile but no make target)
+make docker-providers
+make docker-provider-vsphere
+make docker-provider-libvirt
+make docker-provider-proxmox
+
+# Build + push multi-arch provider images
 make docker-buildx-providers
 make docker-buildx-provider-vsphere
 make docker-buildx-provider-libvirt
@@ -101,23 +120,28 @@ make docker-buildx-provider-proxmox
 ### Testing
 
 ```bash
-# Run unit tests
+# Run unit tests (envtest-backed; includes a dry-run of every VirtRigaud
+# object under examples/ against the CRDs)
 make test
 
 # Run integration tests (no cluster required — cross-package observability tests)
 make test-integration
 
-# Run end-to-end tests (requires kind cluster; gated behind //go:build e2e
-# since #133). NB: `make test-e2e` itself does not yet pass `-tags=e2e`, so
-# until that lands invoke the explicit form:
-go test -tags=e2e ./test/e2e/... -v -ginkgo.v
+# Run the go-libvirt integration tests (need a reachable libvirtd; skip themselves otherwise)
+make test-libvirt-integration
 
-# Lint code (CI uses golangci-lint v2.12.2 — see Contributing)
+# Run end-to-end tests (requires a running kind cluster; the suite is gated
+# behind //go:build e2e and the make target passes -tags=e2e)
+make test-e2e
+
+# Lint code (golangci-lint v2.12.2, pinned in the Makefile and used by CI)
 make lint
 
 # Format code
 make fmt
 ```
+
+See [Testing Locally](testing-locally.md) for what each layer covers.
 
 ## Corporate / banking deployments
 
@@ -125,7 +149,7 @@ v0.3.6 ([PR #117](https://github.com/projectbeskar/virtrigaud/pull/117), part of
 the H1 build-path consolidation) parametrised `build/Dockerfile.manager` so
 forks in environments that cannot pull from `docker.io` / `gcr.io` can point
 at internal mirrors without patching the Dockerfile. This is still the
-mechanism in v0.3.8.
+mechanism in v0.4.0.
 
 ### Override the builder and base images
 
@@ -134,20 +158,20 @@ registry (Artifactory, Harbor, ECR, etc.):
 
 ```bash
 docker build -f build/Dockerfile.manager \
-  --build-arg BUILDER_IMAGE=corp.io/golang:1.26.4 \
+  --build-arg BUILDER_IMAGE=corp.io/golang:1.26.10 \
   --build-arg BASE_IMAGE=corp.io/distroless/static:nonroot \
-  --build-arg VERSION=v0.3.8 \
+  --build-arg VERSION=v0.4.0 \
   --build-arg GIT_SHA=$(git rev-parse HEAD) \
-  -t corp.io/virtrigaud/manager:v0.3.8 .
+  -t corp.io/virtrigaud/manager:v0.4.0 .
 ```
 
 Or via `make`:
 
 ```bash
 make docker-build \
-  BUILDER_IMAGE=corp.io/golang:1.26.4 \
+  BUILDER_IMAGE=corp.io/golang:1.26.10 \
   BASE_IMAGE=corp.io/distroless/static:nonroot \
-  VERSION=v0.3.8 GIT_SHA=$(git rev-parse HEAD)
+  VERSION=v0.4.0 GIT_SHA=$(git rev-parse HEAD)
 ```
 
 Defaults match the upstream public images so unpatched builds behave exactly
@@ -227,8 +251,8 @@ sudo apt-get install golang-go
 # Or download from https://go.dev/dl/
 ```
 
-Go 1.26+ is required for generating CRD documentation from the v0.3.8 source
-tree (the toolchain floor is **1.26.4** in v0.3.8).
+Go 1.26+ is required for generating CRD documentation from the v0.4.0 source
+tree (the toolchain floor is **1.26.10** in v0.4.0).
 
 ### Quick Start
 
@@ -236,8 +260,9 @@ tree (the toolchain floor is **1.26.4** in v0.3.8).
 # Install dependencies (Python and Go tools)
 make install
 make install-crd-tools
+make install-proto-tools
 
-# Build the documentation (includes CRD generation)
+# Build the documentation (includes CRD and gRPC reference generation)
 make build
 
 # Serve with live reload for development
@@ -251,7 +276,8 @@ The documentation build automatically:
 1. Installs Python dependencies with Poetry
 2. Clones/updates the VirtRigaud repository
 3. Runs `crd-ref-docs` to generate CRD documentation
-4. Builds the MkDocs site with all content
+4. Runs `buf generate` to generate the gRPC API reference from `provider.proto`
+5. Builds the MkDocs site with all content
 
 ### Using Make (Recommended)
 
@@ -265,11 +291,20 @@ make install-crd-tools
 # Clone/update VirtRigaud repository
 make clone-virtrigaud
 
+# Install buf (requires Go) for the gRPC API reference
+make install-proto-tools
+
 # Generate CRD documentation
 make generate-crds
 
-# Build the documentation (automatically runs generate-crds)
+# Generate the gRPC API reference (src/references/grpc-api.md)
+make generate-proto-docs
+
+# Build the documentation (automatically runs generate-crds and generate-proto-docs)
 make build
+
+# Same, but fail on warnings (what CI uses)
+make build-strict
 
 # Serve with live reload for development (http://127.0.0.1:8000)
 make serve
@@ -306,26 +341,30 @@ VirtRigaud's Custom Resource Definitions (CRDs):
    main project
 2. **Runs crd-ref-docs** - Extracts CRD schemas and generates markdown
    documentation
-3. **Outputs to `src/generated-crd-docs.md`** - Creates a comprehensive API
-   reference
+3. **Writes `src/generated-crd-docs.md`** - A comprehensive API reference.
+   The page the site navigation links to is the committed copy
+   `src/references/generated-crd-docs.md`, which is refreshed for each
+   release; do not hand-edit it.
 
-This ensures the documentation always reflects the current CRD structure. As
-of v0.3.8 there are **10 CRDs**: VirtualMachine, Provider, VMClass, VMImage,
-VMNetworkAttachment, VMMigration, VMSnapshot, VMSet, VMPlacementPolicy,
-VMClone. (VMAdoption is a controller, not a CRD.) Note that VMSet's
-controller is a not-yet-active stub and VMPlacementPolicy is reference-only
-in v0.3.8 — the CRDs exist but those controllers are not functional.
+This ensures the documentation reflects the CRD structure of the cloned
+source. As of v0.4.0 there are **12 CRDs**: VirtualMachine, Provider,
+VMClass, VMImage, VMNetworkAttachment, VMMigration, VMSnapshot, VMClone,
+VMSet, VMPlacementPolicy, Host and HostPool. (VMAdoption is a controller, not
+a CRD.) VMSet's controller is still a not-yet-active stub that only reports a
+`ControllerNotImplemented` condition. VMPlacementPolicy is consumed by the
+placement scheduler for VirtualMachines on a clustered Provider; Host and
+HostPool describe the hosts of a clustered Provider.
 
 ## Project Structure
 
-### VirtRigaud Repository (v0.3.8)
+### VirtRigaud Repository (v0.4.0)
 
 ```
 virtrigaud/
 ├── api/infra.virtrigaud.io/v1beta1/   # CRD Go types (source of truth)
 ├── cmd/                                # Binaries
 │   ├── manager/                        # Canonical manager entrypoint
-│   ├── provider-vsphere/
+│   ├── provider-vsphere/               # each provider has main.go + Dockerfile
 │   ├── provider-libvirt/
 │   ├── provider-proxmox/
 │   ├── provider-mock/
@@ -334,22 +373,23 @@ virtrigaud/
 │   ├── vcts/                           # Conformance test suite
 │   ├── virtrigaud-loadgen/             # Load generator
 │   └── alpha-to-beta-dryrun/
-├── build/                              # Dockerfiles
-│   ├── Dockerfile.manager              # Canonical manager image
-│   ├── Dockerfile.provider-vsphere
-│   ├── Dockerfile.provider-libvirt
-│   └── Dockerfile.kubectl
+├── build/                              # Dockerfile.manager, Dockerfile.kubectl
 ├── ca-certs/                           # Corporate CA injection slot
 ├── internal/                           # Internal packages
 │   ├── controller/                     # Kubernetes controllers (flat package)
 │   ├── providers/{vsphere,libvirt,proxmox,mock}/   # Provider gRPC servers
 │   ├── transport/grpc/                 # Manager-side gRPC client
-│   └── {obs,resilience,storage,k8s,runtime,scaffold}/
-├── proto/                              # Separate Go module: provider.proto
+│   ├── scheduler/ clustered/           # Placement scheduler, clustered-provider helpers
+│   ├── conformance/                    # vcts runner and validator
+│   └── {obs,resilience,storage,k8s,runtime,scaffold,...}/
+├── proto/                              # Separate Go module: provider.proto + generated bindings
 ├── sdk/                                # Separate Go module: provider SDK
-├── config/                             # Kustomize configs
-├── charts/virtrigaud/                  # Helm chart (templates + synced CRDs)
-├── docs/                               # Documentation source
+├── config/                             # Kustomize configs (CRD bases are committed)
+├── charts/virtrigaud/                  # Helm chart (crds/ is generated, gitignored)
+├── providers/catalog.yaml              # Provider catalog
+├── docs/                               # Design notes, ADRs, release notes
+├── examples/                           # YAML examples (dry-run in make test)
+├── hack/                               # Dev and CI helper scripts
 └── test/{e2e,conformance,integration,performance,utils}/
 ```
 
@@ -368,8 +408,11 @@ virtrigaud-website/
 │   ├── guides/
 │   ├── providers/
 │   ├── examples/
-│   ├── development/
-│   └── generated-crd-docs.md    # Auto-generated
+│   ├── operations/
+│   ├── migration/
+│   ├── references/              # includes generated-crd-docs.md and grpc-api.md (generated)
+│   ├── api-reference/
+│   └── development/
 ├── site/                        # Build output (ignored)
 └── virtrigaud/                  # Cloned repo (ignored)
 ```
@@ -401,10 +444,12 @@ pushed to the main branch. The workflow:
 
 1. Clones the VirtRigaud repository
 2. Generates CRD documentation using `crd-ref-docs`
-3. Builds the MkDocs site
-4. Deploys to GitHub Pages
+3. Generates the gRPC API reference from `provider.proto` using `buf`
+4. Builds the MkDocs site
+5. Deploys to GitHub Pages
 
-Manual deployment can be triggered via the GitHub Actions UI.
+Manual deployment can be triggered via the GitHub Actions UI, optionally with
+a VirtRigaud release tag to document (the default is the latest `main`).
 
 ## Troubleshooting
 
