@@ -65,6 +65,8 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6), and one gRP
 - [Provider Guides](guides/index.md) - Overview and provider setup
 - [Provider Capabilities Matrix](providers/providers-capabilities.md) - Feature comparison
 - [Advanced Topics](guides/advanced/advanced-lifecycle.md) - Advanced VM operations
+- [Security Model and Multi-Tenancy](guides/security-model.md) - Ownership, cross-namespace grants, admission policy
+- [VM Status Reference](guides/vm-status.md) - Phases, conditions, reasons and held provider calls
 
 ### Provider-Specific Guides
 - [vSphere Provider](providers/vsphere.md) - VMware vCenter/ESXi integration
@@ -77,7 +79,8 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6), and one gRP
 - [VM Lifecycle Management](guides/advanced/advanced-lifecycle.md) - Advanced VM operations
 - [Nested Virtualization](guides/advanced/nested-virtualization.md) - Run hypervisors in VMs
 - [Graceful Shutdown](guides/advanced/graceful-shutdown.md) - Proper VM shutdown handling
-- [VM Snapshots](guides/advanced/advanced-lifecycle.md#snapshot-management) - Backup and restore
+- [VM Snapshots and Revert](guides/vm-snapshots.md) - Take a snapshot and revert a VM to it
+- [Clustered Libvirt (Experimental)](guides/clustered/index.md) - One Provider in front of several libvirt hosts: [placement](guides/clustered/placement.md), [operations](guides/clustered/operations.md), [backup and restore](guides/clustered/backup-restore.md)
 - [Remote Providers](guides/advanced/remote-providers.md) - Provider architecture
 
 ### Operations
@@ -101,7 +104,8 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6), and one gRP
 - [Metrics Catalog](api-reference/metrics.md) - Available metrics
 - [Provider Catalog](references/catalog.md) - Available providers
 - [Full CRD Reference](references/generated-crd-docs.md) - Generated field-level schema
-- [Provider gRPC API](references/grpc-api.md) - Manager-to-provider contract
+- [Provider gRPC API Guide](references/grpc-api-guide.md) - How the manager uses the contract and what changed in v0.4.0
+- [Provider gRPC API](references/grpc-api.md) - Generated manager-to-provider contract
 
 ### Development
 - [Overview](development/index.md) - Development guide
@@ -111,9 +115,10 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6), and one gRP
 
 ### Examples Directory
 - [Example README](examples/index.md) - Overview of all examples
-- [Complete Examples](examples/) - Working configuration files
-- [Advanced Examples](examples/advanced/) - Complex scenarios
-- [Security Examples](examples/security/) - Security configurations
+- [Advanced Examples](examples/advanced/index.md) - Snapshots, reconfigure, cloning, task tracking
+- [Clustered libvirt example](guides/clustered/index.md#complete-first-setup) - Provider, HostPool, Hosts and a first VM
+- [Shared Provider example](examples/shared-provider-consumer-namespaces.yaml) - `consumerNamespaceSelector` for multi-tenant clusters
+- [Security configuration](operations/security.md) - Credentials, mTLS and network policy examples
 
 ## Custom Resources
 
@@ -153,7 +158,7 @@ This documentation covers **VirtRigaud v0.4.0**.
     - **Proxmox.** The bridge, VLAN tag, NIC model and static IP of a VM's networks are applied; the cloud-init drive is placed on the VM's disk storage; imports of a migrated disk are accepted only from the VM's own verified migration stage.
     - **Operations.** A provider call whose outcome is unknown is held for an operator instead of being re-sent blindly (`SnapshotOutcomeUnknown`, `ExportOutcomeUnknown`, `ImportOutcomeUnknown`); a delete held for an unreachable clustered host says so (`DeleteBlocked`/`HostUnreachable`); new metrics `virtrigaud_host_committed_cpu` and `virtrigaud_host_committed_memory_mib`; the gRPC contract gains host inventory (`ListHosts`, `GetHostInfo`), `TransferOwner`, `DeleteStagedDisk` and `DeleteLandedDisk` (see [Provider gRPC API](references/grpc-api.md)).
 - **v0.3.11** — *NFS cross-hypervisor migration staging backend (ADR-0006 Slice 4).*
-    - **Second storage-agnostic `VMMigration` backend: NFS (#236).** Alongside the S3 backend, the disk can now be staged on an **NFS export** and moved with `qemu-img`'s native transport — no PVC, no relay, no S3 credentials. Lab-validated across all three providers (vSphere, libvirt, Proxmox VE) in **both directions** against a real OpenMediaVault server.
+    - **Second storage-agnostic `VMMigration` backend: NFS (#236).** Alongside the S3 backend, the disk can now be staged on an **NFS export** and moved with `qemu-img`'s native transport — no PVC, no relay, no S3 credentials. Lab-validated across all three providers (vSphere, libvirt, Proxmox VE) in **both directions**.
     - **Per-provider NFS transport.** libvirt (host-side) and vSphere (pod-side) use qemu-img's `nfs://` libnfs driver; **Proxmox kernel-mounts** the export because `pve-qemu-kvm` ships no libnfs driver.
     - **`nfs.uid` / `nfs.gid` are effectively mandatory for cross-provider migrations** (AUTH_SYS authorizes by the numeric uid/gid each leg presents); set them to the export owner. The staged object is a single flat file in the export root.
     - **Proxmox now advertises `s3` *and* `nfs`** (not PVC: its disks live on the node, unreachable by a pod-mounted PVC). The full 3-hypervisor matrix is now validated in both directions over **both** staging backends. See the [VM Migration User Guide](migration/user-guide.md).
@@ -183,7 +188,7 @@ See [CHANGELOG.md](https://github.com/projectbeskar/virtrigaud/blob/main/CHANGEL
 |----------|--------|----------|---------------|
 | vSphere | Production Ready | Stable | [Guide](providers/vsphere.md) |
 | Libvirt/KVM (single host) | Production Ready | Stable | [Guide](providers/libvirt.md) |
-| Libvirt/KVM (clustered, `topology: cluster`) | Opt-in | Experimental | [Guide](providers/libvirt.md) |
+| Libvirt/KVM (clustered, `topology: cluster`) | Opt-in | Experimental | [Guide](guides/clustered/index.md) |
 | Proxmox VE | Production Ready | Beta | [Guide](providers/proxmox.md) |
 | Mock | Complete | Testing | [providers/tutorial.md](providers/tutorial.md) |
 

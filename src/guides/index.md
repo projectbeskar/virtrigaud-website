@@ -59,7 +59,10 @@ Each setup guide covers prerequisites, credentials, the Provider configuration, 
 
 | Guide | Covers |
 |-------|--------|
-| [Clustered libvirt](clustered/index.md) | `topology: cluster`: one Provider in front of several libvirt hosts, with `Host` and `HostPool`, a placement scheduler and routed per-host lifecycle (experimental in v0.4.0) |
+| [Clustered libvirt](clustered/index.md) | `topology: cluster`: one Provider in front of several libvirt hosts, with `Host` and `HostPool`, a placement scheduler and routed per-host lifecycle (experimental in v0.4.0). Continues with [placement](clustered/placement.md), [operations and troubleshooting](clustered/operations.md) and [backup, restore and re-attach](clustered/backup-restore.md) |
+| [VM snapshots and revert](vm-snapshots.md) | `VMSnapshot`, `spec.snapshot.revertToRef`, `status.snapshotRevert`, the `SnapshotReverted` condition, and the per-provider rules |
+| [VM status reference](vm-status.md) | Phases, conditions and their reasons, `status.ips`, and how to read and release a held (outcome unknown) provider call |
+| [Security model and multi-tenancy](security-model.md) | VM ownership, cross-namespace references, admission policy, the Provider in-use finalizer, identity-safe image preparation, private cloud-init seeds, migration storage, the disk-size limit, and what to check on upgrade |
 | [Advanced VM lifecycle](advanced/advanced-lifecycle.md) | Phases and conditions, reconfiguration results (`RestartRequired`, `ResizePendingPowerOff`), snapshots and `spec.snapshot.revertToRef`, `spec.disks` and `DisksApplied`, `status.ips`, image preparation, `orphan-on-delete`, adoption, `providerRef` immutability |
 | [VM cloning](advanced/vm-cloning.md) | `VMClone`: scope, per-provider rules (libvirt full clones need a powered-off source; libvirt linked clones are disabled), new cloud-init identity, owner stamping, cross-namespace targets |
 | [Graceful shutdown](advanced/graceful-shutdown.md) | `powerState: OffGraceful`: what each provider does and how it falls back |
@@ -102,7 +105,7 @@ A VM may use a Provider, VMClass or VMImage in another namespace only if that ob
 - **Credentials:** use Kubernetes Secrets, never inline credentials; consider the [External Secrets Operator](../providers/security/external-secrets.md).
 - **TLS:** every Provider needs a `runtime.service.tls` block. Use `tls.enabled: true` with a Secret (`tls.crt`, `tls.key`, `ca.crt`); `enabled: false` is a plaintext opt-out for labs and is reported as `TLSConfigured=False` / `ExplicitlyDisabled`.
 - **Least privilege:** give the hypervisor account only the privileges VirtRigaud needs (on vSphere this includes `VirtualMachine.Config.AdvancedConfig`, because every create writes an owner stamp).
-- **Tenants:** `create` on `vmclones` is read access to the source VM's data; sharing a Provider with another namespace shares everything its credentials can reach.
+- **Tenants:** `create` on `vmclones` is read access to the source VM's data; sharing a Provider with another namespace shares everything its credentials can reach. The [Security model](security-model.md) explains what is enforced and where.
 - **Network:** restrict who can reach provider pods with the chart's `networkPolicy.*` (opt-in); see [Network Policies](../providers/security/network-policies.md).
 
 See the [Security guide](../operations/security.md) for the full recommendations.
@@ -118,4 +121,5 @@ See the [Security guide](../operations/security.md) for the full recommendations
 
 1. Choose your provider and follow its setup guide.
 2. Create your [first VM](../getting-started/basic-vm-example.md).
-3. Explore [advanced lifecycle features](advanced/advanced-lifecycle.md).
+3. Explore [advanced lifecycle features](advanced/advanced-lifecycle.md), [snapshots and revert](vm-snapshots.md) and the [VM status reference](vm-status.md).
+4. Before sharing a Provider across namespaces or running multiple tenants, read the [Security model](security-model.md).

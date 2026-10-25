@@ -360,7 +360,7 @@ increase(virtrigaud_image_prepare_artifact_total{outcome="conflict"}[1h]) > 0
 **Labels:** `provider` (`<namespace>/<name>` of the clustered Provider), `host` (the `Host` object's name)  
 **Added:** v0.4.0 (clustered libvirt providers)
 
-The vCPUs and the memory (MiB) that the `VirtualMachine`s bound to, or pending on, a `Host` hold: the committed capacity the placement scheduler subtracts from the host's allocatable capacity. They are refreshed by the `Host` controller on every sync (about once a minute) and removed when the `Host` is deleted, so the series count is the number of `Host`s. Compare with `Host.status.allocatableCPU` / `allocatableMemoryMiB`.
+The vCPUs and the memory (MiB) that the `VirtualMachine`s bound to, or pending on, a `Host` hold: the committed capacity the placement scheduler subtracts from the host's allocatable capacity. They are refreshed by the `Host` controller on every sync (about once a minute) and removed when the `Host` is deleted, so the series count is the number of `Host`s. Compare with `Host.status.allocatableCPU` / `allocatableMemoryMiB`. Alert suggestions, the host guard counter and how to read an unreachable host are in [Clustered libvirt: operations and troubleshooting](../guides/clustered/operations.md#metrics-and-alerts).
 
 ```promql
 virtrigaud_host_committed_cpu{provider="virtrigaud-system/libvirt-cluster"}
@@ -482,6 +482,8 @@ How these are produced, how long they are retried and how to release them is in 
 | `Provider` | `DeleteBlocked=True`, reason `ProviderInUse` | A `Provider` being deleted is held by VMs, snapshots, clones or migrations that need it (ADR-0010). A `Warning` event `ProviderDeleteBlocked` names counts and namespaces, never objects. Released with `virtrigaud.io/force-delete: "true"` on the Provider (event `ProviderForceDeleted`). |
 | `Host` | `status.health`, `Ready`, `lastHeartbeatTime` | Inventory-sync result; a stale `lastHeartbeatTime` means the sync is not running. |
 | `HostPool` | `status.totalHosts`, `readyHosts`, `schedulableHosts`, `Ready` | Written by the `HostPool` controller (a pool with no schedulable host cannot place VMs). |
+
+For the reasons on a VM (`Ready`, `Placed`, `DeleteBlocked`, the `...OutcomeUnknown` holds) see the [VM status reference](../guides/vm-status.md).
 
 ---
 

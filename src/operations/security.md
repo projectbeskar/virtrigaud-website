@@ -154,6 +154,8 @@ then add the resulting `known_hosts` key to the credentials Secret. The same app
 
 **Defence-in-depth (still recommended):** keep the libvirt provider pod and the libvirt host on the same private subnet behind a CNI that enforces traffic on that path, with a NetworkPolicy scoping egress. Host-key verification is the primary control; network isolation is the backstop.
 
+For the tenant-facing view (what each check does, which refusals you will see and what to configure), read [Security Model and Multi-Tenancy](../guides/security-model.md). The sections below are the operator's summary.
+
 ## Who can grant what
 
 Tenant isolation in v0.4.0 is a set of **grants** that two kinds of identities control. The manager itself has cluster-wide rights, so the rule is "refuse unless a grant exists", and the grants are only as strong as the RBAC around them:

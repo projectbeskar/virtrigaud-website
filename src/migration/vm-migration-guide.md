@@ -284,6 +284,8 @@ source VM is deleted with a UID precondition on `status.sourceVMUID`.
 
 ## Grants and gates
 
+The operator's view of these grants (what to configure, which refusals you will see) is in the [Security model](../guides/security-model.md#cross-namespace-clone-and-migration-targets).
+
 Every phase that can call a provider or create something in a namespace passes through
 the same gates:
 
@@ -328,7 +330,7 @@ the VM:
    the migration (`TargetHostMoved`, `TargetDiskMismatch`).
 5. A retry or deletion before the target is created deletes the unbound target first.
 
-Summary and limits: [Clustered libvirt](../guides/clustered/index.md); every reason:
+Operator guide: [Migrating into a clustered Provider](clustered-target.md); summary and limits: [Clustered libvirt](../guides/clustered/index.md); every reason:
 [Migration into a clustered provider](https://github.com/projectbeskar/virtrigaud/blob/main/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
 
 ## Reconciler instrumentation
@@ -513,7 +515,9 @@ Key properties:
 - [VM Migration User Guide](user-guide.md) - practical how-to.
 - [VM Migration API Reference](api-reference.md) - every spec field, status field,
   condition and reason.
-- [Clustered libvirt](../guides/clustered/index.md) - migrating into a clustered Provider.
+- [Migrating into a clustered Provider](clustered-target.md) - the operator guide for a clustered target.
+- [Clustered libvirt](../guides/clustered/index.md) - setting up the clustered Provider.
+- [Security model](../guides/security-model.md) - cross-namespace targets, migration storage mounts and the disk-size limit.
 - [Resilience](../operations/resilience.md) - circuit breaker behaviour during long migrations.
 - [Full CRD Reference](../references/generated-crd-docs.md#vmmigration) - generated CRD documentation.
 - [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) -

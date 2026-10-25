@@ -96,7 +96,7 @@ Full schema: [generated-crd-docs.md#virtualmachine](generated-crd-docs.md#virtua
 | `provider` | `map[string]string` | Provider-specific details |
 | `message` | `string` | Additional state details |
 
-**Conditions.** `Ready` summarizes the VM and carries the reason for a hold. Others:
+**Conditions.** `Ready` summarizes the VM and carries the reason for a hold. Every reason, with what to do about it, is in the [VM status reference](../guides/vm-status.md); the clustered ones are also in [Clustered libvirt: placement](../guides/clustered/placement.md#unschedulable-and-related-reasons). The conditions:
 
 | Condition | Meaning |
 |-----------|---------|
@@ -171,7 +171,7 @@ kubectl patch vm web-server --type merge \
 kubectl get vm web-server -o jsonpath='{.status.snapshotRevert.phase}'
 ```
 
-While `SnapshotReverted` is `False`, `Ready` is `False` with the same reason. Per-provider behaviour is in the [capability matrix](../providers/providers-capabilities.md#snapshots-and-revert). Details: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md).
+While `SnapshotReverted` is `False`, `Ready` is `False` with the same reason. Per-provider behaviour is in the [capability matrix](../providers/providers-capabilities.md#snapshots-and-revert). Walkthrough and the full rules: [VM snapshots and revert](../guides/vm-snapshots.md). Details: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md).
 
 ---
 
@@ -540,7 +540,7 @@ Used for adopted or migrated VMs instead of `imageRef`.
 !!! note "Clustered libvirt only"
     `Host` and `HostPool` are used only by a libvirt Provider with `spec.topology: cluster` (experimental, opt-in). Single-host Providers do not use them. See [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0007-clustered-orchestrator-provider.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md).
 
-A `Host` registers one hypervisor host behind a clustered Provider. The operator fills `status` from the provider's `GetHostInfo` answer. A `Host` and its `HostPool` and Provider must be in the same namespace. A `Host` cannot be deleted while a VirtualMachine is bound to it; fence the host (power it off or revoke its access to shared storage) before you delete one to release held deletes.
+A `Host` registers one hypervisor host behind a clustered Provider (setup and operations: [Clustered libvirt guide](../guides/clustered/index.md)). The operator fills `status` from the provider's `GetHostInfo` answer. A `Host` and its `HostPool` and Provider must be in the same namespace. A `Host` cannot be deleted while a VirtualMachine is bound to it; fence the host (power it off or revoke its access to shared storage) before you delete one to release held deletes.
 
 Full schema: [generated-crd-docs.md#host](generated-crd-docs.md#host). Short name: `hvh`.
 

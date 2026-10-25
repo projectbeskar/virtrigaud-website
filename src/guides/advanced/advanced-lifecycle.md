@@ -24,7 +24,7 @@ This page describes how a `VirtualMachine` moves through its lifecycle in VirtRi
 
 ## Phases
 
-`kubectl get vm` shows `status.phase` in its `PHASE` column. The manager derives it from the rest of the status on every status write, so it is never empty on a VM the manager reconciles and never disagrees with the conditions. Do not set it by hand.
+`kubectl get vm` shows `status.phase` in its `PHASE` column. The manager derives it from the rest of the status on every status write, so it is never empty on a VM the manager reconciles and never disagrees with the conditions. Do not set it by hand. The [VM status reference](../vm-status.md) lists every phase, condition and reason.
 
 | Phase | Meaning |
 |-------|---------|
@@ -117,6 +117,8 @@ A power operation that returns a task (Proxmox) shows `Reconfiguring=True` with 
 On vSphere, a size change of an additional disk grows the disk `Create` attached for that entry (found by the name recorded in the VM's ExtraConfig); a smaller size is refused, and a disk is never shrunk. The VMClass `spec.diskDefaults.size` of the root disk is applied at create (and, on libvirt, grown by `Reconfigure`), not by vSphere's `Reconfigure`.
 
 ## Snapshot management
+
+This section is a summary. The full guide, with the per-provider rules, the unknown-outcome handling and the upgrade caveat, is [VM snapshots and revert](../vm-snapshots.md).
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1

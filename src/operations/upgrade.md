@@ -42,7 +42,10 @@ admission policy for manager-owned keys, identity-safe image preparation
 (ADR-0009), a `Provider` in-use finalizer (ADR-0010), migration staging cleanup
 (ADR-0011), snapshot revert through `spec.snapshot.revertToRef`, Proxmox network
 and cloud-init-drive handling, and private libvirt cloud-init seeds. If you do not
-use clustered providers, the new CRDs are installed but unused.
+use clustered providers, the new CRDs are installed but unused. Clustered
+provider users should also read [Backup, restore and re-attach](../guides/clustered/backup-restore.md):
+a restore of `VirtualMachine`s is guarded in v0.4.0 and some restores now hold VMs
+until you decide.
 
 ### Pre-flight checks
 
@@ -282,6 +285,8 @@ providers. Roll the providers promptly after the manager.
 
 ### Breaking changes
 
+The [Upgrade impact](../guides/security-model.md#upgrade-impact) table in the Security Model guide lists the security-related changes from the tenant's side, with what each looks like after the upgrade.
+
 Rows are grouped by area. "Action" is what you must do; the
 [repository guide](https://github.com/projectbeskar/virtrigaud/blob/main/docs/upgrading.md#breaking-changes)
 carries the full cause and the edge cases of each row.
@@ -493,6 +498,8 @@ Chart-templated providers (`providers.<type>.enabled`) stay disabled by default
   unaffected.
 
 ### In-flight VMMigrations
+
+For a migration into a clustered Provider, see also the [upgrade notes](../migration/clustered-target.md#upgrade-notes).
 
 Migrations are the most exposed objects during this upgrade. In short:
 

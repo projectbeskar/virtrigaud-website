@@ -403,6 +403,8 @@ its conversion. A **clustered** Provider does not prepare images.
 
 ## Cloud-init seed directory
 
+The threat this closes and the file modes it sets are described in [Private cloud-init seeds](../guides/security-model.md#private-cloud-init-seeds-libvirt).
+
 A seed ISO carries the VM's user-data, which may hold passwords, keys and tokens.
 Since v0.4.0 the provider builds every seed in a dedicated directory that only
 the SSH user can list, and makes each seed file private. The directory **must
@@ -900,6 +902,8 @@ network-configuration defaults injected into cloud-init meta-data, see
   capability flags and the Provider CR spec.
 - [Clustered libvirt guide](../guides/clustered/index.md): `Host`, `HostPool`,
   placement and the clustered host prerequisites.
+- [Security model: private cloud-init seeds](../guides/security-model.md#private-cloud-init-seeds-libvirt):
+  why seeds are private and what the provider enforces.
 - [Upgrade Guide](upgrade.md): the order and the host changes needed for v0.4.0.
 - [Operations / Security](security.md): credential flow and the STRIDE-style
   threat model.

@@ -44,6 +44,7 @@ Given a reference to a provisioned source `VirtualMachine` in the same namespace
 | **Clone types** | `FullClone` (default) and `LinkedClone`. `InstantClone` is in the enum but not implemented |
 | **Power** | The produced VM's `spec.powerState` is `On` when `options.powerOn: true`, otherwise `Off` (the default). Every provider leaves a clone powered off; the VirtualMachine controller powers it on when its spec says so |
 | **Owner check** | The provider must be able to prove the source hypervisor VM is the source `VirtualMachine`'s (a reused VM id is not): otherwise the clone fails with reason `VMNotOwned` or `OwnerStampUnreadable` and nothing is copied |
+| **Clustered Providers** | A clone lands on the source VM's own host and is admitted against that host's free capacity; a cordoned, unready or missing source host holds it (`SourceHostCordoned`, `SourceHostNotReady`, `SourceHostGone`). See [Clustered libvirt: operations](../clustered/operations.md#troubleshooting) |
 | **Disk-size limit** | A clone never creates a disk above the administrator's disk-size limit (`manager.maxDiskSize`): the source's disks and the target class are checked before the `Clone` is sent, and the clone is held if one exceeds it |
 
 ### Per provider
@@ -106,7 +107,7 @@ On the new instance, cloud-init regenerates the SSH host keys (`ssh_deletekeys` 
 Clones of VMs that do not use cloud-init are unaffected, and clones made before v0.4.0 keep the identity they booted with.
 
 !!! warning "`create` on `vmclones` is read access to the source VM's data"
-    A clone is a full copy of the source's disk, and it runs cloud-init user-data as **root** on its first boot. On libvirt that user-data can be the `VMClone`'s `spec.customization.userData.cloudInit.inline`; on every provider the clone also re-runs the source's own user-data, which may carry secrets. Anyone who can `create` a `VMClone` of a VM can run commands as root on a copy of that VM's disk and read everything on it. Grant `create` on `vmclones` in a namespace only to subjects trusted with read access to every VM's data in that namespace.
+    A clone is a full copy of the source's disk, and it runs cloud-init user-data as **root** on its first boot. On libvirt that user-data can be the `VMClone`'s `spec.customization.userData.cloudInit.inline`; on every provider the clone also re-runs the source's own user-data, which may carry secrets. Anyone who can `create` a `VMClone` of a VM can run commands as root on a copy of that VM's disk and read everything on it. Grant `create` on `vmclones` in a namespace only to subjects trusted with read access to every VM's data in that namespace. See [Security model](../security-model.md#limits-to-know).
 
 ## Worked example
 
@@ -202,6 +203,9 @@ A libvirt **linked** clone into another namespace is refused (it would keep read
 ## See also
 
 - [Advanced VM lifecycle](advanced-lifecycle.md): reconfiguration, snapshots and revert, detaching VMs.
+- [VM status reference](../vm-status.md): the `CloneRetrying`, `CloneOutcomeUnknown` and other reasons a held clone shows, and how to read them.
+- [Clustered libvirt: operations](../clustered/operations.md#routed-owner-checked-lifecycle): clone routing, `SourceHostCordoned` and the other clustered clone holds.
+- [Security model](../security-model.md): who may clone, cross-namespace targets and ownership stamps.
 - [Provider capabilities matrix](../../providers/providers-capabilities.md): which providers support `Clone` and linked clones.
 - [VM migration](../../migration/vm-migration-guide.md): moving a VM between providers.
 - [`examples/vmclone-basic.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmclone-basic.yaml): the canonical example in the main repository.

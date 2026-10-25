@@ -268,7 +268,7 @@ stringData:
 | Key | Required | Notes |
 |-----|----------|-------|
 | `ssh-privatekey` | Yes | A host whose Secret is missing or has no `ssh-privatekey` is left out of the inventory |
-| `known_hosts` | Recommended | Not required to render, but the provider verifies SSH host keys and **refuses to connect** to a host with no matching entry (unless the audit-flagged insecure escape hatch is set; see [Libvirt host preparation](../../operations/libvirt-host-prepare.md#seed-known_hosts-for-the-credentials-secret-v037)). One Secret can hold the `known_hosts` lines for all hosts it serves |
+| `known_hosts` | Recommended | Not required to render, but the provider verifies SSH host keys and **refuses to connect** to a host with no matching entry (unless the audit-flagged insecure escape hatch is set; see [Libvirt host preparation](../../operations/libvirt-host-prepare.md#ssh-host-key-verification-adr-0004)). One Secret can hold the `known_hosts` lines for all hosts it serves |
 | `username`, `password` | Not used | The user is in the endpoint; password authentication is not carried to clustered hosts |
 
 When a host is left out, the manager does not fail the whole render. It keeps

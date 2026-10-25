@@ -313,7 +313,7 @@ NAME          PROVIDER           CLASS   IMAGE       PHASE     AGE
 my-first-vm   vsphere-provider   small   ubuntu-22   Running   2m
 ```
 
-`status.phase` is set on every status write and is never empty: `Pending`, `Provisioning`, `Running`, `Stopped`, `Reconfiguring`, `Deleting` or `Failed`. The `Ready`, `Provisioning`, `Reconfiguring` and `Placed` conditions carry the reason.
+`status.phase` is set on every status write and is never empty: `Pending`, `Provisioning`, `Running`, `Stopped`, `Reconfiguring`, `Deleting` or `Failed`. The `Ready`, `Provisioning`, `Reconfiguring` and `Placed` conditions carry the reason; every phase, condition and reason is explained in the [VM Status Reference](../guides/vm-status.md).
 
 ## Step 6: Access Your VM
 
@@ -432,6 +432,8 @@ kubectl apply -f complete-vm.yaml
 
 - [Quickstart](index.md#step-9-advanced-operations) — snapshots, snapshot revert and cloning (`VMClone`)
 - [Examples](../examples/index.md) — more configuration files
+- [VM Status Reference](../guides/vm-status.md) — phases, conditions and what to do about a reason
+- [VM Snapshots and Revert](../guides/vm-snapshots.md) — snapshot a VM and revert it
 - [Provider Capabilities](../providers/providers-capabilities.md) — per-provider feature matrix
 - [Observability Guide](../operations/observability.md) — dashboards and alerting
 

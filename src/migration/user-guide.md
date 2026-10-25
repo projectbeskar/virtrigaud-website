@@ -432,6 +432,8 @@ What the provider pods mount (changed in v0.4.0, security):
   hard-linked file in the PVC fails the migration (`refused the staged file`), as does a
   filesystem that reports a link count other than 1.
 
+The rules behind these mounts are summarised in the [Security model](../guides/security-model.md#migration-storage).
+
 Size an auto-created PVC at 1.5x to 2x the source disk. Field detail:
 [API Reference - storage.pvc](api-reference.md#storagepvc-pvcstorageconfig-compat-only).
 
@@ -698,7 +700,7 @@ spec:
   target Provider need not share a namespace. With `pvc` they must.
 - The S3 credentials Secret is always read from the **migration's** namespace.
 
-Details and the pre-upgrade query:
+How the grants fit together with ownership and the admission policy: [Security model](../guides/security-model.md#cross-namespace-clone-and-migration-targets). Details and the pre-upgrade query:
 [Cross-namespace clone and migration targets](https://github.com/projectbeskar/virtrigaud/blob/main/docs/cross-namespace-targets.md).
 
 ## Migration into a clustered libvirt Provider (experimental)
@@ -730,7 +732,8 @@ vSphere (over S3 and NFS), and a Proxmox source; see the validation tables above
 made unreachable after the disk landed, a retry after an import and a held target of a
 previous incarnation were not run in the lab.
 
-Full guide: [Clustered libvirt](../guides/clustered/index.md). Prerequisites, every
+Full guide: [Migrating into a clustered Provider](clustered-target.md) (prerequisites, watching a
+migration, cleanup, known limits). Setting the clustered Provider up: [Clustered libvirt](../guides/clustered/index.md). Every
 condition and how to clear it: [Migration into a clustered
 provider](https://github.com/projectbeskar/virtrigaud/blob/main/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
 Example: [`examples/vmmigration-into-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/main/examples/vmmigration-into-clustered.yaml).
@@ -819,7 +822,9 @@ Example manifests are in the main repository, in
   and reason.
 - [VM Migration Guide](vm-migration-guide.md) - architectural deep dive (phase machine,
   controller orchestration, storage sequencing).
-- [Clustered libvirt](../guides/clustered/index.md) - migrating into a clustered Provider.
+- [Migrating into a clustered Provider](clustered-target.md) - the guide for a clustered libvirt target.
+- [Clustered libvirt](../guides/clustered/index.md) - setting up the clustered Provider itself.
+- [Security model](../guides/security-model.md) - cross-namespace targets, migration storage mounts and the disk-size limit.
 - [Resilience](../operations/resilience.md) - what happens when a provider flaps during a long migration.
 - [Libvirt Host Preparation](../operations/libvirt-host-prepare.md) - host setup for libvirt migrations.
 - [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/main/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) -
