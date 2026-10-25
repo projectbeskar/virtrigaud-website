@@ -25,7 +25,7 @@ A libvirt `Provider` is bound to **one host** by default (`spec.topology: single
 | Per-VM calls | Addressed by domain name | Routed to the VM's bound host (`status.placement`) and owner-checked there |
 | Maturity | Supported | **Experimental.** Opt-in, may still change. Host-to-host migration is not implemented. |
 
-`spec.topology` is immutable once set, and the validating webhook accepts `cluster` only on `type: libvirt`.
+`spec.topology` is immutable once set, and the validating webhook accepts `cluster` only on `type: libvirt`. A clustered Provider's runtime always runs as one replica with the `Recreate` strategy, whatever `spec.runtime.replicas` says, so it is briefly unavailable during a rollout.
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -129,7 +129,7 @@ The sections below give the detail.
 - **Clone**: see [Cloning](#cloning).
 - **ImagePrepare**: lazy import of a `source.libvirt.url` image (single-host only), see [Images](#images).
 - **ExportDisk / ImportDisk / GetDiskInfo**: back the export and import sides of [cross-provider migration](../migration/user-guide.md).
-- **ConsoleUrl**: `vnc://<host>:<port>` parsed from `virsh dumpxml`.
+- **Console URL**: `Describe` returns `vnc://<host>:<port>` parsed from `virsh dumpxml`.
 - **ListHosts / GetHostInfo**: clustered topology only.
 
 ## Prerequisites
@@ -154,7 +154,7 @@ Host preparation (packages, SSH user, sudo grants, known_hosts, rate limits, poo
 
 ## Authentication
 
-The libvirt provider reads credentials from the Secret mounted at `/etc/virtrigaud/credentials` inside the provider pod. It also accepts `LIBVIRT_USERNAME`, `LIBVIRT_PASSWORD` and `LIBVIRT_SSH_PRIVATE_KEY` environment variables as a fallback. **The Secret keys are read as files**; the key names matter:
+The libvirt provider reads credentials from the Secret mounted at `/etc/virtrigaud/credentials` inside the provider pod. The `LIBVIRT_USERNAME`, `LIBVIRT_PASSWORD` and `LIBVIRT_SSH_PRIVATE_KEY` environment variables are read **first**, and the mounted files are the fallback for any value they leave unset. **The Secret keys are read as files**; the key names matter:
 
 | Secret key | File path | Used for |
 |------------|-----------|----------|
@@ -275,7 +275,7 @@ spec:
 | `qemu+ssh://user@host/system` | The supported form. The provider runs `virsh -c qemu:///system` on the host over SSH. |
 | `qemu:///system`, `qemu+tls://...`, `qemu+tcp://...` | Accepted by the CRD, but the provider then runs a **local** `virsh` in the pod. This path is not exercised by the project's tests or lab runs; do not rely on it. |
 
-A `Host` of a clustered Provider needs an `ssh://` endpoint.
+A `Host` of a clustered Provider needs a `qemu+ssh://[user@]host[:port]/system` (or `/session`) endpoint; the CRD rejects any other form.
 
 ## Storage
 
@@ -350,7 +350,7 @@ spec:
 !!! note "Bridged networking and IP discovery"
     On a host bridge the LAN's DHCP server answers, not libvirt, so libvirt holds **no lease** and `status.ips` stays empty unless the QEMU guest agent runs in the guest. See [`status.ips`](#statusips).
 
-On a clustered Provider, the network name (or bridge name) of every attachment becomes a **required `Host` label** `net.virtrigaud.io/<name>: "true"`: only a host that carries it is a candidate.
+On a clustered Provider, every attachment contributes a **required `Host` label** `net.virtrigaud.io/<name>: "true"`: only a host that carries it is a candidate. The label name is the attachment's `networkName`, or its bridge name when no `networkName` is set. Set only one of the two: if both are set, the NIC is attached to the bridge but the VM is scheduled by the `networkName` label.
 
 ## Cloud-init (NoCloud seed)
 
@@ -365,7 +365,7 @@ User-data is passed through unchanged, with these details:
 
 - The seed's `instance-id` is the domain name (`<namespace>.<name>`); a [clone](#clone-identity) gets `virtrigaud-<uid>`.
 - `spec.userData.cloudInit.inline` and `secretRef` are resolved by the manager and merged; the provider writes the result into the seed.
-- The ISO's `meta-data` carries a DHCP network configuration for the common NIC names. Static addressing is not generated (see [Networking](#networking)).
+- The ISO's `meta-data` carries a DHCP (IPv4 and IPv6) network configuration for the common NIC names. Static addressing is not generated (see [Networking](#networking)).
 
 ## VM example
 
@@ -379,10 +379,11 @@ spec:
     libvirt:
       url: "https://cloud-images.example.com/jammy/jammy-server-cloudimg-amd64.img"
       format: qcow2
-  # onMissing: Fail holds new VMs (WaitingForDependencies) until the image
-  # is prepared on the Provider. Omit the block to skip the prepare gate.
+  # onMissing: Import (the default) prepares the image on the Provider when
+  # the first VM needs it. Fail and Wait do not prepare: they hold new VMs
+  # until something else has prepared the image.
   prepare:
-    onMissing: Fail
+    onMissing: Import
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
@@ -444,7 +445,7 @@ A `VMImage` with `source.libvirt.path` names a **base image already on the host*
 
     Keep `/var/lib/libvirt/images` in the list if you use URL images. On a shared pool, keep the image catalog in a separate directory that only administrators write to.
 - **URL images are prepared by identity (ADR-0009).** The prepared file is `<pool dir>/<namespace>.<name>_<16 hex>.qcow2`, read-only (`0444`), owned by the SSH user, with a stamp file; it is reused only when the stamp matches the `VMImage` UID and source digest, never by bare name. A source that fails for good (HTTP 4xx, checksum mismatch, unreadable image) shows `InvalidSource` instead of being retried. Downloads are one transfer, bounded in time (`spec.prepare.timeout`) and size (`VIRTRIGAUD_LIBVIRT_IMAGE_MAX_DOWNLOAD_GIB`, default 256). The pool directory must be an allowed image directory on a filesystem with hard links.
-- **The prepare gate** applies to import-style sources only: with `prepare.onMissing: Fail`, new VMs wait in `WaitingForDependencies` until the image is prepared. A reference-style source (`path`) is not gated.
+- **The prepare gate** applies to import-style sources only: with the default `onMissing: Import` the image is prepared when the first VM needs it; with `Fail` or `Wait` nothing is prepared and new VMs wait in `WaitingForDependencies` until the image has been prepared out of band. A reference-style source (`path`) is not gated.
 
 Full rules, including the stamp and what is refused: [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/main/docs/image-preparation.md#libvirt-image-paths-sourcelibvirtpath).
 
@@ -472,7 +473,7 @@ spec:
 | Running | **Internal** full-system checkpoint: disks and RAM. Needs qcow2 storage. | **External disk-only** snapshot. The CD-ROM is excluded, but the stored definition still holds the seed, so this snapshot **cannot be reverted** (below). |
 | Off | Downgraded to disk-only with a warning (no RAM to capture). | **External disk-only** snapshot, taken with the CD-ROMs ejected. **This is the revertible kind.** |
 
-Snapshot names are sanitised (letters, digits, `_`, `.`, `-`; at most 64 characters). A memory snapshot is larger and slower than a disk-only one.
+The downgrade of `includeMemory` on an off VM is only a provider log line: no condition or event says it happened. A snapshot of a **paused** VM is disk-only without the CD-ROM ejection, so it cannot be reverted. Snapshot names are sanitised (letters, digits, `_`, `.`, `-`; at most 64 characters). A memory snapshot is larger and slower than a disk-only one.
 
 ### Revert
 
@@ -649,7 +650,7 @@ The provider retries transient SSH connection failures with bounded backoff, whi
 1. Open a shell on the libvirt host out of band.
 2. Inspect `sshd` logs (`journalctl -u ssh` or `/var/log/auth.log`).
 3. Check for `MaxStartups` exhaustion, `fail2ban` bans on the provider pod's source IP, or `AllowUsers`/`AllowGroups` restrictions.
-4. Once SSH is healthy the breaker self-recovers (default 30s reset; see [Resilience](../operations/resilience.md#circuitbreaker-on-the-provider-grpc-path-v036)).
+4. Once SSH is healthy the breaker self-recovers (default 60s reset after 10 consecutive failures; see [Resilience](../operations/resilience.md#circuitbreaker-on-the-provider-grpc-path-v036)).
 
 Failures that are the VM's own problem (a refused delete, a disk in use, an unreadable disk image) carry a reason such as `VM_DISK_IN_USE` or `VM_DISK_CHECK_FAILED` and are kept out of the breaker.
 

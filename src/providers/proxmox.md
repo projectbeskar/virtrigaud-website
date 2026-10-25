@@ -11,7 +11,7 @@ This page is aligned to **VirtRigaud v0.4.0**. Capability claims trace back to `
 
 ## Status
 
-The Proxmox provider is listed as **Production-beta** in the [capability matrix](providers-capabilities.md). It implements the full RPC surface, but it has had the least production burn-in of the three providers, and part of its behaviour is limited:
+The Proxmox provider is listed as **Production-beta** in the [capability matrix](providers-capabilities.md). It implements the VM lifecycle, snapshot, clone, image and disk-migration RPCs (not `HardwareUpgrade`, `ListHosts` or `GetHostInfo`), but it has had the least production burn-in of the three providers, and part of its behaviour is limited:
 
 - Most of the Proxmox logic (owner stamps, re-bind, in-flight guards, clone and create error classes) is covered by tests against an in-repo PVE fake. The v0.4.0 release candidates were also run in the project's lab on a **single** Proxmox VE 9.2 node (cloud-init drive storage, power-task phase, network settings, snapshot revert, migration); behaviour that needs a multi-node cluster has not been exercised.
 - It applies only part of `spec.userData` (see [Cloud-init](#cloud-init-what-the-provider-applies)).
@@ -67,7 +67,7 @@ For the full cross-provider matrix and resilience / observability story:
 - **Clone**: `POST .../clone`.
 - **TaskStatus**: polls the PVE task UPID. In-flight tasks count toward `virtrigaud_provider_tasks_inflight`.
 - **ExportDisk / ImportDisk / GetDiskInfo**: migration data plane, see [Cross-hypervisor migration](#cross-hypervisor-migration).
-- **ConsoleUrl**: web-UI deep link.
+- **Console URL**: `Describe` returns a web-UI deep link.
 
 A VM is identified by its VMID. On the provider's default node the id is the bare VMID; on any other node it is `<node>:<vmid>`.
 
@@ -207,14 +207,14 @@ A token with the `Administrator` role, or `root@pam`, needs none of this. A toke
 
 | Endpoint | Notes |
 |----------|-------|
-| `https://pve.example.com:8006` | Cluster-wide endpoint (recommended): the API auto-routes to the correct node. |
+| `https://pve.example.com:8006` | Cluster-wide endpoint (recommended): any node answers the API for the whole cluster. The provider still places VMs on one default node (see below). |
 | `https://pve-node-1.example.com:8006` | Single-node endpoint; loses HA if that node goes down. |
 
 The CRD validates the endpoint pattern. For migration the endpoint host is also the SSH host (see below).
 
 ## Node selection
 
-By default the provider selects a node automatically. To pin to specific nodes (for HA constraints or licensing), set `PROVIDER_NODE_SELECTOR`:
+The provider uses **one default node** for `Create`, `Clone`, snapshot create/revert and for VM ids that are a bare VMID. It is the **first entry** of `PROVIDER_NODE_SELECTOR`, or, when unset, the alphabetically first node of the cluster (`GET /nodes`). The template must be on that node, or `Create` fails with "template N not found on node". Further selector entries only widen the scope of `ListVMs`; `source.proxmox.node` is read but not used for placement. To choose the node, put it first:
 
 ```yaml
 spec:
@@ -638,7 +638,7 @@ spec:
 
 - **Token auth over password auth**: avoids the session-ticket renewal cycle.
 - **Pin the provider pod to a host with fast connectivity to the PVE cluster**: the API is chatty (one call per VM operation, one extra config read per owner-checked call, plus task polling). Size PVE's API rate limits for it.
-- **`PROVIDER_NODE_SELECTOR` for HA pinning**: keeps related VMs on the same node where shared storage is local.
+- **`PROVIDER_NODE_SELECTOR`**: its first entry is where new VMs land, so keep the templates on that node (or on shared storage it can reach).
 
 ## API reference
 

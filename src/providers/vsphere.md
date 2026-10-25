@@ -21,7 +21,7 @@ The vSphere provider advertises the following via `GetCapabilities` (`internal/p
 | `SupportsSnapshots` | true | Standard vSphere snapshots. |
 | `SupportsMemorySnapshots` | **true** | `CreateSnapshot(memory=true)`; requires the VM to be powered on. Quiesce is not requested. |
 | `SupportsLinkedClones` | true | Delta-disk clones on top of a snapshot of the source. |
-| `SupportsImageImport` | true | `ImagePrepare` imports an `ovaURL` as a template. `templateName` and `contentLibrary` are used by reference. |
+| `SupportsImageImport` | true | `ImagePrepare` imports an `ovaURL` as a template. `templateName` is used by reference. A `contentLibrary` item is only checked for existence: it is not deployed to a template, and the manager sends only `templateName` and `ovaURL` to `Create`, so use a template or an OVA. |
 | `SupportsImageArtifactIdentity` | true | Prepared templates are named, stamped and looked up by `VMImage` identity (ADR-0009 Slice 3). |
 | `SupportsOwnerTransfer`, `SupportsOwnerRebind` | true | Adoption stamps the adopted VM; `Create` and `Clone` stamp the VM and re-bind a VM an earlier attempt made. |
 | `SupportsDiskExport` / `SupportsDiskImport` | true | `ExportDisk` / `ImportDisk` / `GetDiskInfo` for migration; formats `vmdk`, `qcow2`, `raw`; export compression. |
@@ -52,7 +52,7 @@ For the full cross-provider matrix and resilience / observability story, see:
 
 ## RPC support
 
-The provider implements the full gRPC contract (`proto/provider/v1/provider.proto`):
+The provider implements the VM lifecycle, snapshot, clone, image and disk-migration RPCs of the gRPC contract (`proto/provider/v1/provider.proto`). `ListHosts` and `GetHostInfo` (clustered-provider inventory) are `Unimplemented`:
 
 - **Validate**: connectivity + credential check against vCenter, with a live probe + session reconnect (see [Session resilience](#session-resilience-v038)).
 - **Create**: clone from a vSphere **template**, or create from a migration's imported disk. Stamps the VM with its owner. The new VM is left **powered off**; the `VirtualMachine` controller powers it on when `spec.powerState` is `On`.
@@ -64,7 +64,7 @@ The provider implements the full gRPC contract (`proto/provider/v1/provider.prot
 - **Clone**: full or linked.
 - **HardwareUpgrade**: see [Virtual hardware version](#virtual-hardware-version).
 - **TaskStatus**: polls a vCenter task. Most operations wait for their task inside the call, so few RPCs return a `TaskRef`.
-- **ConsoleUrl**: vSphere web client URL with the VM's instance UUID.
+- **Console URL**: `Describe` returns a vSphere web client URL with the VM's instance UUID.
 - **ImagePrepare**: OVA import ([identity-safe prepared templates](#images)).
 - **ExportDisk / ImportDisk / GetDiskInfo**: disk export and import for the cross-provider migration pipeline.
 
@@ -337,7 +337,7 @@ spec:
 
 ## Images
 
-A vSphere `VMImage` references a **real vSphere template**, a content library item, or an OVA to import:
+A vSphere `VMImage` references a **real vSphere template** or an OVA to import:
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -455,7 +455,7 @@ Full details: [VM ownership](https://github.com/projectbeskar/virtrigaud/blob/ma
 
 ## Reconfigure
 
-`Reconfigure` applies the desired CPU, memory and additional-disk sizes as **one** `ReconfigVM_Task`, or refuses before changing anything. It never reports success for a change it did not make, and it has three kinds of outcome:
+`Reconfigure` applies the desired CPU, memory and additional-disk sizes as **one** `ReconfigVM_Task`, or refuses before changing anything. It refuses what a running VM cannot take, but it does not report the honest-result marker: a `spec.disks` entry with no recorded disk is logged and skipped while the call succeeds. Outcomes:
 
 | Outcome | When | What the VM shows |
 |---------|------|-------------------|
@@ -501,7 +501,7 @@ Name the `VMSnapshot` in `spec.snapshot.revertToRef` of the `VirtualMachine`, wi
 
 `VMClone` clones a vSphere VM with `CloneVM_Task` on the Provider's default cluster, datastore and folder; the source may be running. `type: LinkedClone` creates a delta disk on the source's most recent root snapshot, creating a `clone-base-<timestamp>` snapshot on the source if it has none. The clone is left powered off (unless `spec.options.powerOn: true`) and is stamped with its target `VirtualMachine`; a clone request sent again finds the stamped clone instead of cloning twice.
 
-**Clone identity.** A clone copies its source's ExtraConfig, including `guestinfo.metadata` whose `instance-id` is the source's VM name, so cloud-init would treat the clone's first boot as the same instance and keep the source's SSH host keys and hostname. The clone's `CloneVM_Task` therefore rewrites `guestinfo.metadata` with `instance-id: virtrigaud-<target VirtualMachine uid>` and the target's hostname (and a `#cloud-config` `guestinfo.userdata`'s top-level `hostname:`/`fqdn:`). cloud-init sees a new instance on first boot, regenerates the SSH host keys and re-runs every per-instance module (`runcmd`, `packages`, `users`). It does **not** regenerate `/etc/machine-id`; seal the source (`cloud-init clean --machine-id`) if clones need their own. A clone boots with the **source's user-data** unless the `VMClone` customization gives its own, secrets included: treat `create` on `vmclones` as read access to the source VM's data. Details: [A clone's host identity](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-ownership.md#a-clones-host-identity).
+**Clone identity.** A clone copies its source's ExtraConfig, including `guestinfo.metadata` whose `instance-id` is the source's VM name, so cloud-init would treat the clone's first boot as the same instance and keep the source's SSH host keys and hostname. The clone's `CloneVM_Task` therefore rewrites `guestinfo.metadata` with `instance-id: virtrigaud-<target VirtualMachine uid>` and the target's hostname (and a `#cloud-config` `guestinfo.userdata`'s top-level `hostname:`/`fqdn:`). cloud-init sees a new instance on first boot, regenerates the SSH host keys and re-runs every per-instance module (`runcmd`, `packages`, `users`). It does **not** regenerate `/etc/machine-id`; seal the source (`cloud-init clean --machine-id`) if clones need their own. A source with no `guestinfo.metadata` is left untouched (the VMware datasource then takes the instance-id from the BIOS UUID, which vCenter regenerates for a clone). The vSphere provider applies **only the hostname and domain** of a clone's customization: inline or Secret user-data in the `VMClone` is logged and not applied, so a clone boots with the **source's user-data**, secrets included. Treat `create` on `vmclones` as read access to the source VM's data. Details: [A clone's host identity](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-ownership.md#a-clones-host-identity).
 
 ## Virtual hardware version
 
@@ -620,7 +620,7 @@ spec:
 | `dns`                   | `guestinfo.network.dns`      | Comma-separated; only written when non-empty. |
 
 !!! note "Only the first network entry is used"
-    The provider consumes **only `spec.networks[0]`**: its `networkRef` selects the portgroup (a single network adapter) and its `ipAddress`/`prefix`/`gateway`/`dns` become the single-NIC static configuration. Further entries are ignored by the vSphere provider, including their `networkRef`. For more than one NIC, put the NICs on the template. The attachment's `vlan` block and `adapterType` are not sent to the provider either: only the `portgroup` name is.
+    The provider consumes **only `spec.networks[0]`**: its `networkRef` selects the portgroup (a single network adapter) and its `ipAddress`/`prefix`/`gateway`/`dns` become the single-NIC static configuration. Further entries are ignored by the vSphere provider, including their `networkRef`. For more than one NIC, put the NICs on the template. The attachment's `vlan` block and `adapterType` have no effect either: the provider reads only the portgroup name.
 
 !!! warning "The guest must consume the keys"
     VirtRigaud only *publishes* `guestinfo.network.*`. The values are inert unless the **template** contains a boot-time agent that reads them and configures the interface. Cloud images do not do this by default: bake the helper below (or an equivalent netplan/NetworkManager generator) into the template. If the IP never applies, this missing guest-side step is almost always the cause.
@@ -712,7 +712,7 @@ Check `/metrics`:
 virtrigaud_circuit_breaker_state{provider_type="vsphere", provider="vsphere-prod"} == 2
 ```
 
-When this fires, the manager has fast-failed enough RPCs to vCenter that it has opened the breaker (default 5 consecutive failures with 30s reset; see [Resilience](../operations/resilience.md#circuitbreaker-on-the-provider-grpc-path-v036)). Investigate the underlying vCenter (credentials, certificate, network) rather than restarting the manager. Refusals scoped to one VM or image (`VM_IS_IMAGE_ARTIFACT`, `RECONFIGURE_NEEDS_POWER_OFF`, `IMAGE_SOURCE_UNAVAILABLE`, a `Conflict`) are kept out of the breaker.
+When this fires, the manager has fast-failed enough RPCs to vCenter that it has opened the breaker (defaults: 10 consecutive failures to open, 60s reset; see [Resilience](../operations/resilience.md#circuitbreaker-on-the-provider-grpc-path-v036)). Investigate the underlying vCenter (credentials, certificate, network) rather than restarting the manager. Refusals scoped to one VM or image (`VM_IS_IMAGE_ARTIFACT`, `RECONFIGURE_NEEDS_POWER_OFF`, `IMAGE_SOURCE_UNAVAILABLE`, a `Conflict`) are kept out of the breaker.
 
 ### `ProviderConflict` on create
 
