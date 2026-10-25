@@ -129,7 +129,7 @@ The set grows with the reconcilers; treat it as open-ended and alert on rates ra
 | Labels | `provider_type`, `method`, `code` |
 | Stable since | v0.3.5 (G4 / PR #107) |
 
-`provider_type`: the value of `Provider.spec.type` (e.g. `vsphere`, `libvirt`, `proxmox`, `mock`).
+`provider_type`: the value of `Provider.spec.type` (`vsphere`, `libvirt`, `proxmox`, `firecracker` or `qemu`; `mock` is not a `Provider.spec.type` value).
 
 `method`: short RPC name extracted from the gRPC full method path. Any RPC of the `Provider` service can appear, for example `Validate`, `Create`, `Delete`, `Power`, `Reconfigure`, `HardwareUpgrade`, `Describe`, `TaskStatus`, `SnapshotCreate`, `SnapshotDelete`, `SnapshotRevert`, `Clone`, `ImagePrepare`, `GetCapabilities`, `ExportDisk`, `ImportDisk`, `GetDiskInfo`, `DeleteStagedDisk`, `DeleteLandedDisk`, `ListVMs`, `TransferOwner`, `ListHosts`, `GetHostInfo`.
 

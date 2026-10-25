@@ -152,13 +152,9 @@ spec:
     - name: data
       sizeGiB: 100
       type: thin
-  lifecycle:
-    gracefulShutdownTimeout: "120s"
-    preStop:
-      snapshot:
-        name: "pre-shutdown"
-        includeMemory: false
 ```
+
+`spec.lifecycle` (`preStop`, `postStart`, `gracefulShutdownTimeout`) is accepted by the API but no controller executes it; see [VirtualMachineLifecycle](#virtualmachinelifecycle). The example above leaves it out.
 
 ### Snapshot revert
 
@@ -295,7 +291,7 @@ Full schema: [generated-crd-docs.md#vmnetworkattachment](generated-crd-docs.md#v
 | Provider | Fields |
 |----------|--------|
 | `vsphere` | `portgroup`, `distributedSwitch`, `vlan` (type, vlanID, trunkVlanIDs), security, trafficShaping |
-| `libvirt` | `networkName`, `bridge`, `model` (virtio/e1000/e1000e/rtl8139), `driver`, `filterRef` |
+| `libvirt` | `networkName`, `bridge`, `model` (virtio/e1000/e1000e/rtl8139/pcnet/ne2k_pci), `driver`, `filterRef` |
 | `proxmox` | `bridge` (vmbr0–N), `model` (virtio/e1000/rtl8139/vmxnet3), `vlanTag`, `firewall`, `rateLimit`, `mtu` |
 
 ### Example
@@ -377,7 +373,7 @@ Full schema: [generated-crd-docs.md#provider](generated-crd-docs.md#provider)
 
 #### ReportedCapabilities
 
-The manager calls the provider's `GetCapabilities` RPC after each successful connect and writes the result into `status.reportedCapabilities`. A `CapabilitiesReported` condition is also set (`True` on success, `False` with reason `Unavailable` if the RPC fails or the provider is unreachable).
+The manager calls the provider's `GetCapabilities` RPC after each successful connect and writes the result into `status.reportedCapabilities`. A `CapabilitiesReported` condition is also set (`True` on success, `False` with reason `CapabilitiesUnavailable` if the RPC fails or the provider is unreachable).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -499,11 +495,14 @@ References a VMNetworkAttachment from a VirtualMachine.
 
 ### VirtualMachineLifecycle
 
+!!! warning "Accepted, not executed"
+    The API accepts `spec.lifecycle`, but no controller reads it: the `preStop` and `postStart` hooks never run, and `gracefulShutdownTimeout` has no effect (the shutdown timeout is not taken from it and stays at 60 s). Do not rely on these fields.
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `preStop` | `LifecycleHandler` | — | Actions to run before the VM is powered off |
 | `postStart` | `LifecycleHandler` | — | Actions to run after the VM is powered on |
-| `gracefulShutdownTimeout` | `Duration` | `60s` | Time to wait for graceful shutdown |
+| `gracefulShutdownTimeout` | `Duration` | `60s` | Intended wait for graceful shutdown; not read by any controller |
 
 ### LifecycleHandler (action types — pick one)
 
@@ -707,9 +706,9 @@ Full schema: [generated-crd-docs.md#vmsnapshot](generated-crd-docs.md#vmsnapshot
 | `snapshotConfig.name` | `string` | No | Name hint (the provider may modify it) |
 | `snapshotConfig.description` | `string` | No | Human-readable description (max 1024) |
 | `snapshotConfig.includeMemory` | `bool` | No | Capture memory state (default `false`) |
-| `snapshotConfig.quiesce` | `bool` | No | Quiesce the file system (default `true`) |
-| `retentionPolicy` | `SnapshotRetentionPolicy` | No | `maxAge`, `maxCount`, `deleteOnVMDelete` (default `true`), `preservePinned`, `gracePeriod` |
-| `schedule` | `SnapshotSchedule` | No | Cron schedule fields (`enabled`, `cronSpec`, ...) |
+| `snapshotConfig.quiesce` | `bool` | No | Accepted but not sent to providers; no provider quiesces the guest file system (default `true`) |
+| `retentionPolicy` | `SnapshotRetentionPolicy` | No | The controller acts on `maxAge` and `deleteOnVMDelete` (default `true`) only. `maxCount`, `preservePinned` and `gracePeriod` are accepted but not acted on |
+| `schedule` | `SnapshotSchedule` | No | Cron schedule fields (`enabled`, `cronSpec`, ...). Accepted but not acted on: no controller creates scheduled snapshots |
 | `metadata` | `SnapshotMetadata` | No | Labels such as `purpose`, `environment`, `pinned` |
 
 ### Status
@@ -838,7 +837,7 @@ Full schema: [generated-crd-docs.md#vmclone](generated-crd-docs.md#vmclone)
 |-------|------|----------|-------------|
 | `source` | `CloneSource` | Yes | `vmRef` only (see limitations above) |
 | `target` | `VMCloneTarget` | Yes | Destination `name` (required), `namespace`, `classRef`, `networks`, `disks`, `placementRef`, labels and annotations |
-| `options` | `CloneOptions` | No | `type`: `FullClone` (default) or `LinkedClone`; `powerOn` (default `false`); `timeout` (default `30m`) |
+| `options` | `CloneOptions` | No | `type`: `FullClone` (default), `LinkedClone` or `InstantClone`; `powerOn` (default `false`); `timeout` (default `30m`) |
 | `customization` | `VMCustomization` | No | Cloud-init or Ignition customization for the target VM |
 | `metadata` | `CloneMetadata` | No | Labels/annotations for clone audit |
 

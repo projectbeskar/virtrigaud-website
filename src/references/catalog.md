@@ -11,13 +11,15 @@ The VirtRigaud Provider Catalog lists all verified providers available for the V
 
 ## Provider Overview
 
-| Provider | Description | Capabilities | Conformance | Maintainer | License |
-|----------|-------------|--------------|-------------|------------|----------|
-| **Mock Provider** | A mock provider for testing and demonstrations (built from source, no release image) | core, snapshot, clone, image-prepare, advanced | ![Conformance](https://img.shields.io/badge/conformance-pass-green) | virtrigaud@projectbeskar.com | Apache-2.0 |
-| **vSphere Provider** | VMware vSphere provider for VirtRigaud | core, snapshot (including memory), clone (full and linked), image-prepare, advanced | ![Conformance](https://img.shields.io/badge/conformance-pass-green) | virtrigaud@projectbeskar.com | Apache-2.0 |
-| **Libvirt Provider** | Libvirt/KVM provider for VirtRigaud (single host, over SSH) | core, snapshot (including memory), clone (full clones only; linked clones are disabled since v0.4.0), image-prepare | ![Conformance](https://img.shields.io/badge/conformance-partial-yellow) | virtrigaud@projectbeskar.com | Apache-2.0 |
-| **Libvirt Provider (clustered, experimental)** | The same provider with `spec.topology: cluster`: one Provider fronts a `Host`/`HostPool` inventory of libvirt hosts (new in v0.4.0, opt-in) | core, snapshot (including memory), clone (full clones, on the source VM's host), disk export and import for migration | ![Conformance](https://img.shields.io/badge/conformance-partial-yellow) | virtrigaud@projectbeskar.com | Apache-2.0 |
-| **Proxmox Provider** | Proxmox VE provider for VirtRigaud | core, snapshot, clone (full and linked), advanced; image-prepare refuses URL sources (templates only) | ![Conformance](https://img.shields.io/badge/conformance-partial-yellow) | virtrigaud@projectbeskar.com | Apache-2.0 |
+| Provider | Description | Capabilities | Maintainer | License |
+|----------|-------------|--------------|------------|----------|
+| **Mock Provider** | A mock provider for testing and demonstrations (built from source, no release image) | core, snapshot, clone, image-prepare, advanced | virtrigaud@projectbeskar.com | Apache-2.0 |
+| **vSphere Provider** | VMware vSphere provider for VirtRigaud | core, snapshot (including memory), clone (full and linked), image-prepare, advanced | virtrigaud@projectbeskar.com | Apache-2.0 |
+| **Libvirt Provider** | Libvirt/KVM provider for VirtRigaud (single host, over SSH) | core, snapshot (including memory), clone (full clones only; linked clones are disabled since v0.4.0), image-prepare | virtrigaud@projectbeskar.com | Apache-2.0 |
+| **Libvirt Provider (clustered, experimental)** | The same provider with `spec.topology: cluster`: one Provider fronts a `Host`/`HostPool` inventory of libvirt hosts (new in v0.4.0, opt-in) | core, snapshot (including memory), clone (full clones, on the source VM's host), disk export and import for migration | virtrigaud@projectbeskar.com | Apache-2.0 |
+| **Proxmox Provider** | Proxmox VE provider for VirtRigaud | core, snapshot, clone (full and linked), advanced; image-prepare refuses URL sources (templates only) | virtrigaud@projectbeskar.com | Apache-2.0 |
+
+The catalog publishes no conformance results. The test suite in the repository (`vcts`, see [Contributing a Provider](#contributing-a-provider)) is run by whoever deploys a provider; the capabilities listed are what each provider reports through `GetCapabilities`.
 
 ## Quick Start
 
@@ -74,7 +76,7 @@ kubectl get providers -A
 - **Repository:** [https://github.com/projectbeskar/virtrigaud](https://github.com/projectbeskar/virtrigaud)
 - **Maturity:** stable
 - **Tags:** testing, development, demo
-- **Documentation:** [https://projectbeskar.github.io/virtrigaud/providers/mock/](https://projectbeskar.github.io/virtrigaud/providers/mock/)
+- **Source:** [`internal/providers/mock`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/internal/providers/mock) and [`cmd/provider-mock`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/cmd/provider-mock) (no separate documentation page)
 
 The mock provider is perfect for:
 - Testing VirtRigaud functionality
@@ -207,41 +209,17 @@ kubectl get provider vsphere-prod -o jsonpath='{.status.reportedCapabilities}' |
 
 ## Capability Profiles
 
-VirtRigaud defines several capability profiles that providers can implement:
+The provider SDK ([`sdk/provider/capabilities`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/sdk/provider/capabilities/capabilities.go)) groups its capability flags into five profiles. A profile is satisfied when the provider has **all** of its flags. The profiles are a convenience of the SDK (`Manager.SupportsProfile`); the manager reads the individual flags from `status.reportedCapabilities`, not a profile name.
 
-### Core Profile
-**Required for all providers**
-- `vm.create` - Create virtual machines
-- `vm.read` - Get virtual machine information
-- `vm.update` - Update virtual machine configuration
-- `vm.delete` - Delete virtual machines
-- `vm.power` - Control power state (on/off/restart)
-- `vm.list` - List virtual machines
+| Profile | Capability flags |
+|---------|------------------|
+| `core` | `validate`, `create`, `delete`, `power`, `describe`, `get_capabilities` |
+| `snapshot` | `snapshots` |
+| `clone` | `linked_clones` |
+| `image_prepare` | `image_import` |
+| `advanced` | `reconfigure`, `reconfigure_online`, `disk_expansion_online` |
 
-### Snapshot Profile
-**Optional - for providers supporting VM snapshots**
-- `vm.snapshot.create` - Create VM snapshots
-- `vm.snapshot.list` - List VM snapshots
-- `vm.snapshot.delete` - Delete VM snapshots
-- `vm.snapshot.restore` - Restore VM from snapshot
-
-### Clone Profile
-**Optional - for providers supporting VM cloning**
-- `vm.clone` - Clone virtual machines
-- `vm.template` - Create and manage VM templates
-
-### Image Prepare Profile
-**Optional - for providers with image management**
-- `image.prepare` - Prepare VM images
-- `image.list` - List available images
-- `image.upload` - Upload custom images
-
-### Advanced Profile
-**Optional - for advanced provider features**
-- `vm.migrate` - Live migrate VMs between hosts
-- `vm.resize` - Dynamic resource allocation
-- `vm.backup` - Backup and restore operations
-- `vm.monitoring` - Advanced monitoring and metrics
+Flags outside any profile (for example `memory_snapshots`, `disk_export`, `disk_import`, `clustering`, `image_artifact_identity`, `honest_reconfigure`, `routed_adoption`, `owner_rebind`) are reported individually. The `clone` profile contains only `linked_clones`; full clones do not need a capability flag.
 
 ## Contributing a Provider
 

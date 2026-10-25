@@ -11,11 +11,11 @@ This page is the hand-written companion to the generated [Provider gRPC API refe
 
 VirtRigaud providers expose a single gRPC service (`provider.v1.Provider`) over mTLS. The manager connects via the Resolver and client created per-provider. Every outbound RPC call passes through these client interceptors before reaching the provider process (`internal/transport/grpc/client.go`):
 
-- **`requestSentInterceptor`** — marks an RPC that failed before its request was sent (no connection, or a circuit-breaker fast-fail), so the caller can tell it from one whose outcome is unknown. Since v0.4.0-rc2 this drives the "outcome unknown" handling of `SnapshotCreate`, `ExportDisk` and `ImportDisk` (see [Provider calls whose outcome was lost](#provider-call-outcomes)).
+- **`requestSentInterceptor`** — marks an RPC that failed before its request was sent (no connection, or a circuit-breaker fast-fail), so the caller can tell it from one whose outcome is unknown. In v0.4.0 this drives the "outcome unknown" handling of `SnapshotCreate`, `ExportDisk` and `ImportDisk` (see [Provider calls whose outcome was lost](#provider-call-outcomes)).
 - **`providerRPCMetricsInterceptor`** — records `virtrigaud_provider_rpc_*` Prometheus metrics (call count, latency, error rate) for every RPC. See the [Metrics Catalog](../api-reference/metrics.md).
 - **`providerCircuitBreakerInterceptor`** — wraps the call with a half-open circuit breaker. In the production path the circuit breaker is always active; unit tests may pass a `nil` breaker which the interceptor handles transparently. Infrastructure errors count toward the threshold; business answers (`NotFound`, `InvalidArgument`, `FailedPrecondition`, and the host- or VM-scoped reasons listed [below](#error-reasons)) do not.
 
-Task-creating RPCs (`Create`, `Delete`, `Power`, `Reconfigure`, `HardwareUpgrade`, `SnapshotCreate`, `SnapshotDelete`, `SnapshotRevert`, `Clone`, `ImagePrepare`, `ExportDisk`, `ImportDisk`) additionally register the returned `TaskRef` with the **inflight-task tracker**. The controller polls `TaskStatus` until `done=true` or the context is cancelled.
+Task-creating RPCs (`Create`, `Delete`, `Power`, `Reconfigure`, `SnapshotCreate`, `SnapshotDelete`, `SnapshotRevert`, `Clone`, `ImagePrepare`, `ExportDisk`, `ImportDisk`) additionally register the returned `TaskRef` with the **inflight-task tracker**. The controller polls `TaskStatus` until `done=true` or the context is cancelled.
 
 ---
 

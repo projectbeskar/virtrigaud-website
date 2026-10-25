@@ -161,6 +161,9 @@ spec:
       networkRef:
         name: kvm-default-network
       # IP allocation handled by VMNetworkAttachment
+  # NOTE: the libvirt provider does not attach spec.disks. The VM is created
+  # with its root disk only and reports DisksApplied=False /
+  # NotSupportedByProvider. The entry below is kept to show the field.
   disks:
     - name: extra-storage
       sizeGiB: 50

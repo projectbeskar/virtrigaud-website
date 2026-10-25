@@ -6,9 +6,9 @@
 # Proxmox → Libvirt is validated end-to-end over the S3/relay path. The disk is
 # staged through an S3-compatible object store and the provider pod is the S3
 # client, so bytes flow PVE node → pod → S3 → pod → libvirt host and NEVER
-# traverse a CSI PVC. (PVC/NFS/`direct` backends are NOT advertised by the
-# Proxmox provider — it is S3/relay-only; applying a `storage.type: pvc`
-# migration against a Proxmox source fails capability validation.)
+# traverse a CSI PVC. (The Proxmox provider advertises S3 and NFS, not PVC or
+# `direct`; applying a `storage.type: pvc` migration against a Proxmox source
+# fails capability validation.)
 #
 # Data path: the Proxmox SOURCE runs `qemu-img convert -O qcow2` on the PVE node
 # over SSH and streams the result up to S3; the libvirt TARGET streams the object

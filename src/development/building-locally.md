@@ -511,5 +511,5 @@ git clone --branch "$(cat VIRTRIGAUD_VERSION)" https://github.com/projectbeskar/
 
 - [Contributing Guide](contributing.md) - How to contribute
 - [Testing Locally](testing-locally.md) - Run tests
-- [Provider Development](../providers/tutorial.md) - Build a provider
+- [Provider Tutorial](../providers/tutorial.md) - Build a provider
 - [GitHub Repository](https://github.com/projectbeskar/virtrigaud) - Main project

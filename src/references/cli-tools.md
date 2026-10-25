@@ -695,6 +695,6 @@ A one-shot migration helper from the v1alpha1 API era. Defined in [`cmd/alpha-to
 ## See Also
 
 - [Getting Started Guide](../getting-started/index.md)
-- [Provider Development](../providers/tutorial.md)
+- [Provider Tutorial](../providers/tutorial.md)
 - [API Reference](../api-reference/cli.md)
 - [Examples](../examples/index.md)

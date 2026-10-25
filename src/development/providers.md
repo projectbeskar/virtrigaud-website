@@ -402,7 +402,7 @@ Some answers never count whatever their code, because the provider answered
 and is healthy: a clustered provider's host-scoped `Unavailable`
 (`HOST_UNAVAILABLE`), a per-VM operation that failed on its host
 (`VM_OPERATION_FAILED`), a refused disk dependency check
-(`VM_DISK_CHECK_FAILED`), an `OUTCOME_UNKNOWN_RETRY` outcome, and, on
+(`VM_DISK_CHECK_FAILED`), a `VM_OUTCOME_UNKNOWN_RETRY` outcome, and, on
 `ImagePrepare`, `IMAGE_ARTIFACT_IN_PROGRESS` / `IMAGE_SOURCE_UNAVAILABLE` and
 manager-side `DeadlineExceeded` / `Canceled`. Using these reasons is how a
 clustered provider keeps one dead host or one tenant's failing request from
@@ -539,7 +539,7 @@ USER 65532:65532
 Then wire the image into a `Provider` CR. The manager runs it as a Deployment
 (`spec.runtime`), passes the Provider's settings in environment variables
 (`PROVIDER_TYPE`, `PROVIDER_ENDPOINT`, `PROVIDER_NAMESPACE`, `PROVIDER_NAME`,
-`TLS_ENABLED`, `LOG_LEVEL`, `LOG_FORMAT`), mounts the credentials Secret at
+`TLS_ENABLED`, `TLS_INSECURE_SKIP_VERIFY`, `LOG_LEVEL`, `LOG_FORMAT`), mounts the credentials Secret at
 `/etc/virtrigaud/credentials` and the TLS Secret at `/etc/virtrigaud/tls`:
 
 ```yaml
