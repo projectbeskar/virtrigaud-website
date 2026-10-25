@@ -205,8 +205,8 @@ kubectl get pods -n virtrigaud-system -l app.kubernetes.io/name=virtrigaud-provi
 A successful state looks like:
 
 ```
-NAME                                                      READY   STATUS    RESTARTS   AGE
-virtrigaud-provider-virtrigaud-system-vsphere-lab-abc12   1/1     Running   0          30s
+NAME                                                                  READY   STATUS    RESTARTS   AGE
+virtrigaud-provider-virtrigaud-system-vsphere-lab-7d4b8c9d5b-abc12   1/1     Running   0          30s
 ```
 
 Verify the Provider CR status:

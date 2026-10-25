@@ -21,7 +21,7 @@ The service has 23 RPCs in v0.4.0 (18 in v0.3.11). All changes since v0.3.11 are
 
 | RPC | Purpose |
 |---|---|
-| `ListHosts` / `GetHostInfo` | Host inventory of a clustered provider (`HostInfo`: id, address, allocatable CPU, memory and storage, health, labels, CPU model and features, machine types, emulator version). Used by the `Host` and `HostPool` controllers. Advertised by `supports_clustering`. Single-host providers return `Unimplemented`. |
+| `ListHosts` / `GetHostInfo` | Host inventory of a clustered provider (`HostInfo`: id, address, allocatable CPU, memory and storage, health, labels, CPU model and features, machine types, emulator version). The `Host` controller calls `GetHostInfo` to fill `Host.status`. Advertised by `supports_clustering`. Single-host providers return `Unimplemented`. |
 | `TransferOwner` | Compare-and-swap re-stamp of a VM's owner when a `VirtualMachine` adopts it. Advertised by `supports_owner_transfer` (single-host) and `supports_routed_adoption` (clustered). |
 | `DeleteStagedDisk` | Removes a migration's staged object (`nfs` and `s3` backends) after the migration ends. Backends listed in `supported_staged_disk_delete_backends`. |
 | `DeleteLandedDisk` | Removes the disk an `ImportDisk` landed for a migration target VM that does not use it. Advertised by `supports_landed_disk_delete`. |

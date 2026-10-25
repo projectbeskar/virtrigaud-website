@@ -23,7 +23,7 @@ The CRD-upgrade hook applies these changes when you run `helm upgrade ... --vers
 - **`VMImage`:** `status.providerStatus["<namespace>/<name>"]` gains `providerUID`, `sourceDigest` and `taskRef` (prepare state is now per Provider).
 - **`VMMigration`:** `status.targetVMUID`, `status.targetVMClaim`, `status.sourceVMUID`, `status.storagePVCUID`, and `status.storageInfo.importTarget`, `stagingDigest` and `stagingLayout`; `spec.importedDisk` accepts an empty `diskID` while `migrationRef` is set (migration into a clustered Provider).
 - **`VMClone`:** `status.targetUID`. **`VMSnapshot`:** `status.boundProvider` and `status.vmUID`.
-- New RBAC rules for the manager: `get` on the `virtualmachines`, `providers`, `vmclasses` and `vmimages` CRDs, `get;list;watch` on `namespaces`, and `get;patch;update` on `hostpools/status`. The chart applies them with the manager; a Kustomize install must reapply `config/rbac/role.yaml`.
+- New RBAC rules for the manager: `get` on the `virtualmachines`, `providers`, `vmclasses`, `vmimages` and `vmsnapshots` CRDs, `get;list;watch` on `namespaces`, and `get;patch;update` on `hostpools/status`. The chart applies them with the manager; a Kustomize install must reapply `config/rbac/role.yaml`.
 
 No field is removed. The admission rules (`spec.providerRef` and `spec.type` immutability) can reject updates that earlier releases accepted; see the Upgrade Guide. Existing `VirtualMachine`, `Provider`, `VMSnapshot` and `VMMigration` resources are kept.
 

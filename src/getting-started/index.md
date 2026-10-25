@@ -113,8 +113,8 @@ appear for every Provider CR. See the [Metrics Catalog](../api-reference/metrics
 ## Step 3: Configure a Provider
 
 A `Provider` names one hypervisor endpoint, the Secret that holds its credentials,
-and the provider image the manager runs for it. Credentials are read by the provider
-pod from files mounted from that Secret and never pass through the manager.
+and the provider image the manager runs for it. For a single-host Provider, credentials are read by the provider
+pod from files mounted from that Secret and do not pass through the manager. (A clustered libvirt Provider differs: the manager reads each host's SSH credentials and renders them into a Secret owned by the Provider.)
 
 ### Option A: vSphere Provider
 

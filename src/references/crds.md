@@ -22,7 +22,7 @@ VirtRigaud ships **12 CRDs** at v0.4.0. For the full auto-generated field refere
 | `VMNetworkAttachment` | Active |
 | `VMMigration` | Active |
 | `VMSnapshot` | Active |
-| `VMClone` | Active (`source.vmRef` only, same-provider, full clones) |
+| `VMClone` | Active (`source.vmRef` only, same-provider; full clones, linked where the provider supports it) |
 | `VMSet` | Stub — `Ready=False / ControllerNotImplemented`; no replica management |
 | `VMPlacementPolicy` | Reference-only — no standalone controller; consumed via `VirtualMachine.spec.placementRef` (and by the clustered libvirt scheduler) |
 | `Host` | Active — inventory is synced from the clustered Provider (clustered libvirt only) |
@@ -347,7 +347,7 @@ Full schema: [generated-crd-docs.md#provider](generated-crd-docs.md#provider)
 | `runtime` | `ProviderRuntimeSpec` | Yes | How the provider is executed |
 | `healthCheck` | `ProviderHealthCheck` | No | Health check configuration |
 | `connectionPooling` | `ConnectionPooling` | No | Connection pool settings |
-| `topology` | `string` | No | `single` (default): one provider process bound to one host. `cluster`: the provider fronts several hosts registered as `Host` resources in a `HostPool`; accepted only on `type: libvirt`, experimental. **Immutable** |
+| `topology` | `string` | No | `single` (default): one provider process bound to one host. `cluster`: the provider fronts several hosts registered as `Host` resources in a `HostPool`; accepted only on `type: libvirt` (enforced by the Provider validating webhook, so only when `webhooks.enabled=true`), experimental. **Immutable** |
 | `consumerNamespaceSelector` | `LabelSelector` | No | Namespaces, other than this one, whose VMs, `VMClone`s, `VMMigration`s and `VMSnapshot`s may use this Provider. Unset: own namespace only; `{}`: every namespace. Sharing a Provider shares everything its credentials can reach |
 
 ### ProviderDefaults
@@ -526,7 +526,7 @@ Used for adopted or migrated VMs instead of `imageRef`.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `diskID` | `string` | — | Provider-specific disk identifier (required) |
+| `diskID` | `string` | — | Provider-specific disk identifier (required, except that it may be empty while `migrationRef` is set: the target VM of a migration into a clustered Provider is created before its import) |
 | `path` | `string` | — | Optional disk path on provider |
 | `format` | `string` | `qcow2` | `qcow2`, `vmdk`, `raw`, `vdi`, `vhdx` |
 | `source` | `string` | — | Origin: `migration`, `clone`, `import`, `snapshot`, `manual` |
@@ -540,7 +540,7 @@ Used for adopted or migrated VMs instead of `imageRef`.
 !!! note "Clustered libvirt only"
     `Host` and `HostPool` are used only by a libvirt Provider with `spec.topology: cluster` (experimental, opt-in). Single-host Providers do not use them. See [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0007-clustered-orchestrator-provider.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md).
 
-A `Host` registers one hypervisor host behind a clustered Provider. The operator fills `status` from the provider's `ListHosts`/`GetHostInfo` answers. A `Host` and its `HostPool` and Provider must be in the same namespace. A `Host` cannot be deleted while a VirtualMachine is bound to it; fence the host (power it off or revoke its access to shared storage) before you delete one to release held deletes.
+A `Host` registers one hypervisor host behind a clustered Provider. The operator fills `status` from the provider's `GetHostInfo` answer. A `Host` and its `HostPool` and Provider must be in the same namespace. A `Host` cannot be deleted while a VirtualMachine is bound to it; fence the host (power it off or revoke its access to shared storage) before you delete one to release held deletes.
 
 Full schema: [generated-crd-docs.md#host](generated-crd-docs.md#host). Short name: `hvh`.
 

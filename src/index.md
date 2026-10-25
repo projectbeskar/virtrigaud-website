@@ -122,7 +122,7 @@ VirtRigaud v0.4.0 ships **12 Custom Resource Definitions** in the `infra.virtrig
 | Kind | Purpose |
 |---|---|
 | `VirtualMachine` | Desired state of a single VM (image, class, networks, disks, power state). `spec.snapshot.revertToRef` reverts it to a `VMSnapshot`. |
-| `Provider` | Connection details for a hypervisor (vSphere / Libvirt / Proxmox / Mock) and its provider-server Deployment. `spec.topology: cluster` (libvirt only) fronts several hosts; `spec.consumerNamespaceSelector` shares it with other namespaces. |
+| `Provider` | Connection details for a hypervisor (vSphere / Libvirt / Proxmox) and its provider-server Deployment. `spec.topology: cluster` (libvirt only) fronts several hosts; `spec.consumerNamespaceSelector` shares it with other namespaces. |
 | `VMClass` | Reusable sizing template (CPU, memory, firmware). Can be shared with other namespaces through `spec.consumerNamespaceSelector`. |
 | `VMImage` | Reference to a hypervisor template / OVA / cloud image. Can be shared with other namespaces through `spec.consumerNamespaceSelector`. |
 | `VMNetworkAttachment` | Logical network the VM attaches to (resolved per-provider). |
@@ -130,7 +130,7 @@ VirtRigaud v0.4.0 ships **12 Custom Resource Definitions** in the `infra.virtrig
 | `VMMigration` | Inter-provider VM migration (export → import) through S3 or NFS staging. |
 | `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.4.0. |
 | `VMPlacementPolicy` | Placement / anti-affinity rules. Applied via `VirtualMachine.spec.placementRef`; the clustered libvirt scheduler uses it as its constraint language. There is no standalone controller. |
-| `VMClone` | One-shot full clone of an existing VM (vSphere, Proxmox and Libvirt). libvirt linked clones are not supported. |
+| `VMClone` | One-shot clone of an existing VM (vSphere, Proxmox and Libvirt). libvirt supports full clones only; linked clones are not supported there. |
 | `Host` | One hypervisor host behind a clustered libvirt Provider, with its live capacity and health in `status`. |
 | `HostPool` | A group of `Host`s under one clustered Provider, with scheduling strategy and overcommit policy. `status` counts total, ready and schedulable hosts. |
 

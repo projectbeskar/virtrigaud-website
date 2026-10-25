@@ -34,7 +34,7 @@ helm install virtrigaud virtrigaud/virtrigaud \
   --timeout 10m
 ```
 
-`--wait` blocks until all pods are ready. The manager's readiness probe also checks that the installed `VirtualMachine`, `Provider`, `VMClass` and `VMImage` CRDs carry the schema fields the manager depends on (for example `status.boundProvider` and `spec.consumerNamespaceSelector`), so a stale CRD keeps the manager unready instead of letting it run against an old schema.
+`--wait` blocks until all pods are ready. The manager's readiness probe also checks that the installed `VirtualMachine`, `Provider`, `VMClass`, `VMImage` and `VMSnapshot` CRDs carry the schema fields the manager depends on (for example `status.boundProvider` and `spec.consumerNamespaceSelector`), so a stale CRD keeps the manager unready instead of letting it run against an old schema.
 
 The chart installs a pre-install hook Job that applies the CRDs with server-side apply (see [Automatic CRD Upgrades](helm-crd-upgrades.md)), the manager Deployment and its RBAC, and the reserved-keys admission policy. It does **not** deploy any provider pod.
 
@@ -332,7 +332,7 @@ kubectl delete providers -A --all
 helm uninstall virtrigaud -n virtrigaud-system
 
 # WARNING: deletes every VirtRigaud custom resource
-kubectl delete crd -l app.kubernetes.io/name=virtrigaud
+kubectl get crd -o name | grep '\.infra\.virtrigaud\.io$' | xargs kubectl delete
 ```
 
 ## Migration from Kustomize to Helm
