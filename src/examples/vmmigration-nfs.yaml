@@ -1,0 +1,84 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
+# VMMigration over the NFS staging backend (ADR-0006 Slice 4).
+#
+# The NFS backend stages the disk on an NFS export and moves it with qemu-img's
+# native transport — there is NO PVC and NO provider-pod relay. Each provider
+# reaches the export the way that is natural for it:
+#   - libvirt  : the libvirt HOST's qemu-img writes/reads nfs:// over libnfs.
+#   - vSphere  : the provider POD's qemu-img writes/reads nfs:// over libnfs.
+#   - Proxmox  : the PVE NODE kernel-mounts the export (pve-qemu has no libnfs)
+#                and qemu-img works against the mount.
+#
+# REQUIREMENTS (read before using):
+#   1. nfs.uid / nfs.gid are effectively MANDATORY for cross-provider migrations.
+#      AUTH_SYS authorizes by the numeric uid/gid the client presents, and each
+#      provider's qemu-img runs as a different process identity (the libvirt SSH
+#      user, the vSphere pod's uid 65532, the Proxmox node's root). Set uid/gid to
+#      the identity that OWNS the export's files so every provider can read AND
+#      write the same staged object. Omitting them works only when every leg
+#      happens to present a uid the export already trusts.
+#      uid 0 / gid 0 are refused for every provider type at Validating
+#      (NFSRootIdentityNotAllowed): on an export without root_squash they are
+#      root. Use a dedicated non-zero uid/gid that owns the export.
+#      A libvirt export runs its qemu-img as root (needed for a VM with an
+#      external snapshot) only when uid/gid are unset or equal to the provider's
+#      SSH user; any other identity is presented by the SSH user's own qemu-img.
+#   2. The NFS server must be reachable from the data plane of BOTH providers
+#      (the hypervisor host/node for libvirt/Proxmox, the provider pod for
+#      vSphere) and must allow those client IPs in the export ACL.
+#   3. The server host must pass the operator's migration-storage host allowlist
+#      (--migration-storage-allowed-hosts); loopback/link-local/metadata targets
+#      are always rejected (ADR-0006 C3).
+#
+# Harden the export (ADR-0006 C6): one export per tenant, root_squash on, and
+# remember AUTH_SYS + NFSv3 are CLEARTEXT with no Kerberos — run it only on a
+# trusted migration network.
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMMigration
+metadata:
+  name: app-libvirt-to-vsphere-nfs
+  namespace: default
+spec:
+  source:
+    vmRef:
+      name: app-on-libvirt
+    # A powered-off source gives a clean cold copy; a snapshot is optional and
+    # not required for NFS. (Leave createSnapshot unset/false to avoid the
+    # multi-disk/CDROM snapshot pitfall.)
+    createSnapshot: false
+    powerOffBeforeMigration: true
+  target:
+    name: app-on-vsphere
+    providerRef:
+      name: vsphere-prod
+    classRef:
+      name: standard-2cpu-4gb
+    networks:
+      - name: primary
+        networkRef:
+          name: vm-network
+    # false (the default) leaves the migrated VM off; true powers it on.
+    powerOn: false
+  storage:
+    type: nfs
+    nfs:
+      # NFS server exporting the staging share (IP or hostname; a hostname is
+      # resolved and SSRF-checked by the controller).
+      server: nfs.example.com
+      # Absolute exported path on the server. The staged object is a single flat
+      # file in this export root: vmmigrations-<ns>-<name>-<stage>.qcow2 (NFS
+      # cannot auto-create directories the way S3 keys do).
+      export: /export/virtrigaud
+      # AUTH_SYS identity presented to the server — set to the export owner's
+      # uid/gid (see REQUIREMENTS above). Mandatory in practice for cross-provider.
+      uid: 1000
+      gid: 1000
+    # transferMode is informational for nfs: the qemu-img transport is neither
+    # "relay" nor pod-mediated, and the controller exempts nfs from the relay gate.
+    transferMode: auto
+  options:
+    cleanupPolicy: OnSuccess
+    verifyChecksums: true
+    timeout: 1h

@@ -5,81 +5,81 @@ SPDX-License-Identifier: Apache-2.0
 
 # Nested Virtualization Support
 
-!!! note "Not actively tested in v0.3.8"
-    The configuration patterns in this page are based on the provider implementations and hypervisor capabilities, but nested virtualization is **not part of the v0.3.8 test suite**. The VMClass `performanceProfile.nestedVirtualization` field exists in the API, and the provider-level mechanics described here are correct for each hypervisor, but VirtRigaud does not run end-to-end nested-virt scenarios in CI.
-
-    If you need nested virtualization for a production workload, validate the configuration in your environment before relying on it.
+!!! note "Provider support differs, and none of it is covered by end-to-end tests"
+    The VMClass field `spec.performanceProfile.nestedVirtualization` exists in the API. In v0.4.0 it is **applied by the vSphere and libvirt providers and ignored by the Proxmox provider** (see [the support table](#what-each-provider-does)). VirtRigaud does not run end-to-end nested-virtualization scenarios in CI or in its lab validation of v0.4.0. If you need it for a production workload, validate the configuration on your own hosts first.
 
 ## Overview
 
-Nested virtualization allows virtual machines to run hypervisors and create their own virtual machines. This is useful for:
+Nested virtualization lets a virtual machine run a hypervisor and its own virtual machines. It is useful for developing virtualization software, running Kubernetes or lab environments inside VMs, and training.
 
-- Development and testing of virtualization software
-- Running container orchestration platforms like Kubernetes
-- Creating nested lab environments
-- Educational purposes for learning virtualization concepts
-
-VirtRigaud supports nested virtualization through the `PerformanceProfile` configuration in VMClass resources.
+VirtRigaud exposes it through the `performanceProfile` of a `VMClass`. Every VM created from the class gets the setting; there is no per-VM switch.
 
 ## Prerequisites
 
-### vSphere Provider
-- ESXi 6.0 or later
-- VM hardware version 9 or later (recommended: version 14+)
-- ESXi host must have VT-x/AMD-V enabled in BIOS
-- Sufficient CPU and memory resources on the ESXi host
+These are requirements of the hypervisors, not checks VirtRigaud performs.
 
-### LibVirt Provider
-- QEMU/KVM hypervisor
-- Host CPU with VT-x (Intel) or AMD-V (AMD) support
-- Nested virtualization enabled in host kernel modules
-- libvirt 1.2.13 or later
+### vSphere
 
-### Proxmox Provider
-- Proxmox VE 6.0 or later
-- Host CPU with nested virtualization support
-- Nested virtualization enabled in Proxmox configuration
+- An ESXi host with VT-x or AMD-V enabled in the BIOS.
+- VM hardware version 9 or later (14 or later recommended). Set it with the `vsphere.hardwareVersion` key in the VMClass `extraConfig` (see [vSphere hardware version](../../operations/vsphere-hardware-version.md)).
 
-## Enabling Nested Virtualization
+### libvirt
 
-Nested virtualization is configured at the VMClass level using the `PerformanceProfile` section:
+- A KVM host whose CPU has VT-x or AMD-V, with nested virtualization enabled in the host kernel module (`kvm_intel nested=1` or `kvm_amd nested=1`).
+
+### Proxmox VE
+
+- A host CPU with nested virtualization support, enabled on the host.
+- The VM's CPU type set to `host` (or a model that exposes `vmx`/`svm`). **VirtRigaud does not set the CPU type**: configure it on the template or the VM in Proxmox.
+
+## Enabling nested virtualization
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMClass
 metadata:
   name: nested-vm-class
-  namespace: virtrigaud-system
+  namespace: default
 spec:
   cpu: 4
   memory: 8Gi
-  firmware: UEFI  # Recommended for modern features
-  
-  # Enable nested virtualization
+  firmware: UEFI
+
   performanceProfile:
     nestedVirtualization: true
-    # Optional: Enable additional features
-    virtualizationBasedSecurity: true
-    cpuHotAddEnabled: true
+    virtualizationBasedSecurity: false   # may conflict with a nested hypervisor
     memoryHotAddEnabled: true
-  
-  # Optional: Security features that work well with nested virtualization
+
   securityProfile:
-    secureBoot: false  # May interfere with some nested hypervisors
-    tpmEnabled: false  # Optional, depending on nested OS requirements
-    vtdEnabled: true   # Enable VT-d/AMD-Vi for better performance
-  
+    secureBoot: false                    # may interfere with some nested hypervisors
+    tpmEnabled: false
+    vtdEnabled: true                     # expose an IOMMU to the guest
+
   diskDefaults:
     type: thin
-    size: 100Gi  # Larger disk for nested VMs
+    size: 100Gi                          # room for the nested VMs
 ```
 
-## Complete Example
+!!! warning "Leave CPU hot-add off on vSphere"
+    The vSphere provider skips `cpuHotAddEnabled` for a class that enables nested virtualization (CPU hot-add and nested virtualization are incompatible on vSphere) and logs a warning. Memory hot-add is applied. The complete example in the repository, [`nested-virtualization.yaml`](../../examples/nested-virtualization.yaml), sets `cpuHotAddEnabled: true` in one class; on vSphere that flag is ignored, on libvirt it provisions vCPU headroom.
 
-Here's a complete example showing how to create a VM with nested virtualization support:
+## What each provider does
+
+| `VMClass` field | vSphere | libvirt | Proxmox |
+|-----------------|---------|---------|---------|
+| `performanceProfile.nestedVirtualization` | Sets the `vhv.enable` and `vhv.allowNestedPageTables` ExtraConfig keys to `TRUE` at create | Adds `vmx` and `svm` CPU features (`policy='require'`) to a `host-model` CPU in the domain XML | **Ignored** |
+| `performanceProfile.virtualizationBasedSecurity` | Sets `vbs.enable` | Not applied | Ignored |
+| `performanceProfile.cpuHotAddEnabled`, `memoryHotAddEnabled` | Applied (CPU hot-add skipped when nested virtualization is on) | Provision hot-plug headroom at create (see [Advanced VM lifecycle](advanced-lifecycle.md#per-provider)) | Ignored |
+| `securityProfile.vtdEnabled` | Sets `vvtd.enable` | Adds an `<iommu model='intel'/>` device | Ignored |
+| `securityProfile.secureBoot`, `tpmEnabled` | Applied; forces UEFI firmware | Applied (secure boot uses the `q35` machine and OVMF, TPM adds a TPM device) | Ignored |
+| `performanceProfile.latencySensitivity`, `hyperThreadingPolicy`, `resourceLimits` | Not applied | Not applied | Not applied |
+
+!!! warning "libvirt requires both `vmx` and `svm`"
+    The libvirt provider adds **both** features as required, whatever the host CPU is. A host CPU exposes only one of them (Intel `vmx`, AMD `svm`), and libvirt may refuse to start a domain that requires a CPU feature the host does not offer. This has not been validated on Intel and AMD hosts for v0.4.0; if a VM from a nested class does not start on libvirt, check the domain's start error for the missing feature.
+
+## Complete example
 
 ```yaml
----
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMClass
 metadata:
@@ -89,29 +89,15 @@ spec:
   cpu: 8
   memory: 16Gi
   firmware: UEFI
-  
   performanceProfile:
     nestedVirtualization: true
-    virtualizationBasedSecurity: false  # May conflict with nested hypervisors
-    cpuHotAddEnabled: true
     memoryHotAddEnabled: true
-    latencySensitivity: low  # Better performance for nested VMs
-    hyperThreadingPolicy: prefer
-  
   securityProfile:
-    secureBoot: false  # Disable for compatibility
-    tpmEnabled: false
-    vtdEnabled: true   # Enable for better I/O performance
-  
-  resourceLimits:
-    cpuReservation: 4000  # Reserve 4GHz for nested VMs
-    memoryReservation: 8Gi
-  
+    secureBoot: false
+    vtdEnabled: true
   diskDefaults:
     type: thin
     size: 200Gi
-    storageClass: fast-ssd
-
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMImage
@@ -122,8 +108,9 @@ spec:
   source:
     libvirt:
       url: "https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64.img"
-      checksum: "sha256:de5e632e17b8965f2baf4ea6d2b824788e154d9a65df4fd419ec4019898e15cd"
-
+      format: qcow2
+      checksum: "sha256:REPLACE_WITH_REAL_SHA256"
+      checksumType: sha256
 ---
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
@@ -137,7 +124,7 @@ spec:
     name: hypervisor-class
   imageRef:
     name: ubuntu-server-22-04
-  
+  powerState: "On"
   userData:
     cloudInit:
       inline: |
@@ -147,223 +134,82 @@ spec:
           - name: ubuntu
             sudo: ALL=(ALL) NOPASSWD:ALL
             ssh_authorized_keys:
-              - ssh-rsa AAAAB3NzaC1yc2E... # Your SSH key
-        
+              - ssh-ed25519 AAAA... # your SSH key
         packages:
           - qemu-kvm
           - libvirt-daemon-system
           - libvirt-clients
-          - bridge-utils
-          - virt-manager
-        
         runcmd:
-          # Enable nested virtualization verification
-          - echo "Checking nested virtualization support..."
-          - cat /proc/cpuinfo | grep -E "(vmx|svm)"
+          - grep -E "(vmx|svm)" /proc/cpuinfo
           - ls -la /dev/kvm
-          
-          # Configure libvirt
-          - systemctl enable libvirtd
-          - systemctl start libvirtd
-          - usermod -aG libvirt ubuntu
-          
-          # Verify nested KVM support
-          - modprobe kvm_intel nested=1 || modprobe kvm_amd nested=1
-          - echo "Nested virtualization setup complete"
-  
-  powerState: On
 ```
 
-## Provider-Specific Configuration
+The `VMImage` source above is a libvirt URL source; on vSphere or Proxmox use a template source (`source.vsphere.templateName`, `source.proxmox.templateName`).
 
-### vSphere Provider
+## Provider details
 
-For vSphere, nested virtualization is enabled using the following VM configuration:
+### vSphere
 
-- `vhv.enable = TRUE` - Enables hardware-assisted virtualization
-- `vhv.allowNestedPageTables = TRUE` - Improves nested VM performance
-- Hardware version 14+ recommended for best compatibility
+At create, a VM from a nested class gets `vhv.enable = TRUE` and `vhv.allowNestedPageTables = TRUE` in its ExtraConfig. Consider hardware version 14 or later, UEFI firmware for modern guests, and enough CPU and memory for the nested VMs. A running VM's settings are not changed by editing the class afterwards: the keys are written at create.
 
-Additional considerations:
-- Use UEFI firmware for modern guest operating systems
-- Ensure sufficient CPU and memory allocation
-- Consider enabling VT-d for better I/O performance
+### libvirt
 
-### LibVirt Provider
+The domain XML gets a CPU definition with the two features:
 
-For LibVirt/KVM, nested virtualization requires:
-
-- Host kernel modules: `kvm_intel nested=1` or `kvm_amd nested=1`
-- CPU features: `vmx` (Intel) or `svm` (AMD) passed through to guest
-- QEMU machine type: `q35` recommended for modern features
-
-The LibVirt provider automatically configures:
 ```xml
 <cpu mode='host-model' check='partial'>
-  <feature policy='require' name='vmx'/>  <!-- Intel -->
-  <feature policy='require' name='svm'/>  <!-- AMD -->
+  <feature policy='require' name='vmx'/>
+  <feature policy='require' name='svm'/>
 </cpu>
 ```
 
-### Proxmox Provider
+The host needs the `kvm_intel`/`kvm_amd` module loaded with `nested=1` (`cat /sys/module/kvm_intel/parameters/nested` prints `Y` or `1`).
 
-For Proxmox VE, nested virtualization is configured through:
+### Proxmox VE
 
-- CPU type: `host` or `kvm64` with nested features
-- Enable nested virtualization in VM CPU configuration
-- Ensure host has nested virtualization enabled
+Nothing is done for `nestedVirtualization`. For a VM cloned from a template, the CPU type of the template is kept; set it to `host` there. VirtRigaud does not change a Proxmox VM's CPU type, `kvm` or NUMA settings.
 
 ## Verification
 
-After creating a VM with nested virtualization enabled, verify the setup:
-
-### On Linux Guests
+Inside a Linux guest:
 
 ```bash
-# Check for virtualization extensions
-grep -E "(vmx|svm)" /proc/cpuinfo
-
-# Verify KVM device availability
-ls -la /dev/kvm
-
-# Check nested virtualization status
-cat /sys/module/kvm_intel/parameters/nested  # Intel
-cat /sys/module/kvm_amd/parameters/nested    # AMD
-
-# Test with a simple nested VM
-virt-host-validate
+grep -E "(vmx|svm)" /proc/cpuinfo      # virtualization extensions visible
+ls -la /dev/kvm                        # KVM device present
+virt-host-validate                     # needs libvirt-clients in the guest
 ```
 
-### On Windows Guests
+On a Windows guest, `systeminfo | findstr /i hyper` reports whether the hypervisor requirements are met.
 
-```powershell
-# Check Hyper-V compatibility
-systeminfo | findstr /i hyper
+## Performance and operations
 
-# Verify virtualization extensions
-Get-ComputerInfo | Select-Object HyperV*
-```
-
-## Performance Considerations
-
-### CPU Allocation
-- Allocate sufficient CPU cores (minimum 4, recommended 8+)
-- Consider CPU reservation for consistent performance
-- Enable CPU hot-add for flexibility
-
-### Memory Configuration
-- Allocate generous memory (minimum 8GB, recommended 16GB+)
-- Consider memory reservation for nested VMs
-- Enable memory hot-add for dynamic scaling
-
-### Storage
-- Use fast storage (SSD/NVMe) for better nested VM performance
-- Allocate sufficient disk space for multiple nested VMs
-- Consider thin provisioning for efficient space usage
-
-### Network
-- Configure appropriate network topology
-- Consider SR-IOV for high-performance networking
-- Plan IP address allocation for nested environments
+- Give a nested host generous CPU and memory (minimum 4 vCPUs and 8 GiB, more is better), fast storage and enough disk for the nested VMs. Disk size limits set by the administrator (`manager.maxDiskSize`) apply to the class's disk.
+- On vSphere, memory hot-add can be enabled for flexibility; CPU hot-add cannot be combined with nested virtualization.
+- Nested VMs add attack surface: isolate the network of nested environments, set quotas, and keep the host and guest hypervisors patched.
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **Nested virtualization not working**
-   - Verify host CPU supports VT-x/AMD-V
-   - Check host BIOS settings
-   - Ensure hypervisor nested virtualization is enabled
-
-2. **Poor performance in nested VMs**
-   - Increase CPU and memory allocation
-   - Enable CPU/memory reservations
-   - Use faster storage
-   - Verify nested page tables are enabled
-
-3. **Guest OS doesn't detect virtualization extensions**
-   - Check VM hardware version (vSphere)
-   - Verify CPU feature passthrough (LibVirt)
-   - Ensure proper CPU type configuration (Proxmox)
-
-### Debugging Commands
-
-```bash
-# Check virtualization support on host
-lscpu | grep Virtualization
-
-# Verify KVM nested support
-cat /sys/module/kvm_*/parameters/nested
-
-# Check VM CPU features (inside guest)
-lscpu | grep -E "(vmx|svm|Virtualization)"
-
-# Test nested VM creation
-virt-install --name test-nested --memory 1024 --vcpus 1 --disk size=10 --cdrom /path/to/iso
-```
-
-## Security Considerations
-
-### Isolation
-- Nested VMs add additional attack surface
-- Consider network isolation for nested environments
-- Implement proper access controls
-
-### Resource Limits
-- Set appropriate resource limits to prevent resource exhaustion
-- Monitor nested VM resource usage
-- Implement quotas for nested environments
-
-### Updates and Patches
-- Keep host hypervisor updated
-- Maintain guest hypervisor software
-- Apply security patches to nested VMs
-
-## Best Practices
-
-1. **Planning**
-   - Design nested architecture carefully
-   - Plan resource allocation in advance
-   - Consider network topology requirements
-
-2. **Configuration**
-   - Use UEFI firmware for modern features
-   - Enable VT-d/AMD-Vi for better performance
-   - Configure appropriate CPU and memory reservations
-
-3. **Monitoring**
-   - Monitor resource usage at all levels
-   - Set up alerting for resource exhaustion
-   - Track performance metrics
-
-4. **Maintenance**
-   - Regular backup of nested environments
-   - Plan for hypervisor updates
-   - Test disaster recovery procedures
+| Symptom | Check |
+|---------|-------|
+| The guest does not show `vmx`/`svm` | The host CPU and BIOS support virtualization; the host module has `nested=1` (libvirt); the VMClass has `nestedVirtualization: true` **and the VM was created after that** (the setting is applied at create); on vSphere the hardware version is 9 or later; on Proxmox the VM's CPU type is `host` (VirtRigaud does not set it) |
+| A libvirt VM does not start after enabling nested virtualization | The domain requires both `vmx` and `svm`; see the warning above |
+| Poor performance in nested VMs | More CPU and memory, faster storage; on vSphere check the nested page-table setting is present |
+| The class is accepted but nothing changed on Proxmox | Expected: the Proxmox provider ignores `performanceProfile` |
 
 ## Limitations
 
-### vSphere Provider
-- Requires ESXi 6.0+ and hardware version 9+
-- Performance overhead of 10-20% typical
-- Some advanced features may not be available in nested VMs
+- The vSphere and libvirt settings are applied at create only; they are not retrofitted to existing VMs.
+- Proxmox: no support in the provider (configure the CPU type outside VirtRigaud).
+- libvirt: x86_64 only; see the `vmx`/`svm` warning.
+- Nested virtualization carries a performance cost that depends on the workload, and some hypervisor features are unavailable in nested guests.
+- Not covered by VirtRigaud's end-to-end tests.
 
-### LibVirt Provider
-- Requires host kernel support
-- Performance depends on host CPU features
-- Limited to x86_64 architecture
+## Support matrix
 
-### Proxmox Provider
-- Requires Proxmox VE 6.0+
-- Performance overhead varies by workload
-- Some clustering features may not work in nested environments
+| Provider | Applied by VirtRigaud | Host requirement | Notes |
+|----------|----------------------|------------------|-------|
+| vSphere | Yes (`vhv.enable`, `vhv.allowNestedPageTables`) | Hardware version 9+ (14+ recommended) | CPU hot-add is skipped for nested classes |
+| libvirt | Yes (`vmx` and `svm` CPU features) | `kvm_intel nested=1` or `kvm_amd nested=1` | Requires both features; not validated on Intel and AMD hosts |
+| Proxmox VE | No | CPU type `host`, set outside VirtRigaud | `performanceProfile` is ignored |
 
-## Support Matrix
-
-| Provider | Min Version | Nested Support | Performance | Notes |
-|----------|-------------|----------------|-------------|-------|
-| vSphere  | ESXi 6.0    | Via `vhv.enable=TRUE` | Good | Hardware version 14+ recommended |
-| LibVirt  | 1.2.13      | Via CPU host-model passthrough | Good | Requires `kvm_intel nested=1` or `kvm_amd nested=1` on host |
-| Proxmox  | PVE 6.0     | Via CPU type `host` | Good | Enable `kvm: 1` and `cpu: host` in VM config |
-
-For more information, see the provider-specific documentation in the `docs/providers/` directory.
+For provider details see the [vSphere](../../providers/vsphere.md), [libvirt](../../providers/libvirt.md) and [Proxmox](../../providers/proxmox.md) provider pages.

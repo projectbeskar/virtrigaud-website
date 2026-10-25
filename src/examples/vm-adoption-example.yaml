@@ -1,0 +1,181 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
+# VM Adoption Examples
+#
+# VMAdoption is a CONTROLLER built into the manager, not a CRD.
+# Adoption is triggered by annotations on the Provider CR.
+# The Provider spec uses the v1beta1 schema: type, endpoint,
+# credentialSecretRef, and runtime — NOT nested provider-specific blocks.
+#
+# The old spec fields (remote: true, vsphere.server, libvirt.uri,
+# proxmox.server, credentials.secretRef) do NOT exist in current releases.
+
+---
+# Example 1: vSphere Provider with VM Adoption enabled
+#
+# Adoption is THE way to bring a pre-existing vSphere VM under management.
+# Creating a VirtualMachine whose name matches an existing VM does NOT bind to
+# it: the vSphere provider only binds a VM in the target folder whose
+# ExtraConfig owner stamp (virtrigaud.owner.uid) records that VirtualMachine's
+# own UID, and otherwise fails the create with a Ready=False / ProviderConflict
+# condition. See docs/vm-ownership.md.
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: Provider
+metadata:
+  name: vsphere-prod
+  namespace: default
+  annotations:
+    virtrigaud.io/adopt-vms: "true"
+spec:
+  type: vsphere
+  endpoint: "https://vcenter.example.com:443"
+  credentialSecretRef:
+    name: vsphere-prod-credentials
+    namespace: default
+  runtime:
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    service:
+      port: 9443
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-vsphere-tls   # Secret with tls.crt, tls.key, ca.crt
+        insecureSkipVerify: false
+  defaults:
+    datastore: datastore1
+    cluster: cluster1
+
+---
+# Example 2: vSphere Provider — adopt only VMs matching a name pattern
+# The annotation value is passed to the VMAdoption controller as a filter hint.
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: Provider
+metadata:
+  name: vsphere-prod-filtered
+  namespace: default
+  annotations:
+    virtrigaud.io/adopt-vms: "true"
+    virtrigaud.io/adopt-filter: '{"namePattern": "^prod-.*"}'
+spec:
+  type: vsphere
+  endpoint: "https://vcenter.example.com:443"
+  credentialSecretRef:
+    name: vsphere-prod-credentials
+    namespace: default
+  runtime:
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    service:
+      port: 9443
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-vsphere-tls   # Secret with tls.crt, tls.key, ca.crt
+        insecureSkipVerify: false
+
+---
+# Example 3: Libvirt Provider with VM Adoption enabled
+#
+# Adoption is THE way to bring a pre-existing libvirt domain under management.
+# Creating a VirtualMachine whose name matches an existing domain does NOT bind
+# to it: the libvirt provider only binds a domain stamped with that
+# VirtualMachine's own UID, and otherwise fails the create with a
+# Ready=False / ProviderConflict condition. See docs/libvirt-domain-ownership.md
+# and docs/vm-ownership.md.
+#
+# VirtualMachines created by VirtRigaud get libvirt domains named
+# "<namespace>.<name>" (e.g. "team-a.app-web"); the filter below matches domain
+# names, so it does not match those. Adoption also never adopts a domain whose
+# VirtRigaud owner stamp names a VirtualMachine that still exists, or whose
+# owner stamp cannot be read. A domain stamped only by VirtualMachines that are
+# NOT in this cluster (deleted, or another VirtRigaud installation's) is not
+# adopted either, unless the single-host Provider also carries
+#   virtrigaud.io/adopt-stamped-vms: "true"
+# (set it only when no other installation manages the same host; see
+# docs/vm-ownership.md#owner-stamps-are-scoped-to-one-cluster).
+#
+# Every adopted domain is stamped with its new VirtualMachine before that
+# VirtualMachine is bound (a stale stamp is replaced only with the opt-in
+# above), through a provider that reports supportsOwnerTransfer; see
+# docs/vm-ownership.md#adoption-stamps-the-adopted-vm.
+#
+# The same annotations work on a CLUSTERED libvirt Provider (spec.topology:
+# cluster, experimental; ADR-0007 Addendum A slice 4). There a domain is
+# identified by (host, domain name), the adopted VirtualMachine is named
+# "<domain>-<10 hex digits>" and bound to its host, and the domain is stamped
+# with the new VirtualMachine. Only UNSTAMPED domains are adopted there: one
+# left by a deleted or restored VirtualMachine is reported in
+# status.adoption.message for the ADR-0007 A6 runbook, as is a host that could
+# not be listed. See
+# docs/clustered-provider-inventory.md#listing-and-adoption-slice-4.
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: Provider
+metadata:
+  name: libvirt-kvm-prod
+  namespace: default
+  annotations:
+    virtrigaud.io/adopt-vms: "true"
+    virtrigaud.io/adopt-filter: '{"namePattern": "^app-.*"}'
+spec:
+  type: libvirt
+  endpoint: "qemu+ssh://kvm-host.example.com/system"
+  credentialSecretRef:
+    name: libvirt-prod-credentials
+    namespace: default
+  runtime:
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+    service:
+      port: 9443
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-libvirt-tls   # Secret with tls.crt, tls.key, ca.crt
+        insecureSkipVerify: false
+
+---
+# Example 4: Proxmox Provider with VM Adoption enabled
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: Provider
+metadata:
+  name: proxmox-prod
+  namespace: default
+  annotations:
+    virtrigaud.io/adopt-vms: "true"
+spec:
+  type: proxmox
+  endpoint: "https://proxmox.example.com:8006"
+  credentialSecretRef:
+    name: proxmox-prod-credentials
+    namespace: default
+  runtime:
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0"
+    service:
+      port: 9443
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-proxmox-tls   # Secret with tls.crt, tls.key, ca.crt
+        insecureSkipVerify: false
+
+# ---------------------------------------------------------------------------
+# Detaching (un-adopting) a VM without deleting it
+#
+# To stop managing a VM but leave the hypervisor VM running, annotate its
+# VirtualMachine with virtrigaud.io/orphan-on-delete: "true" and delete it. The
+# finalizer is then removed WITHOUT any provider call (a Normal "Orphaned" event
+# records the id and Provider left behind):
+#
+#   kubectl annotate virtualmachine legacy-db -n default virtrigaud.io/orphan-on-delete=true
+#   kubectl delete virtualmachine legacy-db -n default
+#
+# Do NOT re-point spec.providerRef at a missing Provider to achieve this: once a
+# VM is bound (status.id set), spec.providerRef is immutable and the API server
+# rejects the change. See docs/vm-provider-binding.md.

@@ -55,16 +55,33 @@ spec:
     burst: 10
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.7"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
     service:
       port: 9090
-      # v0.3.7: a Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
-      # Set tls.enabled: false to keep plaintext (dev/lab only).
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
       tls:
         enabled: true
         secretRef:
-          name: provider-libvirt-tls   # Secret (kubernetes.io/tls or Opaque) with tls.crt, tls.key, ca.crt
+          name: provider-libvirt-tls   # Secret with tls.crt, tls.key, ca.crt
         insecureSkipVerify: false
+    # Directories a VMImage `source.libvirt.path` may point into (image files
+    # must sit DIRECTLY in one of them; the path is resolved on the host, so
+    # symlinks cannot escape). Comma- or colon-separated; the default when unset
+    # is /var/lib/libvirt/images. List the pool directory ImagePrepare writes
+    # into too if you use URL-sourced images. See docs/image-preparation.md.
+    #
+    # Host directory VMs' cloud-init seeds (user-data, which may carry secrets)
+    # are built in, private. It must exist on every libvirt host, owned by the
+    # provider's SSH user, mode 0711 (creates are refused otherwise):
+    #   install -d -m 0711 -o <ssh user> -g <ssh user> /var/lib/libvirt/virtrigaud-seeds
+    # The default when unset is /var/lib/libvirt/virtrigaud-seeds. See
+    # docs/libvirt-domain-ownership.md#cloud-init-seed-directory.
+    # env:
+    #   - name: VIRTRIGAUD_LIBVIRT_IMAGE_DIRS
+    #     value: "/var/lib/libvirt/images,/srv/golden-images"
+    #   - name: VIRTRIGAUD_LIBVIRT_SEED_DIR
+    #     value: "/var/lib/libvirt/virtrigaud-seeds"
 
 ---
 # Define a VM class for KVM
@@ -94,6 +111,12 @@ metadata:
 spec:
   source:
     libvirt:
+      # Absolute path of a base image on the libvirt host. It must resolve to a
+      # regular, self-contained image file directly inside an allowed image
+      # directory (VIRTRIGAUD_LIBVIRT_IMAGE_DIRS on the provider, default
+      # /var/lib/libvirt/images), must not be a disk of any existing VM, and
+      # must not use a VirtRigaud-reserved name (*-disk.qcow2,
+      # *-migrated.qcow2, dotfiles). It is copied into each VM's own disk.
       path: "/var/lib/libvirt/images/ubuntu-20.04-cloudimg.qcow2"
       format: qcow2
       # Alternative: download from URL

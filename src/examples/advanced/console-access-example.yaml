@@ -24,11 +24,17 @@ spec:
     name: vsphere-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.2.3"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
     service:
       port: 9090
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-vsphere-tls   # Secret with tls.crt, tls.key, ca.crt
+        insecureSkipVerify: false
   defaults:
-    datacenter: "Production"
     datastore: "datastore1"
     cluster: "cluster1"
 
@@ -46,11 +52,17 @@ spec:
     name: libvirt-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.2.3"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
     service:
       port: 9090
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-libvirt-tls   # Secret with tls.crt, tls.key, ca.crt
+        insecureSkipVerify: false
   defaults:
-    storagePool: "default"
     network: "default"
 
 ---
@@ -61,7 +73,7 @@ metadata:
   name: console-demo
   namespace: default
 spec:
-  cpus: 2
+  cpu: 2
   memory: "4Gi"
   diskDefaults:
     type: thin
@@ -103,9 +115,11 @@ metadata:
 spec:
   providerRef:
     name: vsphere-prod
-  vmClassRef: console-demo
-  vmImageRef: ubuntu-vsphere
-  
+  classRef:
+    name: console-demo
+  imageRef:
+    name: ubuntu-vsphere
+
   powerState: "On"
   
   userData:
@@ -142,9 +156,11 @@ metadata:
 spec:
   providerRef:
     name: libvirt-local
-  vmClassRef: console-demo
-  vmImageRef: ubuntu-libvirt
-  
+  classRef:
+    name: console-demo
+  imageRef:
+    name: ubuntu-libvirt
+
   powerState: "On"
   
   userData:
@@ -364,7 +380,9 @@ data:
     **Solution**:
     ```bash
     # Check if VNC is listening
-    virsh dumpxml <vm-name> | grep graphics
+    # The libvirt domain name is the VM's status.id: <namespace>.<vm-name> for
+    # VMs created since namespaced domain names, the bare <vm-name> for older ones.
+    virsh dumpxml "$(kubectl get vm <vm-name> -n <namespace> -o jsonpath='{.status.id}')" | grep graphics
     
     # Check firewall
     sudo ufw allow 5900/tcp

@@ -7,6 +7,13 @@
 # ⚠️  IMPORTANT: Requires Active vSphere Environment  
 # The vSphere provider needs access to vCenter Server or ESXi hosts.
 # See docs/providers/vsphere.md for setup instructions and configuration details.
+#
+# Required vCenter privilege: the account in credentialSecretRef needs
+# "Virtual machine > Change Configuration > Advanced configuration"
+# (VirtualMachine.Config.AdvancedConfig) on the target VM folder and resource
+# pool. Every create writes an ExtraConfig owner stamp and fails without it.
+# VMImage templateName must name a real vSphere template (not a regular VM).
+# See docs/vm-ownership.md.
 
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: Provider
@@ -21,15 +28,15 @@ spec:
   insecureSkipVerify: false
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.7"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
     service:
       port: 9090
-      # v0.3.7: a Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
-      # Set tls.enabled: false to keep plaintext (dev/lab only).
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
       tls:
         enabled: true
         secretRef:
-          name: provider-vsphere-tls   # Secret (kubernetes.io/tls or Opaque) with tls.crt, tls.key, ca.crt
+          name: provider-vsphere-tls   # Secret with tls.crt, tls.key, ca.crt
         insecureSkipVerify: false
   defaults:
     datastore: datastore1

@@ -14,25 +14,25 @@ spec:
   endpoint: https://vcenter.dc1.example.com
   credentialSecretRef:
     name: vsphere-creds
+  runtime:
+    mode: Remote
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    service:
+      port: 9090
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
+      tls:
+        enabled: true
+        secretRef:
+          name: provider-vsphere-tls   # Secret with tls.crt, tls.key, ca.crt
+        insecureSkipVerify: false
   defaults:
     datastore: ssd-datastore
     cluster: prod-cluster
     folder: virtrigaud-vms
-  runtime:
-    mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.3.7"
-    service:
-      port: 9090
-      # v0.3.7: a Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
-      # Set tls.enabled: false to keep plaintext (dev/lab only).
-      tls:
-        enabled: true
-        secretRef:
-          name: provider-vsphere-tls   # Secret (kubernetes.io/tls or Opaque) with tls.crt, tls.key, ca.crt
-        insecureSkipVerify: false
 
 ---
-# Libvirt Provider Configuration
+# Libvirt Provider Configuration  
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: Provider
 metadata:
@@ -43,20 +43,20 @@ spec:
   endpoint: qemu+tcp://edge-kvm.example.com/system
   credentialSecretRef:
     name: libvirt-creds
-  defaults:
-    cluster: edge
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.3.7"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
     service:
       port: 9090
-      # v0.3.7: a Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
-      # Set tls.enabled: false to keep plaintext (dev/lab only).
+      # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
+      # Set tls.enabled: false only to keep plaintext (dev/lab).
       tls:
         enabled: true
         secretRef:
-          name: provider-libvirt-tls   # Secret (kubernetes.io/tls or Opaque) with tls.crt, tls.key, ca.crt
+          name: provider-libvirt-tls   # Secret with tls.crt, tls.key, ca.crt
         insecureSkipVerify: false
+  defaults:
+    cluster: edge
 
 ---
 # Shared VM Classes
@@ -127,7 +127,7 @@ spec:
     name: ubuntu-multi
   networks:
     - name: production-network
-  powerState: On
+  powerState: "On"
   userData:
     cloudInit:
       inline: |
@@ -159,7 +159,7 @@ spec:
     name: ubuntu-multi
   networks:
     - name: production-network
-  powerState: On
+  powerState: "On"
   userData:
     cloudInit:
       inline: |
@@ -198,7 +198,7 @@ spec:
     - name: api-data
       sizeGiB: 200
       type: thick
-  powerState: On
+  powerState: "On"
   userData:
     cloudInit:
       inline: |

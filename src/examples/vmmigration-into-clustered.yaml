@@ -1,0 +1,78 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
+# VMMigration INTO a clustered (topology: cluster) libvirt Provider
+# (ADR-0007 Addendum B; docs/clustered-provider-inventory.md, "Migration into a
+# clustered provider").
+#
+# For a clustered target the migration creates its target VirtualMachine
+# FIRST, at Validating, before the source is powered off or exported. Its
+# spec.importedDisk names this migration but no disk yet (an empty diskID),
+# and the ordinary scheduler places it on a host of the pool — one whose
+# allocatableStorageBytes holds the source disk — reserving its capacity.
+# The migration waits (condition TargetPlaced) until the target has a pending
+# host, then exports, imports the disk ON THAT HOST, and records the landed
+# disk on the target VM, which is then created there with the disk attached
+# in place.
+#
+# Experimental: topology: cluster may still change. Read "Before you start" and
+# "Limits" in the doc before using this against anything you care about.
+#
+# REQUIREMENTS:
+#   - The clustered provider reports supports_routed_import (otherwise the
+#     migration fails at Validating, reason ClusteredTargetUnsupported).
+#   - storage.type is s3 or nfs, set explicitly: pvc (what an unset storage
+#     means) is refused at Validating, because the disk lands on a host.
+#   - The target VM is in this VMMigration's namespace (target.namespace unset).
+#     The Provider may be in another namespace if it grants this one
+#     (spec.consumerNamespaceSelector, docs/cross-namespace-references.md).
+#   - Each host's "default" pool is active and at /var/lib/libvirt/images, with
+#     room for the disk; the host has qemu-img, flock and timeout, and the
+#     cloud-init seed directory /var/lib/libvirt/virtrigaud-seeds (see the
+#     host prerequisites in the doc).
+#   - Replace the NFS server below (a placeholder) with your own.
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMMigration
+metadata:
+  name: app-into-cluster
+  namespace: default
+spec:
+  source:
+    # A VirtualMachine on a single-host libvirt Provider: the direction that
+    # was run in the lab. Other source providers have not been run into a
+    # clustered target.
+    vmRef:
+      name: app-on-libvirt
+    powerOffBeforeMigration: true
+  target:
+    name: app-on-cluster
+    providerRef:
+      # A libvirt Provider with spec.topology: cluster
+      # (provider-libvirt-clustered.yaml, which lives in virtrigaud-system).
+      # It is in another namespace than this migration, so its
+      # spec.consumerNamespaceSelector must select this namespace ("default");
+      # without that the migration is refused (ConsumerNotAllowed). Or run
+      # the migration in the Provider's namespace (the target VM and the
+      # classRef then live there too) and drop the namespace line.
+      name: libvirt-cluster
+      namespace: virtrigaud-system
+    classRef:
+      name: standard-2cpu-4gb
+    # Optional: steer the placement of the target VM.
+    # placementRef:
+    #   name: spread-web
+    powerOn: true
+  storage:
+    type: nfs
+    nfs:
+      server: nfs.example.com
+      export: /export/virtrigaud
+      uid: 1000
+      gid: 1000
+  options:
+    # OnSuccess (the default) deletes the staged disk once the migration
+    # succeeds, and the landed disk if the VMMigration is deleted without a
+    # target VM using it. A migration deleted (or retried) before its target
+    # is created deletes that unbound target VM first.
+    cleanupPolicy: OnSuccess
+    verifyChecksums: true

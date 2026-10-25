@@ -2,7 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Basic VM Migration Example
-# Migrates a VM from one provider to another with minimal configuration
+# Migrates a VM from one provider to another with minimal configuration.
+#
+# NOTE: this example uses the legacy PVC-backed storage path (compat-only).
+# The recommended, validated path is S3/relay across all three providers in any
+# direction — see vmmigration-s3.yaml and vmmigration-proxmox-s3.yaml. PVC does
+# NOT work for Proxmox or for host-resident libvirt disks.
 
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMMigration
@@ -14,11 +19,36 @@ spec:
   source:
     vmRef:
       name: my-source-vm
-    createSnapshot: true  # Create snapshot before migration
-  
+    # The snapshot the migration creates is deleted when it completes, when it
+    # fails for good, and when the VMMigration is deleted (unless
+    # options.cleanupPolicy is Never). Deleting the VMMigration waits until the
+    # snapshot is gone (condition SnapshotCleanup=False while its provider
+    # cannot delete it); annotate the VMMigration with
+    # virtrigaud.io/force-delete: "true" to remove it anyway and leave the
+    # snapshot on the hypervisor.
+    createSnapshot: true
+
   # Target configuration
   target:
     name: my-target-vm
+    # Optional: namespace for the migrated VM. Defaults to this VMMigration's
+    # namespace. Another namespace works only if someone who can update THAT
+    # Namespace (normally a cluster admin) has annotated it with
+    #   infra.virtrigaud.io/allowed-source-namespaces: default
+    # A granted cross-namespace migration's disk is copied as a base image,
+    # not attached in place.
+    # otherwise the migration waits (Ready=False, reason
+    # TargetNamespaceNotAllowed) before touching anything.
+    # See docs/cross-namespace-targets.md.
+    # namespace: team-b
+    # A target Provider in another namespace must share itself with this
+    # VMMigration's namespace (and, for a target in another namespace, with
+    # that one too) via spec.consumerNamespaceSelector, e.g.
+    #   consumerNamespaceSelector:
+    #     matchLabels:
+    #       kubernetes.io/metadata.name: default
+    # Otherwise the migration waits (Ready=False, reason ConsumerNotAllowed).
+    # See docs/cross-namespace-references.md.
     providerRef:
       name: target-provider
       namespace: virtrigaud-system
@@ -26,9 +56,14 @@ spec:
       name: standard-vm
     networks:
       - name: default
-  
-  # PVC-backed intermediate storage (only supported type in v0.3.6).
+
+  # PVC-backed intermediate storage (legacy, compat-only backend: s3 and nfs are the validated ones).
   # Requires a ReadWriteMany StorageClass (NFS, CephFS, etc.).
+  # The PVC is mounted only into this migration's source (read-write) and
+  # target (read-only) provider pods, and only while the migration is in
+  # flight. To use an existing PVC instead (pvc.name), its owner must first
+  # label it virtrigaud.io/component=migration-storage. See
+  # examples/migration/README.md ("PVC staging backend").
   storage:
     type: pvc
     pvc:

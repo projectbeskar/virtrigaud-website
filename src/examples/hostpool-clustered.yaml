@@ -1,0 +1,127 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
+# Clustered libvirt provider — Host / HostPool inventory (experimental)
+#
+# This example shows the inventory foundation for a clustered libvirt provider:
+# one HostPool grouping two bare Hosts. It is ADR-0007 P1 and purely ADDITIVE —
+# single-host providers and their VMs are unaffected (ADR-0007 D9).
+#
+# Prerequisite: the referenced Provider (libvirt-cluster) is a CLUSTERED provider
+# (spec.topology: cluster; see provider-libvirt-clustered.yaml). Clustered
+# libvirt is experimental in v0.4.0. The Provider controller renders the Hosts
+# of this namespace into its "<provider>-hosts" Secret, the inventory sync fills
+# Host.status and HostPool.status, and the scheduler places VMs on the Hosts.
+# Host-to-host live migration is not implemented.
+#
+# Placement labels on each Host (spec.labels) are consumed as HARD scheduling
+# constraints (ADR-0007 D6): a VM is only placed/migrated onto a host that can
+# see its storage pool AND has its network. Here both hosts see pool "nfs01" and
+# bridge "br-vlan100".
+#
+# THE net.virtrigaud.io/<network> LABEL IS REQUIRED FOR PLACEMENT, NOT JUST
+# MIGRATION: a Host with no net.virtrigaud.io/<network>="true" label for a
+# network a VM uses is never a placement candidate for that VM, even with free
+# CPU/memory (the scheduler's host filter). <network> is the VM's libvirt
+# network identity: VMNetworkAttachment.spec.network.libvirt.networkName, or
+# its bridge.name when no network name is set — "br-vlan100" below matches a
+# VMNetworkAttachment whose bridge.name is "br-vlan100". Forgetting this label
+# leaves a VM Placed=False/Unschedulable with reason "host does not have a
+# required network"; see docs/clustered-provider-inventory.md (the "First VM
+# checklist" and "Troubleshooting" sections). Storage-pool labels
+# (storage.virtrigaud.io/pool-<name>) are shown below too, but are NOT
+# enforced as a scheduling filter for an ordinary VM create — see the same doc.
+#
+# SAME-NAMESPACE RULE (security): the HostPool, every Host, every per-host
+# credential Secret, and the clustered Provider MUST all live in ONE namespace
+# (here: virtrigaud-system). providerRef / poolRef / credentialSecretRef are
+# namespace-local references — they have no namespace field — and the operator
+# only ever reads Hosts and credential Secrets from the Provider's namespace. A
+# Host created in any other namespace is ignored by the Provider. VirtualMachines
+# may live elsewhere and reference the Provider cross-namespace; their placement
+# is resolved against the HostPool/Hosts in the Provider's namespace.
+#
+# IN-USE PROTECTION (ADR-0007 Addendum A): the operator keeps the finalizer
+# host.infra.virtrigaud.io/in-use on every Host. Deleting a Host that a
+# VirtualMachine is bound to (status.placement.host) or has a create pending on
+# (status.placement.pendingHost) is held (Ready=False, reason HostInUse) until
+# those VMs are deleted — their per-VM calls and cleanup are routed to it.
+#
+# Host.spec.endpoint is validated at admission: only
+#   qemu+ssh://[user@]host[:port]/system   (or /session)
+#   grpc://host:port                        (accepted by the schema; no host agent exists yet)
+# is accepted (host = DNS name, IPv4, or [IPv6]); no query string, other path,
+# or percent-encoding.
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: HostPool
+metadata:
+  name: pool-a
+  namespace: virtrigaud-system
+spec:
+  # The clustered Provider that owns this pool — same namespace as this pool.
+  providerRef:
+    name: libvirt-cluster
+  # Spread balances VMs across hosts; BinPack consolidates onto the fewest hosts.
+  strategy: Spread
+  # Overcommit ratios are decimal strings (no floats in the API surface).
+  overcommit:
+    cpu: "4.0"
+    memory: "1.0"
+  # Named storage pools available in the pool. Per-host visibility is asserted by
+  # a matching Host.spec.labels entry. VirtRigaud consumes storage; it does not
+  # deploy it.
+  storagePools:
+    - name: nfs01
+    - name: local-ssd
+  # Named networks (bridge/VLAN/overlay) available in the pool.
+  networks:
+    - name: br-vlan100
+  # Default migration policy for VMs in this pool.
+  migration:
+    defaultLive: true
+    defaultStorageMode: shared
+    requireTLS: true          # QEMU-native --tls on the data path (banking posture)
+    bandwidthMbps: 10000
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: Host
+metadata:
+  name: host-a
+  namespace: virtrigaud-system
+spec:
+  providerRef:
+    name: libvirt-cluster
+  poolRef:
+    name: pool-a
+  # Placeholder endpoint — no real hostnames/secrets in examples.
+  endpoint: qemu+ssh://virt@host-a.example.com/system
+  labels:
+    storage.virtrigaud.io/pool-nfs01: "true"
+    net.virtrigaud.io/br-vlan100: "true"
+    topology.virtrigaud.io/rack: "r7"
+  # schedulable defaults to true; shown explicitly for clarity. Set to false to
+  # cordon the host (no new placement; existing VMs stay) ahead of an evacuation.
+  schedulable: true
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: Host
+metadata:
+  name: host-b
+  namespace: virtrigaud-system
+spec:
+  providerRef:
+    name: libvirt-cluster
+  poolRef:
+    name: pool-a
+  endpoint: qemu+ssh://virt@host-b.example.com/system
+  # Optional per-host credential override (SSH key / known_hosts material).
+  # Defaults to the Provider's credentials when omitted. The Secret must be in
+  # this Host's (= the Provider's) namespace; it is never read from elsewhere.
+  credentialSecretRef:
+    name: host-b-creds
+  labels:
+    storage.virtrigaud.io/pool-nfs01: "true"
+    net.virtrigaud.io/br-vlan100: "true"
+    topology.virtrigaud.io/rack: "r8"
+  schedulable: true

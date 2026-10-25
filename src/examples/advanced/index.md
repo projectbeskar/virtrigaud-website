@@ -5,344 +5,101 @@ SPDX-License-Identifier: Apache-2.0
 
 # Advanced VirtRigaud Examples
 
-This directory contains advanced examples demonstrating complex scenarios and v0.2.3+ features.
+These examples cover the operations beyond creating a VM: snapshots and reverting to them, reconfiguration, cloning, console access and task tracking. They mirror `examples/advanced/` of the repository at **v0.4.0** and are valid against the v0.4.0 CRDs. For the behaviour behind them see [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md) and [VM cloning](../../guides/advanced/vm-cloning.md).
 
-## Overview
+!!! note "Placeholders"
+    Endpoints, Secret names, datastores and templates are placeholders. Each Provider in these files has the `runtime.service.tls` block that v0.4.0 requires (see [the examples index](../index.md#read-this-before-applying-an-example)); create the TLS Secret it names or set `enabled: false` in a lab.
 
-These examples showcase production-ready patterns, advanced operations, and best practices for managing VMs at scale with VirtRigaud.
+| File | What it shows |
+|------|---------------|
+| [snapshot-lifecycle.yaml](snapshot-lifecycle.yaml) | `VMSnapshot` objects with retention policies, a weekly-backup pattern, how to revert a VM to a snapshot with `spec.snapshot.revertToRef`, and a CronJob for snapshot cleanup |
+| [vm-reconfigure-and-snapshot.yaml](vm-reconfigure-and-snapshot.yaml) | A VMClass with hot-add enabled, a VM, a snapshot before a resize, a `VMPlacementPolicy`, a `VMClone` and a `VMSet` |
+| [vm-reconfigure-patch.yaml](vm-reconfigure-patch.yaml) | A resize applied with `kubectl patch`, and the libvirt hot-add and disk-grow rules |
+| [vsphere-clone-example.yaml](vsphere-clone-example.yaml) | Several VMs created from one vSphere template, and a `VMClone` of an existing VM |
+| [proxmox-clone-example.yaml](proxmox-clone-example.yaml) | Full and linked `VMClone` objects on Proxmox VE |
+| [vsphere-task-tracking.yaml](vsphere-task-tracking.yaml) | Following long-running vSphere operations (create, reconfigure) through the VM's task status |
+| [console-access-example.yaml](console-access-example.yaml) | Reading the console URL of a vSphere VM (web console) and a libvirt VM (VNC) |
 
-## v0.3.8 Features
+For `VMClone` without a Provider around it, see [`vmclone-basic.yaml`](../vmclone-basic.yaml) in the main examples.
 
-### VMClone Operations (MVP)
+## Snapshots and revert
 
-VMClone is a first-class CRD in v0.3.8. The source must be a `vmRef` pointing to an existing `VirtualMachine` on the same provider. Cross-provider clones are not supported. Libvirt returns `Unimplemented`.
+[snapshot-lifecycle.yaml](snapshot-lifecycle.yaml) takes three snapshots of one VM (with memory, disk-only, and a long-retention weekly one) and documents the revert procedure as comments:
 
-**Files**:
-- [vsphere-clone-example.yaml](vsphere-clone-example.yaml) — Full and linked clones on vSphere
-- [proxmox-clone-example.yaml](proxmox-clone-example.yaml) — Full and linked clones on Proxmox VE
+1. Power the VM off with `spec.powerState: "Off"`. VirtRigaud never powers a VM off for a revert: until the provider reports the VM `Off` and `spec.powerState` is `Off` or `OffGraceful`, nothing is sent and the VM shows `SnapshotReverted=False` with reason `WaitingForPowerOff`.
+2. Name the snapshot in `spec.snapshot.revertToRef.name`. It must be `Ready`, taken of this VM through the VM's Provider.
+3. Watch `status.snapshotRevert.phase` (`Reverting`, then `Succeeded` or `Failed`) and the `SnapshotReverted` condition.
+4. Power the VM on again if you want it running; the revert does not.
 
 ```yaml
-# Minimal VMClone — Full clone on vSphere or Proxmox
-apiVersion: infra.virtrigaud.io/v1beta1
-kind: VMClone
-metadata:
-  name: prod-clone
-  namespace: default
 spec:
-  source:
-    vmRef:
-      name: source-vm
-      namespace: default
-  targetName: prod-clone-target
-  classRef:
-    name: medium
-    namespace: default
-  options:
-    type: Full        # Full = independent storage; Linked = shared base disk
+  powerState: "Off"
+  snapshot:
+    revertToRef:
+      name: web-server-01-pre-update
 ```
 
-Cloning examples demonstrating:
-- **Full Clones**: Independent VMs for production workloads
-- **Linked Clones**: Space-efficient copies for development/testing
-- `spec.source.vmRef` — the only supported source type in v0.3.8 (template refs are not yet supported)
-- Same-provider constraint — `source.vmRef` and the target Provider must match
+The revert is sent at most once per request. Libvirt has additional rules (a revert needs a snapshot taken while the VM was powered off, and deleting snapshots has an order when memory snapshots are involved); they are in [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md#reverting-to-a-snapshot) and in the repository's [snapshot revert reference](https://github.com/projectbeskar/virtrigaud/blob/main/docs/vm-snapshot-revert.md).
 
-**Use Cases**:
-- Production workload deployment
-- Development environment provisioning
-- Test environment creation
-- VM backup and disaster recovery
+## Cloning
 
-**Key characteristics**:
-- Full clone: independent storage; ~5-15 minutes on vSphere
-- Linked clone: shared base disk; ~1-3 minutes on vSphere
-- `status.targetVMID` field populated on successful clone completion
+`VMClone` clones an existing, provisioned `VirtualMachine` on the same provider.
 
-## v0.2.3+ Features
+- `spec.source.vmRef` is the only implemented source type; `snapshotRef`, `templateRef` and `imageRef` fail the clone with `UnsupportedSource`.
+- `options.type` is `FullClone` (the default) or `LinkedClone`. `LinkedClone` needs a provider that reports `SupportsLinkedClones`: vSphere and Proxmox do; libvirt does not, so a libvirt `LinkedClone` fails with `LinkedCloneUnsupported`.
+- A libvirt full clone needs the source VM powered off. A running source leaves the clone `Pending` with `SourceMustBePoweredOff` until the source is off.
+- A clone is left powered off unless `options.powerOn: true`.
+- Deleting a `VMClone` does not delete the VM it produced.
 
-### vSphere Task Tracking
-**File**: [vsphere-task-tracking.yaml](vsphere-task-tracking.yaml)
+[vsphere-clone-example.yaml](vsphere-clone-example.yaml) also shows that a `VirtualMachine` has no clone-type field: a VM created with an `imageRef` that names a vSphere template is created by cloning the template, and the full or linked choice is not exposed there.
 
-Real-time monitoring of long-running vSphere operations:
-- **Task Progress Monitoring**: Real-time progress percentages
-- **State Reporting**: Queued, running, success, error states
-- **Error Information**: Detailed error messages from vSphere
-- **vCenter Integration**: Direct correlation with vSphere task manager
-- **Parallel Operations**: Independent tracking for multiple VMs
+## Reconfiguration
 
-**Monitored Operations**:
-- VM creation and cloning
-- Resource reconfiguration
-- Snapshot operations
-- VM deletion
-- Disk expansion
+[vm-reconfigure-patch.yaml](vm-reconfigure-patch.yaml) changes a running VM's resources:
 
-**Benefits**:
-- Visibility into operation progress
-- Debugging failed operations
-- Performance optimization insights
-- Capacity planning data
-- Integration with vCenter task console
-
-### Console Access
-**File**: [console-access-example.yaml](console-access-example.yaml)
-
-Remote VM console access for both vSphere and Libvirt:
-
-**vSphere Web Console**:
-- Automatic URL generation
-- Browser-based access via vCenter
-- Full keyboard/mouse support
-- Copy/paste functionality
-- Multi-monitor support
-- Power controls integration
-
-**Libvirt VNC Console**:
-- VNC URL generation
-- Multiple VNC client support (TigerVNC, RealVNC, noVNC)
-- SSH tunnel support for security
-- Web-based access via noVNC
-- Multiple simultaneous viewers
-
-**Use Cases**:
-- Initial VM setup before SSH
-- Boot troubleshooting
-- OS installation
-- GUI application access
-- Rescue and recovery operations
-- Training and demonstrations
-
-## Existing Advanced Examples
-
-### VM Reconfiguration and Snapshots
-**File**: [vm-reconfigure-and-snapshot.yaml](vm-reconfigure-and-snapshot.yaml)
-
-Demonstrates VM lifecycle management:
-- Resource reconfiguration
-- Snapshot creation before changes
-- Rollback capabilities
-- Placement policies
-
-### Snapshot Lifecycle
-**File**: [snapshot-lifecycle.yaml](snapshot-lifecycle.yaml)
-
-Complete snapshot management:
-- Snapshot creation with memory state
-- Retention policies
-- Scheduled snapshots
-- Snapshot deletion and cleanup
-
-### VM Reconfiguration Patch
-**File**: [vm-reconfigure-patch.yaml](vm-reconfigure-patch.yaml)
-
-Demonstrates dynamic reconfiguration:
-- Live resource updates
-- Kubectl patch operations
-- Zero-downtime changes (where supported)
-
-## Getting Started
-
-### Prerequisites
-
-1. **VirtRigaud Installed**:
-   ```bash
-   helm install virtrigaud virtrigaud/virtrigaud \
-     --version 0.3.11 -n virtrigaud-system --create-namespace
-   ```
-
-2. **Provider Configured**:
-   - vSphere: vCenter credentials and access
-   - Libvirt: Libvirt daemon connection
-   - Proxmox: Proxmox VE API access
-
-3. **Base Resources**:
-   - VMClass definitions
-   - VMImage configurations
-   - Network attachments
-
-### Usage Pattern
-
-1. **Review Example**:
-   ```bash
-   # Read the example file
-   cat vsphere-clone-example.yaml
-   ```
-
-2. **Customize for Your Environment**:
-   - Update provider endpoints
-   - Adjust resource specifications
-   - Modify network configurations
-   - Update credentials references
-
-3. **Deploy**:
-   ```bash
-   kubectl apply -f vsphere-clone-example.yaml
-   ```
-
-4. **Monitor**:
-   ```bash
-   # Watch VMs
-   kubectl get vm -w
-   
-   # Check provider logs
-   kubectl logs -f deployment/virtrigaud-provider-vsphere
-   
-   # View VM details
-   kubectl describe vm <vm-name>
-   ```
-
-5. **Access and Verify**:
-   ```bash
-   # Get console URL
-   kubectl get vm <vm-name> -o jsonpath='{.status.consoleURL}'
-   
-   # SSH to VM
-   ssh user@<vm-ip>
-   ```
-
-## Advanced Patterns
-
-### Batch Operations
-
-Deploy multiple VMs simultaneously:
 ```bash
-# Deploy all examples
-kubectl apply -f advanced/
-
-# Monitor all VMs
-watch -n 2 'kubectl get vm'
+kubectl patch vm web-server-01 --patch-file vm-reconfigure-patch.yaml --type merge
 ```
 
-### Resource Management
+- **vSphere and Proxmox** reconfigure online, subject to the platform's own limits. A vSphere resize that needs the VM powered off is reported as `ResizePendingPowerOff`.
+- **libvirt** applies a CPU or memory change online only when the VM was created from a VMClass with `cpuHotAddEnabled` or `memoryHotAddEnabled` and the new value is within the headroom provisioned at create time; otherwise the change is written to the persistent definition and the VM reports `RestartRequired` until it is restarted. Disk growth is live and grow-only.
 
-Update VM resources dynamically:
+The reconfigure results are described in [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md#reconfiguration).
+
+## Console access and task tracking
+
+- [console-access-example.yaml](console-access-example.yaml): `status.consoleURL` holds the vSphere web console URL or the libvirt VNC URL. Use an SSH tunnel for VNC; do not expose the VNC port.
+- [vsphere-task-tracking.yaml](vsphere-task-tracking.yaml): the manager follows a vSphere task until it finishes, so a slow create or reconfigure shows progress on the VM instead of a hung call.
+
+## Getting started
+
 ```bash
-# Trigger reconfiguration
-kubectl patch vm <vm-name> --type='merge' \
-  -p='{"spec":{"vmClassRef":"larger-class"}}'
+# Review, edit the placeholders, then apply
+cat vsphere-clone-example.yaml
+kubectl apply -f vsphere-clone-example.yaml
+
+# Watch
+kubectl get vm -w
+kubectl get vmclone -w
+kubectl describe vm <vm-name>
+kubectl get events --field-selector involvedObject.name=<vm-name>
+
+# Console URL and IP addresses
+kubectl get vm <vm-name> -o jsonpath='{.status.consoleURL}'
+kubectl get vm <vm-name> -o jsonpath='{.status.ips}'
 ```
-
-### Automation Scripts
-
-Use provided scripts for common tasks:
-```bash
-# Console access automation
-kubectl create configmap console-scripts \
-  --from-file=console-access-example.yaml
-
-# Execute script
-kubectl exec <pod> -- bash /scripts/automation.sh <vm-name>
-```
-
-## Best Practices
-
-### 1. Resource Planning
-- Use linked clones for dev/test environments
-- Reserve full clones for production workloads
-- Monitor task durations for capacity planning
-
-### 2. Security
-- Use SSH tunnels for VNC connections
-- Implement network policies
-- Rotate console access credentials
-- Enable audit logging
-
-### 3. Operations
-- Monitor provider logs during complex operations
-- Use task tracking for troubleshooting
-- Implement proper cleanup procedures
-- Document custom configurations
-
-### 4. Performance
-- Distribute VMs across datastores
-- Use linked clones to reduce storage load
-- Monitor vCenter task queue depth
-- Implement rate limiting for bulk operations
 
 ## Troubleshooting
 
-### Common Issues
+| Symptom | Check |
+|---------|-------|
+| A `VMClone` stays `Pending` | `kubectl get vmclone <name> -o jsonpath='{.status.conditions}'`: reasons include `SourceNotFound`, `SourceMustBePoweredOff` (libvirt), `TargetNamespaceNotAllowed`, `ConsumerNotAllowed`, `CloneRetrying` and `CloneOutcomeUnknown` |
+| A `VMClone` is `Failed` | The reason names it: `LinkedCloneUnsupported`, `UnsupportedSource`, `TargetConflict`, `ProviderConflict`. `Failed` is terminal: fix the spec and create a new `VMClone` |
+| No console URL | Check the VM is powered on and its provider supports console access; see the provider logs |
+| A snapshot delete does not finish | `kubectl describe vmsnapshot <name>`: `DeleteBlocked` means the provider refused it (for example a libvirt snapshot another snapshot depends on); the message says what to delete first |
 
-#### Clone Operations Fail
-```bash
-# Check source template
-kubectl describe vmimage <image-name>
+## See also
 
-# Verify storage capacity
-kubectl logs deployment/virtrigaud-provider-vsphere | grep -i storage
-
-# Check vCenter for detailed errors
-```
-
-#### Console URL Not Generated
-```bash
-# Verify VM is running
-kubectl get vm <vm-name> -o jsonpath='{.status.phase}'
-
-# Check provider logs
-kubectl logs deployment/virtrigaud-provider-vsphere | grep -i console
-
-# Restart provider if needed
-kubectl rollout restart deployment/virtrigaud-provider-vsphere
-```
-
-#### Task Tracking Shows Errors
-```bash
-# Get task details from provider logs
-kubectl logs deployment/virtrigaud-provider-vsphere | grep task-<id>
-
-# Check vCenter task manager
-# Navigate to vCenter > Tasks & Events
-
-# Review VM events
-kubectl get events --field-selector involvedObject.name=<vm-name>
-```
-
-## Example Combinations
-
-### Complete Development Environment
-```bash
-# 1. Create base template VM
-kubectl apply -f vsphere-clone-example.yaml  # Base template
-
-# 2. Create multiple dev VMs via linked clones
-kubectl apply -f - <<EOF
-<linked-clone-definitions>
-EOF
-
-# 3. Access via console for initial setup
-kubectl get vm dev-vm-01 -o jsonpath='{.status.consoleURL}'
-
-# 4. Monitor all operations
-kubectl get vm -w
-```
-
-### Production Deployment Pipeline
-```bash
-# 1. Full clone from approved template
-# 2. Task tracking for provisioning
-# 3. Automated testing via console
-# 4. Snapshot before production deployment
-# 5. Deploy to production
-```
-
-## Further Reading
-
-- [Main Examples README](../index.md)
-- [vSphere Provider Guide](../../providers/vsphere.md)
-- [Libvirt Provider Guide](../../providers/libvirt.md)
-- [Provider Capabilities Matrix](../../providers/providers-capabilities.md)
-
-## Contributing
-
-Have an advanced example to share? Contributions welcome!
-
-1. Create your example YAML
-2. Document use cases and features
-3. Include troubleshooting guidance
-4. Submit a pull request
-
----
-
-**Note**: These examples target v0.3.8. VMClone examples require v0.3.8 or later. Ensure you're running the correct version before applying.
-
+- [Examples index](../index.md)
+- [vSphere provider](../../providers/vsphere.md), [Libvirt provider](../../providers/libvirt.md), [Proxmox provider](../../providers/proxmox.md)
+- [Provider capabilities matrix](../../providers/providers-capabilities.md)
