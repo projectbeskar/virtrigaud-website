@@ -393,7 +393,6 @@ v0.4.0, are not removed: check the pool for `<domain>-disk*` files that are not
     dumpxml --inactive` of every domain on the host, and `virsh -c "$CONN"
     snapshot-dumpxml` of every snapshot), remove the leftover file; a
     `VMSnapshot` that is still being retried then completes on its next attempt.
-    A definite refusal is planned for a later release.
 
 !!! note "Unreadable overlay files"
     libvirt creates snapshot and revert overlays with mode `0600`, owned by root

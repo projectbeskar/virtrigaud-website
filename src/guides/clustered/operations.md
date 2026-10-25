@@ -337,7 +337,7 @@ and the [metrics reference](../../api-reference/metrics.md).
 | `virtrigaud_host_committed_memory_mib` | Manager | `provider`, `host` | MiB counted as committed on a host |
 | `virtrigaud_provider_host_guard_refusals_total` | Provider | `provider_type`, `reason` (`lock_dir_unsafe`, `lock_symlink`, `target_symlink`, `unknown`) | A long routed host command was refused because a host path VirtRigaud writes to was tampered with or pre-created |
 | `virtrigaud_circuit_breaker_state` | Manager | `provider_type`, `provider` | 0 closed, 1 half-open, 2 open. Host-scoped failures stay out of it |
-| `virtrigaud_errors_total` | Manager | `reason`, `component` | `reason="placement"` for scheduling failures; `reason="provider-resolve"` for each retry of a delete held because the Provider is unreachable; `reason="force-delete-not-allowed"` for each refused force-delete |
+| `virtrigaud_errors_total` | Manager | `reason`, `component` | `reason="placement"` for scheduling failures; `reason="provider-resolve"` for each VM or `VMSnapshot` reconcile that cannot get the Provider (create, describe, power and delete retries all count); `reason="force-delete-not-allowed"` for each refused force-delete |
 | `virtrigaud_provider_rpc_requests_total` | Manager | `provider_type`, `method`, `code` | RPC error ratio per method |
 
 The two committed-capacity gauges are refreshed by the Host controller about
@@ -367,7 +367,7 @@ Alert candidates (adjust thresholds to your environment):
   for: 15m
   labels: {severity: warning}
 - alert: ClusteredHeldDeletes
-  # Deletes retried because the Provider could not be reached.
+  # Reconciles that could not reach the Provider (not only deletes).
   expr: increase(virtrigaud_errors_total{reason="provider-resolve"}[15m]) > 0
   for: 30m
   labels: {severity: warning}
@@ -407,7 +407,7 @@ kubectl logs deploy/<provider deployment> -n <provider namespace>
 | Provider `HostCredentialsReady=False` | A host's credential Secret is missing, unreadable or has no `ssh-privatekey` (`CredentialsUnresolved`), or the Provider's own `credentialSecretRef` names another namespace (`CredentialRefNamespaceRejected`) | Fix the Secret, in the Provider's namespace. The host is left out of the inventory until then; other hosts keep working |
 | Connection fails with a host-key error | No matching `known_hosts` entry for the host | Add the `ssh-keyscan -H` line for the host to the credentials Secret |
 | Create fails with `refusing to stage cloud-init data` | The host's seed directory is missing, not owned by the SSH user, or group/world accessible | `install -d -m 0711 -o <ssh user> -g <ssh user> /var/lib/libvirt/virtrigaud-seeds` on that host |
-| Create or import fails `InvalidSpec`: the `default` pool "is not at /var/lib/libvirt/images" | The host's `default` storage pool is at another directory | An administrator fixes the pool on the host; VirtRigaud never changes an existing pool. Check with `virsh pool-dumpxml default` |
+| Create fails `InvalidSpec` (a routed import is refused `HOST_STORAGE_MISCONFIGURED` and re-placed): the `default` pool "is not at /var/lib/libvirt/images" | The host's `default` storage pool is at another directory | An administrator fixes the pool on the host; VirtRigaud never changes an existing pool. Check with `virsh pool-dumpxml default` |
 | Host reports `allocatableStorageBytes: 0` | `default` pool inactive, not `dir`/`fs`/`netfs`, not at the expected path, or unmeasurable | Same as above; start the pool |
 | `Placed=False/HostUnavailable` | The pending host is unreachable | Restore the host; see [a host that stops answering](#a-host-that-stops-answering) |
 | `Ready=False/HostUnavailable` on a bound VM | The VM's host is unreachable | Same; re-checked every 30 s |

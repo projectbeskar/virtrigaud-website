@@ -355,8 +355,8 @@ is not repeated here. In addition, each host of a clustered Provider needs:
 - **libvirt's `default` storage pool at `/var/lib/libvirt/images`.** VM disks
   and imported disks are created there. If the host has no `default` pool the
   provider creates one at that path on the first create; a `default` pool at
-  any **other** directory is never changed and makes creates and imports fail
-  with `InvalidSpec`. Check with
+  any **other** directory is never changed and makes a create fail
+  with `InvalidSpec` and a routed import be refused (`HOST_STORAGE_MISCONFIGURED`). Check with
   `virsh pool-dumpxml default | grep '<path>'`. A host whose `default` pool is
   missing, inactive or elsewhere reports `allocatableStorageBytes: 0`.
 - **The cloud-init seed directory**, owned by the SSH user, mode `0711`:
@@ -365,8 +365,8 @@ is not repeated here. In addition, each host of a clustered Provider needs:
     install -d -m 0711 -o <ssh user> -g <ssh user> /var/lib/libvirt/virtrigaud-seeds
     ```
 
-    A host whose seed directory is missing, not owned by the SSH user, or
-    group- or world-accessible refuses every create (and every clone of a VM
+    A host whose seed directory is missing and cannot be created, not owned by the SSH user, or
+    readable or writable by group or others refuses every create (and every clone of a VM
     that has a seed), retryably, with `refusing to stage cloud-init data`. Keep
     it on a local filesystem, not on shared storage.
 - **`flock` (util-linux), `timeout` (coreutils) and `qemu-img`.** The routed

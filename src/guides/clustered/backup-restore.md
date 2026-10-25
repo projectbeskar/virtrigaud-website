@@ -33,8 +33,7 @@ False/RestorePending
 ```
 
 `Pending` is deliberate. The VM is held, nothing about it failed, and it
-proceeds by itself once the cause is gone. Releases up to v0.4.0-rc5 showed
-`Failed` for these holds. No image is prepared, nothing is scheduled and no
+proceeds by itself once the cause is gone. No image is prepared, nothing is scheduled and no
 `Create` is sent while the hold lasts.
 
 ## Why a restore needs care
@@ -110,7 +109,7 @@ UID therefore finds that the marker names another UID. If such a VM has no
     Release a marker only when every `Host` of the Provider is `Ready`.
 
 A `VMClone` or `VMMigration` target is built without this key, so it never
-inherits the marker. Single-host and thin-client Providers neither read nor write it.
+inherits the marker. Single-host Providers neither read nor write it.
 
 A change to the marker does not trigger a reconcile on its own. A released VM is
 picked up at its next re-check, within 5 minutes.

@@ -275,8 +275,7 @@ status:
 
 `status.ips` is absent while the provider has no reachable address to report.
 Tooling that took `status.ips[0]` or matched `127.0.0.1` or `fe80::...` no
-longer finds it: up to v0.4.0-rc7 a libvirt VM with a running guest agent listed
-every address of every interface. The list is rewritten on the next reconcile;
+longer finds it: only routable addresses are listed. The list is rewritten on the next reconcile;
 no spec change is needed.
 
 Where each provider gets addresses:
@@ -302,9 +301,7 @@ On **libvirt** the network decides what is visible without the guest agent:
 So the guest agent is the source that works on every network type. The default
 cloud-init the libvirt provider injects installs and starts `qemu-guest-agent`
 and the provider adds the agent channel to every domain it defines; an image or
-`spec.userData` that does not install and start the agent has none. Up to
-v0.4.0-rc7 a guest on the NAT `default` network without the agent showed no
-address although libvirt had its lease.
+`spec.userData` that does not install and start the agent has none.
 
 ## Provider call outcomes
 

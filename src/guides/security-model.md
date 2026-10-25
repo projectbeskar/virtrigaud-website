@@ -314,7 +314,10 @@ Points that catch people out:
 The object reports `Ready=False`, reason `ConsumerNotAllowed`, with a message
 naming the referenced kind, namespace and name and the field that would grant
 access, plus one `Warning` event. No provider call is made through the refused
-reference, and nothing moves to `Failed`. The message is the same whether the
+reference. For a `VirtualMachine` this is a hold that reports
+`status.phase: Failed`, including for a VM that is running (see the
+[VM status reference](vm-status.md)); a `VMClone` or `VMMigration` already in
+flight waits instead of failing. The message is the same whether the
 referenced object does not exist or exists without a grant, so a refusal tells
 a tenant nothing about another namespace.
 

@@ -344,7 +344,7 @@ The sizes the scheduler works with are bounded by the schema:
 | Quantity | Bound |
 |----------|-------|
 | `VMClass.spec.cpu` | 1 to 128 |
-| `VMClass.spec.memory` | non-negative, below 100 TiB |
+| `VMClass.spec.memory` | non-negative, below 10^14 bytes (about 90.9 TiB; the CRD message says 100Ti) |
 | `status.placement.pendingResources` | CPU at most 128, memory at most 100 TiB (104857600 MiB) |
 | `status.placement.memoryCeilingMiB` | 0 to 104857600 |
 | Footprint of any VM in the accounting | at least 1 vCPU and 128 MiB |

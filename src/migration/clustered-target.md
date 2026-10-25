@@ -296,8 +296,7 @@ a host), and a retry after an import.
   is new, and `VirtualMachine` and `VMSet` accept an empty
   `spec.importedDisk.diskID` while `migrationRef` is set.
 - `Host.status.allocatableStorageBytes` is now the `default` pool's free space
-  only, measured fresh. Earlier v0.4.0 release candidates summed every active
-  pool. Review any `VMPlacementPolicy` that sets `minDiskSpacePerHost`.
+  only, measured fresh. Review any `VMPlacementPolicy` that sets `minDiskSpacePerHost`.
   See the [upgrade guide](../operations/upgrade.md).
 
 ## See also
