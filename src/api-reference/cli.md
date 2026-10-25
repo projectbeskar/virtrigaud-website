@@ -5,16 +5,16 @@ SPDX-License-Identifier: Apache-2.0
 
 # CLI Reference
 
-VirtRigaud provides several command-line tools for inspecting resources, validating conformance specs, developing providers, and load testing. This reference covers v0.4.0 and lists the commands and flags the tools actually define. For longer explanations and caveats see the [CLI Tools Reference](../references/cli-tools.md).
+VirtRigaud provides several command-line tools for inspecting resources, validating conformance specs, developing providers, and load testing. This reference covers v0.4.0 and lists the commands and flags the tools define. For longer explanations and caveats see the [CLI Tools Reference](../references/cli-tools.md).
 
 ## Overview
 
 | Tool | Purpose | Target Users |
 |------|---------|--------------|
 | [`vrtg`](#vrtg) | Read-only CLI for VMs and Providers | End users, DevOps teams |
-| [`vcts`](#vcts) | Conformance test runner and spec validator | Provider developers, QA teams |
-| [`vrtg-provider`](#vrtg-provider) | Provider development toolkit | Provider developers |
-| [`virtrigaud-loadgen`](#virtrigaud-loadgen) | Load generator | Performance engineers |
+| [`vcts`](#vcts) | Conformance test spec validator and runner (the runner cannot pass yet) | Provider developers, QA teams |
+| [`vrtg-provider`](#vrtg-provider) | Scaffold, check and catalog a new provider | Provider developers |
+| [`virtrigaud-loadgen`](#virtrigaud-loadgen) | Load generator for `VirtualMachine` create, delete and list | Performance engineers |
 | [`alpha-to-beta-dryrun`](#alpha-to-beta-dryrun) | v1alpha1 migration helper (tombstone) | Pre-v0.3.0 upgraders |
 
 ## Installation
@@ -30,7 +30,7 @@ chmod +x vrtg
 sudo mv vrtg /usr/local/bin/
 ```
 
-The same naming applies to `vcts`, `vrtg-provider` and `virtrigaud-loadgen`.
+The same naming applies to `vcts`, `vrtg-provider` and `virtrigaud-loadgen`. `<tool> --version` prints the release the binary was built from (`dev` for a source build).
 
 ### From Source
 
@@ -56,9 +56,9 @@ CLI for looking at VirtRigaud resources. Source: [`cmd/vrtg/main.go`](https://gi
 ### Global Flags
 
 ```bash
---kubeconfig string   Path to kubeconfig file (accepted but not used; set KUBECONFIG instead)
+--kubeconfig string   Path to kubeconfig file (default: KUBECONFIG, in-cluster, then ~/.kube/config)
 -n, --namespace       Kubernetes namespace (default: "default")
--o, --output          Output format: table, json, yaml (default: "table"; json and yaml are not implemented)
+-o, --output          Output format: table, json, yaml (default: "table")
 --timeout duration    Request timeout (default: 30s)
 -h, --help            Help for vrtg
 ```
@@ -67,24 +67,25 @@ CLI for looking at VirtRigaud resources. Source: [`cmd/vrtg/main.go`](https://gi
 
 | Command | Aliases | Status | Description |
 |---------|---------|--------|-------------|
-| `vrtg vm list` | `virtualmachine`, `vms` | Fails in v0.4.0 | List VirtualMachines in all namespaces (name, provider, class, image, IPs, age). |
-| `vrtg vm describe <name>` | | Fails in v0.4.0 | Show one VirtualMachine: provider, class, image, power state, IDs, IPs, console URL, conditions. |
-| `vrtg vm events <name>` | | Works | Show the Kubernetes events of a VirtualMachine in `--namespace`. |
-| `vrtg vm console-url <name>` | | Fails in v0.4.0 | Print `status.consoleURL`. |
-| `vrtg provider list` | `providers` | Fails in v0.4.0 | List Providers in all namespaces (name, type, endpoint, age). |
-| `vrtg provider status <name>` | | Fails in v0.4.0 | Show a Provider's type, endpoint and conditions. |
-| `vrtg provider logs <name>` | | Placeholder | Prints "not implemented - use kubectl logs". |
-| `vrtg snapshot create <vm> <snapshot>`, `list [vm]`, `revert <vm> <snapshot>` | `snap`, `snapshots` | Placeholder | Print "not implemented". |
-| `vrtg clone run <source> <target>`, `list` | `clones` | Placeholder | Print "not implemented". |
-| `vrtg conformance run <provider>` | `conf` | Placeholder | Prints "not implemented"; use [`vcts`](#vcts). |
-| `vrtg diag bundle` | `diagnostics` | Placeholder | Prints "not implemented". |
-| `vrtg init` | | Placeholder | Prints "not implemented". |
+| `vrtg vm list` | `virtualmachine`, `vms` | Implemented | List VirtualMachines (namespace, name, provider, class, image, IPs, age). All namespaces unless `-n` is given. |
+| `vrtg vm describe <name>` | | Implemented | Show one VirtualMachine: provider, class, image, power state, IDs, IPs, console URL, conditions. |
+| `vrtg vm events <name>` | | Implemented | Show the Kubernetes events of a VirtualMachine in `--namespace`. |
+| `vrtg vm console-url <name>` | | Implemented | Print `status.consoleURL`. |
+| `vrtg provider list` | `providers` | Implemented | List Providers (namespace, name, type, endpoint, age). All namespaces unless `-n` is given. |
+| `vrtg provider status <name>` | | Implemented | Show a Provider's type, endpoint, `status.healthy` and conditions. |
+| `vrtg provider logs <name>` | | Not implemented | Exits non-zero; use `kubectl logs`. |
+| `vrtg snapshot create <vm> <snapshot>`, `list [vm]`, `revert <vm> <snapshot>` | `snap`, `snapshots` | Not implemented | Exit non-zero; use `VMSnapshot` resources and `spec.snapshot.revertToRef`. |
+| `vrtg clone run <source> <target>`, `list` | `clones` | Not implemented | Exit non-zero; use `VMClone` resources. |
+| `vrtg conformance run <provider>` | `conf` | Not implemented | Exits non-zero; use [`vcts`](#vcts). |
+| `vrtg diag bundle` | `diagnostics` | Not implemented | Exits non-zero; use `kubectl describe` and `kubectl logs`. |
+| `vrtg init` | | Not implemented | Exits non-zero; install with the Helm chart. |
 | `vrtg completion bash\|zsh\|fish\|powershell` | | Implemented | Generate a shell completion script. |
 
-None of the subcommands defines flags beyond the global ones. Placeholder commands print a message and exit 0. `vm list` and `provider list` ignore `--namespace`.
+None of the subcommands defines flags beyond the global ones. `-o json` and `-o yaml` apply to `vm list`, `vm describe`, `provider list` and `provider status` (the output carries `apiVersion` and `kind` and omits `metadata.managedFields`); `vm events` and `vm console-url` always print text. `describe`, `console-url`, `events` and `provider status` read the namespace given by `-n` (`default` if omitted).
 
 ```bash
 vrtg vm list
+vrtg vm list -n production -o yaml
 vrtg vm describe my-vm -n production
 vrtg vm events my-vm -n production
 vrtg provider status vsphere-prod -n virtrigaud-system
@@ -92,7 +93,7 @@ vrtg provider status vsphere-prod -n virtrigaud-system
 
 ### Cluster access
 
-`vrtg` uses controller-runtime's default configuration loading: the `KUBECONFIG` environment variable, then in-cluster configuration, then `~/.kube/config`. There is no `~/.vrtg/config.yaml` and `vrtg` reads no `VRTG_*` environment variables.
+Without `--kubeconfig`, `vrtg` uses controller-runtime's default configuration loading: the `KUBECONFIG` environment variable, then in-cluster configuration, then `~/.kube/config`. A `--kubeconfig` path that cannot be loaded is an error; the tool does not fall back to another cluster. There is no `~/.vrtg/config.yaml` and `vrtg` reads no `VRTG_*` environment variables.
 
 ## vcts
 
@@ -101,7 +102,7 @@ VirtRigaud Conformance Test Suite. Source: [`cmd/vcts/main.go`](https://github.c
 ### Global Flags
 
 ```bash
---kubeconfig string   Path to kubeconfig file (accepted but not used; set KUBECONFIG instead)
+--kubeconfig string   Path to kubeconfig file (default: KUBECONFIG, in-cluster, then ~/.kube/config)
 -n, --namespace       Namespace of the Provider under test (default: "default")
 -v, --verbose         Verbose output
 -h, --help            Help for vcts
@@ -125,16 +126,16 @@ Run conformance tests against a Provider resource.
 vcts run --provider vsphere-prod --namespace virtrigaud-system --skip vm-power-cycle
 ```
 
-!!! warning "`vcts run` fails in v0.4.0"
-    It reads the Provider with a client that does not register the VirtRigaud API types and exits with `no kind is registered for the type v1beta1.Provider in scheme` before writing any result. Behind that, the step executor returns "not implemented" for every step type. See the [CLI Tools Reference](../references/cli-tools.md#vcts).
+!!! warning "`vcts run` cannot pass yet"
+    The runner reads the Provider and writes `results.json`, `junit.xml` and `report.md`, but it does not execute the steps of a specification: every `create`, `update`, `delete`, `wait` and `validate` step reports "not implemented", so the selected tests are reported as failed and the command exits non-zero. See the [CLI Tools Reference](../references/cli-tools.md#vcts).
 
 #### list
 
-Print the tests defined in `test/conformance/specs/` (relative to the current directory) with their descriptions and required capabilities.
+Print the tests defined in `test/conformance/specs/` with their descriptions and required capabilities. `list` and `run` read that directory relative to the current directory, so run them from the root of a VirtRigaud checkout.
 
 #### validate
 
-Validate the YAML test specifications. Takes an optional directory argument (default `test/conformance/specs`). It exits non-zero only when no spec file is found; an invalid file is printed as `ERROR: ...` but does not change the exit status (v0.4.0).
+Validate the YAML test specifications. Takes an optional directory argument (default `test/conformance/specs`). It exits non-zero when no spec file is found or when a file cannot be parsed or holds an invalid test (the file is printed as `ERROR: ...`); it exits 0 only when every file is valid.
 
 ```bash
 vcts validate test/conformance/specs/
@@ -144,7 +145,7 @@ The repository ships `test/conformance/specs/basic-lifecycle.yaml` with two test
 
 ## vrtg-provider
 
-Development toolkit for provider projects. Source: [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/main.go).
+Development toolkit for provider projects outside this repository; it edits local files only. Source: [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/main.go).
 
 ### Global Flags
 
@@ -167,44 +168,41 @@ vrtg-provider init <provider-name> [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-o, --output` | `.` | Output directory; the project is written to `<output>/providers/<provider-name>/` |
-| `-t, --type` | `generic` | Provider type: `vsphere`, `libvirt`, `firecracker`, `qemu`, `generic` |
-| `--remote` | `false` | Generate remote runtime configuration |
+| `-t, --type` | `generic` | Provider type: `vsphere`, `libvirt`, `firecracker`, `qemu`, `generic` (there is no `proxmox` value) |
+| `--remote` | `false` | Generate remote runtime configuration (the manifests under `config/`) |
+| `--virtrigaud-path` | the checkout the project is created in, if any | VirtRigaud checkout the generated `go.mod` resolves the SDK and proto modules from |
 | `--force` | `false` | Overwrite existing files |
 
 ```bash
 vrtg-provider init myprovider --type libvirt --output ./providers/
 ```
 
-!!! warning "The scaffold needs fixing before it builds"
-    In v0.4.0 the generated project does not compile as written (it imports the main module's `internal/version`, has an unused import, and a stale `ImagePrepare` signature). See [`vrtg-provider init`](../references/cli-tools.md#init-initialize-provider).
+The SDK and proto modules are not published under their own version tags, so the generated `go.mod` points at a local VirtRigaud checkout through `replace` directives: `init` writes them (a relative path when the project is inside the checkout) or, with `--virtrigaud-path`, uses the checkout you name. Run `go mod tidy` first, then `make build`. The generated `Dockerfile` cannot see that checkout, so build the image from a context that contains both. See [`vrtg-provider init`](../references/cli-tools.md#init-initialize-provider).
 
 #### generate
 
-!!! warning "`generate`, `verify` and `publish` do not run in v0.4.0"
-    Each first checks that the directory is a provider project and always fails with `not in a provider project directory: go.mod does not contain virtrigaud dependency`, even in a project created by `init`. See the [CLI Tools Reference](../references/cli-tools.md#generate-code-generation).
-
-Regenerate protocol buffer bindings. Source: [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/generate.go). Run from within a provider project directory (`go.mod` and `Makefile` required).
+Regenerate protocol buffer bindings. Source: [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/generate.go). Run from within a provider project directory (a `Makefile` and a `go.mod` that requires a `github.com/projectbeskar/virtrigaud` module, which `init` creates). A scaffolded project imports its bindings from the proto module, so there is nothing to generate and the command says so.
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--proto-only` | `false` | Only regenerate proto bindings |
-| `--clean` | `false` | Intended to clean first; it only prints `Would remove files matching: ...` and deletes nothing |
+| `--clean` | `false` | Remove `*.pb.go` files under `internal/rpc` before regenerating |
 
 #### verify
 
-Build, check, test and (best effort) conformance-check a provider project. Source: [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/verify.go). Run from within a provider project directory.
+Build, check and test a provider project. Source: [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/verify.go). Run from within a provider project directory.
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--skip-build` | `false` | Skip build check |
 | `--skip-tests` | `false` | Skip unit tests |
-| `--skip-conformance` | `false` | Skip the VCTS conformance step |
-| `--profile` | `core` | Conformance profile: `core`, `snapshot`, `clone`, `advanced` |
+| `--skip-conformance` | `false` | Skip the closing reminder that conformance was not run |
+| `--profile` | `core` | Deprecated and without effect |
 
-The conformance step invokes `vcts version` and `vcts run --profile`, neither of which exists in `vcts`, so it only ever prints a warning; use `--skip-conformance`.
+`verify` does not run the conformance suite, which needs the provider deployed in a cluster: deploy it, then run `vcts run --provider <name>` (the runner cannot pass yet, see [`vcts`](#vcts)).
 
 ```bash
-vrtg-provider verify --skip-conformance
+vrtg-provider verify
 ```
 
 #### publish
@@ -219,11 +217,11 @@ Write a catalog entry for a provider. Source: [`cmd/vrtg-provider/publish.go`](h
 | `--name` | No | directory name | Provider name |
 | `--tag` | No | `latest` | Image tag |
 | `--license` | No | `Apache-2.0` | SPDX license identifier |
-| `--skip-verify` | No | `false` | Skip the verification step |
+| `--skip-verify` | No | `false` | Skip the build and test step |
 | `--dry-run` | No | `false` | Print the catalog entry without writing it |
 | `--catalog` | No | auto-detect | Path to `providers/catalog.yaml` |
 
-The verification step records fixed placeholder results; it does not run the conformance suite.
+`publish` builds and tests the project, then records the conformance profile `core` as `skip` (not run) with a "not run" badge; it never claims a pass, with or without `--skip-verify`. It writes a local catalog file and does not open a pull request.
 
 ```bash
 vrtg-provider publish \
@@ -243,12 +241,12 @@ Prints the version and git SHA compiled into the binary (`dev` / `unknown` for a
 
 ## virtrigaud-loadgen
 
-Load generator for VirtualMachine create, delete and list operations. In v0.4.0 those three operations fail against a real cluster (the client does not register the VirtRigaud API types); see the [CLI Tools Reference](../references/cli-tools.md#virtrigaud-loadgen). Source: [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/virtrigaud-loadgen/main.go).
+Load generator for VirtualMachine create, delete and list operations; see the [CLI Tools Reference](../references/cli-tools.md#virtrigaud-loadgen) for the details. Source: [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/virtrigaud-loadgen/main.go).
 
 ### Global Flags
 
 ```bash
---kubeconfig string   Path to kubeconfig file (accepted but not used; set KUBECONFIG instead)
+--kubeconfig string   Path to kubeconfig file (default: KUBECONFIG, in-cluster, then ~/.kube/config)
 -n, --namespace       Namespace to create and delete VMs in (default: "default")
 -o, --output-dir      Output directory for results (default: "./loadgen-results")
 --dry-run             Don't create or delete Kubernetes resources
@@ -266,17 +264,17 @@ virtrigaud-loadgen run [flags]
 
 | Flag | Description |
 |------|-------------|
-| `-c, --config` | Load generation config file. Not implemented in v0.4.0: the file is not read and built-in defaults apply (5 minutes, 2 workers, provider `test-provider`, class `test-class`, image `test-image`). |
+| `-c, --config` | Load generation config file (YAML) that overrides the built-in defaults (5 minutes, 2 workers, provider `test-provider`, class `test-class`, image `test-image`). Keys you leave out keep their default; an unknown key is an error. |
 
 ```bash
 # Dry run
 virtrigaud-loadgen run --dry-run --namespace loadtest
 
-# Real run into a dedicated namespace
-virtrigaud-loadgen run --namespace loadtest --output-dir ./perf-results
+# Real run with a config file, into a dedicated namespace
+virtrigaud-loadgen run --config loadtest.yaml --namespace loadtest --output-dir ./perf-results
 ```
 
-The `delete` operation removes a random VirtualMachine from the target namespace (not only ones the tool created), so always use a dedicated namespace. Only create, delete and describe (a list) call the API; power, reconfigure, snapshot and clone are recorded as instant successes.
+Always use a dedicated namespace: a run creates real VirtualMachines and leaves the ones still present when it ends (remove them with `kubectl delete virtualmachine -n <namespace> -l generated-by=loadgen`). The `delete` operation removes only VMs that the same run created. Only create, delete and describe (a list) call the API; power, reconfigure, snapshot and clone are simulated and recorded as instant successes. The config file keys and their defaults are in the [CLI Tools Reference](../references/cli-tools.md#run-execute-load-test).
 
 There are no `scenarios` or `analyze` subcommands and no `--workers`, `--duration`, `--scenario` or `--vms` flags.
 
@@ -286,8 +284,8 @@ There are no `scenarios` or `analyze` subcommands and no `--workers`, `--duratio
 
 ```csv
 Operation,Provider,VMName,StartTime,Duration,Success,Error,Phase
-power,test-provider,,2026-01-15T10:00:01Z,0s,true,,PowerToggle
-describe,test-provider,,2026-01-15T10:00:02Z,24µs,false,"failed to list VMs: no kind is registered for the type v1beta1.VirtualMachineList in scheme",
+create,test-provider,loadgen-vm-1a2b3c-0-1,2026-01-15T10:00:01Z,41ms,true,,Creating
+power,test-provider,,2026-01-15T10:00:02Z,0s,true,,PowerToggle
 ```
 
 ## alpha-to-beta-dryrun
@@ -326,26 +324,26 @@ The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typ
 
 ### Using vrtg
 
-1. **Select the cluster explicitly** with `KUBECONFIG` or `kubectl config use-context`; `--kubeconfig` is not read.
-2. **Pass `--namespace`** for `describe`, `events`, `console-url` and `provider status`; the `list` commands always span all namespaces.
-3. **Use `kubectl`** for everything except `vrtg vm events`: the other read commands fail in v0.4.0 and the rest are placeholders (there is no JSON or YAML output).
+1. **Pass `--namespace`** when you want one namespace: the `list` commands span all namespaces without it, while `describe`, `events`, `console-url` and `provider status` read `default` unless you name one.
+2. **Use `-o json` or `-o yaml`** to feed other tools; use `kubectl` for waiting on conditions and for the commands `vrtg` does not implement (snapshots, clones, logs).
 
 ### Testing with vcts
 
-1. **Validate specs in CI** with `vcts validate`.
-2. **Treat `vcts run` as scaffolding** until the step executor is implemented.
+1. **Validate specs in CI** with `vcts validate`; it exits non-zero on an invalid spec.
+2. **Do not rely on `vcts run` yet**: the runner does not execute specification steps, so the selected tests fail.
 
 ### Developing with vrtg-provider
 
-1. **Start with `init`**, then fix the generated project so it builds, or start from `cmd/provider-mock`.
+1. **Start with `init`** inside a VirtRigaud checkout (or pass `--virtrigaud-path`), run `go mod tidy`, then `make build` and `vrtg-provider verify`.
 2. **Implement the core RPCs first** and declare only the capabilities you really implement.
-3. **Use `--skip-conformance`** with `verify`.
+3. **Treat a `publish` entry as unverified**: it records conformance as not run.
 
 ### Load Testing with virtrigaud-loadgen
 
 1. **Use a dedicated namespace**, and `--dry-run` first.
-2. **Create the Provider, VMClass and VMImage** named in the defaults (`test-provider`, `test-class`, `test-image`) before a real run.
-3. **Remember what is simulated**: power, reconfigure, snapshot and clone are simulated, and create, delete and describe fail against a cluster in v0.4.0.
+2. **Create the Provider, VMClass and VMImage** named in the defaults or in your `--config` file before a real run.
+3. **Remember what is simulated**: power, reconfigure, snapshot and clone are not sent to the API, so give them weight 0 unless you want them in the mix.
+4. **Clean up** the VMs left at the end with `kubectl delete virtualmachine -n <namespace> -l generated-by=loadgen`.
 
 ## Support
 

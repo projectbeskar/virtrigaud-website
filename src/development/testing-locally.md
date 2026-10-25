@@ -173,10 +173,12 @@ go build -o bin/vcts ./cmd/vcts
 ./bin/vcts list                               # list the tests (run from the repo root)
 ```
 
-`vcts run --provider <name>` also exists, but the runner's step executor
-(create, update, delete, wait, validate) is not implemented in v0.4.0, so a
-test with steps fails; do not use it as a pass/fail gate yet. There is no
-`make` shortcut for conformance. See the
+`vcts validate` exits non-zero when a spec file cannot be parsed or holds an
+invalid test. `vcts run --provider <name>` also exists, but the runner's step
+executor (create, update, delete, wait, validate) is not implemented in
+v0.4.0, so every selected test fails and the command exits non-zero; do not
+use it as a pass/fail gate yet. There is no `make` shortcut for conformance.
+See the
 [CLI Tools Reference](../references/cli-tools.md#vcts).
 
 ## Linting

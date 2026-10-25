@@ -409,8 +409,8 @@ If you want to add a hypervisor that does not exist in the tree yet (KubeVirt, F
 
 1. Read the [provider development guide](../development/providers.md) and the [provider gRPC contract](../references/grpc-api.md).
 2. Use the in-tree mock provider (`internal/providers/mock/`) as the minimum-implementation reference.
-3. Scaffold a new provider with `vrtg-provider init <name>` (or copy the proxmox layout, which has the cleanest separation between the gRPC server and the REST client).
+3. Scaffold a new provider with `vrtg-provider init <name>` (run it inside a VirtRigaud checkout or pass `--virtrigaud-path`, because the SDK and proto modules are resolved from a checkout), or copy the proxmox layout, which has the cleanest separation between the gRPC server and the REST client.
 4. Register the new capability set via the SDK builder (`sdk/provider/capabilities/`).
-5. Run the conformance suite against your provider pod with `vcts` (`cmd/vcts`; the test specs are in `test/conformance/specs`).
+5. Check the conformance specs with `vcts validate` (`cmd/vcts`; the specs are in `test/conformance/specs`). `vcts run` cannot pass yet: the runner does not execute the steps of a specification. See the [CLI tools reference](../references/cli-tools.md#vcts).
 
 That work is outside the scope of this operator onboarding page; see the developer documentation referenced above.

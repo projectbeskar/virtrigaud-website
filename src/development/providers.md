@@ -33,20 +33,38 @@ Tutorial](../providers/tutorial.md). For day-2 operator concerns, see
 
 ### The `vrtg-provider` scaffolder
 
-`vrtg-provider init|generate|verify|publish` exists (see the [CLI Tools
-Reference](../references/cli-tools.md#vrtg-provider)), but in v0.4.0 treat it
-as a rough starting point:
+`vrtg-provider init|generate|verify|publish` scaffolds and checks a provider
+project (see the [CLI Tools
+Reference](../references/cli-tools.md#vrtg-provider)):
 
-- the project `init` generates does not compile as written (it imports the
-  main module's `internal/version`, has an unused import and a stale
-  `ImagePrepare` signature);
-- `verify` only reliably builds and runs unit tests (its conformance step
-  calls `vcts` options that do not exist);
-- `publish` writes a catalog entry with placeholder conformance results.
+```bash
+vrtg-provider init myprovider --type libvirt --virtrigaud-path /path/to/virtrigaud
+cd providers/myprovider
+go mod tidy
+make build
+make test
+vrtg-provider verify
+```
 
-The most reliable skeleton is
+- `init` writes a project whose provider returns `Unimplemented` for every
+  operation, with its capabilities, a test, a `Makefile`, a `Dockerfile` and a
+  CI workflow. `--type` accepts `generic`, `vsphere`, `libvirt`, `firecracker`
+  and `qemu` (not `proxmox`); it selects the scaffold's template and is separate from
+  the closed `Provider.spec.type` enum above.
+- The SDK and proto modules have no version tags of their own, so the
+  generated `go.mod` resolves them from a local VirtRigaud checkout through
+  `replace` directives: `init` finds the checkout when the project is created
+  inside it, otherwise pass `--virtrigaud-path`. The generated `Dockerfile`
+  cannot see that checkout, so build the image from a context that contains
+  both, or adjust it.
+- `verify` builds the project, runs its unit tests and reports `gofmt`,
+  `go vet` and `golangci-lint` findings. It does **not** run the conformance
+  suite, and `vcts run` cannot pass yet (the runner implements no steps).
+- `publish` writes a catalog entry and records conformance as not run
+  (`core: skip`); it never claims a pass.
+
 [`cmd/provider-mock/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/provider-mock/main.go)
-together with `internal/providers/mock/`.
+together with `internal/providers/mock/` is a fuller reference implementation.
 
 ## Consuming the SDK from your own module
 

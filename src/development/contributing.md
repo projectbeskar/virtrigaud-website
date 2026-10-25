@@ -391,7 +391,8 @@ go build -o bin/vcts ./cmd/vcts
 ./bin/vcts validate test/conformance/specs/
 ```
 
-`vcts run` exists but its step executor is not implemented in v0.4.0; see the
+`vcts validate` exits non-zero when a spec is invalid. `vcts run` exists but
+its step executor is not implemented in v0.4.0, so it cannot pass yet; see the
 [CLI Tools Reference](../references/cli-tools.md#vcts).
 
 ## Release Process

@@ -231,7 +231,7 @@ Use the [Provider Developer Tutorial](../providers/tutorial.md) to create your p
 
 ### 2. Ensure Conformance
 
-Run the VirtRigaud Conformance Test Suite (VCTS) against a deployed `Provider` resource to verify your provider meets the requirements (see [`vcts`](cli-tools.md#vcts) for the flags):
+The VirtRigaud Conformance Test Suite (VCTS) is meant to be run against a deployed `Provider` resource (see [`vcts`](cli-tools.md#vcts) for the flags):
 
 ```bash
 # Install the VCTS tool
@@ -240,13 +240,19 @@ Run the VirtRigaud Conformance Test Suite (VCTS) against a deployed `Provider` r
 git clone --branch v0.4.0 https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud && go build -o vcts ./cmd/vcts
 
+# Validate the specification files (works today)
+vcts validate test/conformance/specs/
+
 # Run conformance tests against a Provider resource in the cluster
 vcts run --provider my-provider --namespace virtrigaud-system
 ```
 
+!!! warning "`vcts run` cannot pass yet"
+    In v0.4.0 the conformance runner implements no steps: every `create`, `update`, `delete`, `wait` and `validate` step reports "not implemented", so the selected tests are reported as failed and `vcts run` exits non-zero. It also selects tests only for `vsphere` and `libvirt` Providers. `vcts validate` and `vcts list` work. Until the runner executes steps, test your provider with your own VM lifecycle checks against a real cluster.
+
 ### 3. Publish to Catalog
 
-Use the `vrtg-provider publish` command to create and submit a catalog entry:
+Use the `vrtg-provider publish` command, from inside the provider project that `vrtg-provider init` created, to write a catalog entry:
 
 ```bash
 vrtg-provider publish \
@@ -258,11 +264,13 @@ vrtg-provider publish \
 ```
 
 The `publish` command will:
-1. Record verification results (in v0.4.0 these are fixed placeholders; `publish` does not run VCTS)
-2. Generate a catalog entry in `providers/catalog.yaml`
-3. Print next steps for opening a pull request
 
-In v0.4.0 `vrtg-provider publish` refuses to run (`not in a provider project directory`), see the [CLI Tools Reference](cli-tools.md#vrtg-provider). Write the catalog entry by hand until that is fixed.
+1. Build the project and run its unit tests (skipped with `--skip-verify`)
+2. Record the conformance profile `core` as `skip` (not run) and give the entry a "not run" badge; `publish` does not run VCTS and never records a pass
+3. Add or update the entry in `providers/catalog.yaml` (found by walking up from the current directory, or named with `--catalog`)
+4. Print next steps for opening a pull request
+
+`publish` only writes the local catalog file; it does not open the pull request. See the [CLI Tools Reference](cli-tools.md#publish-publishing).
 
 See [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/publish.go) for the full flag list.
 
@@ -273,7 +281,7 @@ See [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud
 
 To be included in the catalog, providers must:
 
-- ✅ Pass VCTS core profile tests (`vcts run` itself does not work in v0.4.0; see the [CLI Tools Reference](cli-tools.md#vcts))
+- ✅ Pass VCTS core profile tests (`vcts run` cannot pass yet because the runner implements no steps; see the [CLI Tools Reference](cli-tools.md#vcts))
 - ✅ Include comprehensive documentation
 - ✅ Provide Helm chart for deployment
 - ✅ Follow security best practices
