@@ -19,7 +19,7 @@ The tools are separate from the operator. They talk to the cluster with your kub
 | [`virtrigaud-loadgen`](#virtrigaud-loadgen) | Create and delete `VirtualMachine`s at a steady rate and record how long the API calls take | Performance engineers, SREs |
 | [`alpha-to-beta-dryrun`](#alpha-to-beta-dryrun) | v1alpha1 migration helper (tombstone) | Operators upgrading from pre-v0.3.0 |
 
-`vrtg`, `vcts` and `virtrigaud-loadgen` need the VirtRigaud CRDs installed in the cluster and permission to read (`vrtg`, `vcts`) or to create and delete (`virtrigaud-loadgen`) the resources they touch.
+`vrtg`, `vcts run` and `virtrigaud-loadgen` need the VirtRigaud CRDs installed in the cluster and permission to read (`vrtg`, `vcts run`) or to create and delete (`virtrigaud-loadgen`) the resources they touch. `vcts validate` and `vcts list` read local files only and need no cluster.
 
 !!! note "Limits in v0.4.0"
     - `vcts run` cannot pass yet: the conformance runner does not execute the steps of a specification, so the selected tests are reported as failed. `vcts validate` and `vcts list` work.
@@ -210,7 +210,7 @@ These commands exist so the command tree is stable. They are **not implemented**
 VirtRigaud Conformance Test Suite. Defined in [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vcts/main.go) with the runner in [`internal/conformance/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/internal/conformance).
 
 !!! warning "`vcts run` cannot pass yet"
-    `vcts validate` and `vcts list` work. `vcts run` connects to the cluster and reads the Provider, but the conformance runner does not execute the steps of a specification: every `create`, `update`, `delete`, `wait` and `validate` step reports "not implemented", so the selected tests are reported as failed and the command exits non-zero. The runner also infers a provider's capabilities from `spec.type` (only `vsphere` and `libvirt` Providers select any test) rather than from its status. Use `vcts validate` and `vcts list` today.
+    `vcts validate` and `vcts list` work. `vcts run` connects to the cluster and reads the Provider, but the conformance runner does not execute the steps of a specification: the `create`, `update`, `delete`, `wait` and `validate` steps report "not implemented", so each selected test fails at its first step and the command exits non-zero. The runner infers a provider's capabilities from `spec.type` rather than from its status, and only `vsphere` and `libvirt` Providers select any test: for any other Provider type `vcts run` selects zero tests, prints `Total Tests: 0` and exits 0. Use `vcts validate` and `vcts list` today.
 
 ### Usage
 
@@ -256,7 +256,7 @@ vcts run --provider libvirt-provider \
   --output-dir /tmp/test-results
 ```
 
-A run writes `results.json`, `junit.xml` and `report.md` into the output directory, prints a summary (total, passed, failed, skipped) and exits non-zero when a test fails. Until the runner executes steps (see the warning above), every selected test fails.
+A run writes `results.json`, `junit.xml` and `report.md` into the output directory, prints a summary (total, passed, failed, skipped) and exits non-zero when a test fails. Until the runner executes steps (see the warning above), every selected test fails. A Provider of a type that selects no test (anything but `vsphere` and `libvirt`) gives `Total Tests: 0` and exit status 0, and so does a run outside a checkout, where the specs directory is not found.
 
 #### list - List Available Tests
 
@@ -306,7 +306,7 @@ vrtg-provider [command] [flags]
 ### Global Flags
 
 ```bash
--v, --verbose   Enable verbose output
+-v, --verbose   Accepted, no effect
 --version       Print the version
 -h, --help      Help for vrtg-provider
 ```
@@ -345,7 +345,7 @@ vrtg-provider init myprovider --virtrigaud-path ~/src/virtrigaud
 vrtg-provider init myprovider --force
 ```
 
-The scaffold is created under `<output>/providers/<provider-name>/`. The provider name must be lowercase letters, digits and hyphens, start and end with a letter or digit, and be at most 63 characters. `init` refuses to overwrite existing files unless `--force` is given. The generated Go files are `gofmt`-clean.
+The scaffold is created under `<output>/providers/<provider-name>/`. The provider name must be lowercase letters, digits and hyphens, start and end with a letter or digit, and be at most 63 characters. `init` stops when the target directory already contains any file, unless `--force` is given. The generated Go files are `gofmt`-clean.
 
 **How the project finds the SDK and proto modules.** The SDK (`github.com/projectbeskar/virtrigaud/sdk`) and the protobuf bindings (`github.com/projectbeskar/virtrigaud/proto`) are separate Go modules that are **not published under their own version tags**. A generated project therefore resolves them, and the repository module they import from, from a local VirtRigaud checkout through `replace` directives in its `go.mod`:
 
@@ -424,7 +424,7 @@ vrtg-provider verify --skip-tests
 
 Create a catalog entry for a provider and write it to a catalog YAML file. Defined in [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/publish.go).
 
-Run it from within a provider project directory. It builds and tests the project, then adds or updates the provider's entry in the catalog file (default: `providers/catalog.yaml`, found by walking up from the current directory). `--dry-run` prints the entry without writing it.
+Run it from within a provider project directory. It builds and tests the project, then adds or updates the provider's entry in the catalog file (default: `providers/catalog.yaml`, found by walking up from the current directory). `--dry-run` prints the entry without writing it; it still runs the build and tests unless `--skip-verify` is also given. If no `providers/catalog.yaml` is found, pass `--catalog`.
 
 !!! note "Publish records conformance as not run"
     `publish` never claims a conformance pass. It records the `core` profile as `skip` (not run) and gives the entry a "not run" badge, both after the build-and-test step and with `--skip-verify`. The entry therefore does not say the provider conforms. `publish` writes to a local catalog file; it does not open a pull request.
@@ -472,7 +472,7 @@ vrtg-provider publish \
 vrtg-provider version
 ```
 
-Prints the version and git SHA that are compiled into the binary (`dev` and `unknown` in a locally built binary). `--version` prints the version only.
+Prints the version and git SHA. A release binary reports its release tag and `Git SHA: unknown` (the release build stamps only the version); a locally built binary reports `dev` and `unknown`. `--version` prints the version only (`dev (unknown)` for a local build).
 
 ### Provider Template Structure
 
@@ -483,7 +483,7 @@ providers/my-provider/
 ├── main.go                      # Entry point: SDK server, logging and recovery middleware
 ├── internal/
 │   └── provider/
-│       ├── provider.go          # gRPC service stubs; every operation returns Unimplemented
+│       ├── provider.go          # gRPC service: Validate, GetCapabilities; the VM operations return Unimplemented
 │       ├── capabilities.go      # Capability declaration (SDK capabilities builder)
 │       └── provider_test.go
 ├── config/
@@ -545,7 +545,7 @@ Each worker performs one randomly chosen operation per second for the configured
 | VM template | `classRef: test-class`, `imageRef: test-image`, label `generated-by: loadgen`, `powerState: On` |
 | Operation mix (weights) | create 20, delete 10, power 15, reconfigure 10, snapshot 5, clone 5, describe 35 |
 
-The `Provider`, `VMClass` and `VMImage` named in the configuration must exist in the namespace, or the creates are recorded as failures.
+Create the `Provider`, `VMClass` and `VMImage` named in the configuration in the namespace first. The tool does not check that they exist: a create is recorded as successful once the apiserver accepts the `VirtualMachine`, and a VM whose references are missing then fails to reconcile.
 
 `--config` reads a YAML file that overrides the defaults; keys you leave out keep their default. Durations are Go duration strings (`30s`, `5m`).
 
@@ -568,7 +568,7 @@ operations:                       # relative weights, not percentages; at least 
   clone: 0
 ```
 
-An unknown key, an unparsable duration or an unusable value (no providers, all weights zero, a missing `classRef` or `imageRef`, ...) is an error and nothing is created. The keys `vmCount`, `rampUpTime`, `steadyState`, `rampDownTime`, the `*Interval` keys, `vmTemplate.annotations` and `vmTemplate.resources` are accepted but not used in v0.4.0.
+An unknown key, an unparsable duration or an unusable value (no providers, all weights zero, a missing `classRef` or `imageRef`, ...) is an error and nothing is created. The keys `vmCount` (only echoed in the start-up banner), `rampUpTime`, `steadyState`, `rampDownTime`, the `*Interval` keys, `vmTemplate.annotations` and `vmTemplate.resources` are accepted but not used in v0.4.0.
 
 **What each operation does:**
 
@@ -576,6 +576,8 @@ An unknown key, an unparsable duration or an unusable value (no providers, all w
 - **delete** removes a random VM **that this run created** (`No VMs created by this run to delete` is recorded as a failure when there is none).
 - **describe** lists the VMs in the namespace.
 - **power**, **reconfigure**, **snapshot** and **clone** are **simulated**: they are recorded as instant successes without calling the API, so the summary does not measure those paths of the operator.
+
+**Exit status.** `run` exits 0 whenever the run completes, even if operations failed; read `summary.md` and `results.csv` for the outcome.
 
 **Cleanup.** VMs still present when the run ends are left in place. Remove them with:
 

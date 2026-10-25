@@ -46,8 +46,7 @@ make test
 vrtg-provider verify
 ```
 
-- `init` writes a project whose provider returns `Unimplemented` for every
-  operation, with its capabilities, a test, a `Makefile`, a `Dockerfile` and a
+- `init` writes a project whose provider answers `Validate` and `GetCapabilities` and returns `Unimplemented` for the VM operations, with a test, a `Makefile`, a `Dockerfile` and a
   CI workflow. `--type` accepts `generic`, `vsphere`, `libvirt`, `firecracker`
   and `qemu` (not `proxmox`); it selects the scaffold's template and is separate from
   the closed `Provider.spec.type` enum above.

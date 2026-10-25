@@ -81,7 +81,7 @@ CLI for looking at VirtRigaud resources. Source: [`cmd/vrtg/main.go`](https://gi
 | `vrtg init` | | Not implemented | Exits non-zero; install with the Helm chart. |
 | `vrtg completion bash\|zsh\|fish\|powershell` | | Implemented | Generate a shell completion script. |
 
-None of the subcommands defines flags beyond the global ones. `-o json` and `-o yaml` apply to `vm list`, `vm describe`, `provider list` and `provider status` (the output carries `apiVersion` and `kind` and omits `metadata.managedFields`); `vm events` and `vm console-url` always print text. `describe`, `console-url`, `events` and `provider status` read the namespace given by `-n` (`default` if omitted).
+The aliases in the table belong to the command group (`vrtg virtualmachine list`, `vrtg vms list`, `vrtg providers list`, `vrtg snap list`, `vrtg clones list`), not to the subcommand. None of the subcommands defines flags beyond the global ones. `-o json` and `-o yaml` apply to `vm list`, `vm describe`, `provider list` and `provider status` (the output carries `apiVersion` and `kind` and omits `metadata.managedFields`); `vm events` and `vm console-url` always print text. `describe`, `console-url`, `events` and `provider status` read the namespace given by `-n` (`default` if omitted).
 
 ```bash
 vrtg vm list
@@ -127,7 +127,7 @@ vcts run --provider vsphere-prod --namespace virtrigaud-system --skip vm-power-c
 ```
 
 !!! warning "`vcts run` cannot pass yet"
-    The runner reads the Provider and writes `results.json`, `junit.xml` and `report.md`, but it does not execute the steps of a specification: every `create`, `update`, `delete`, `wait` and `validate` step reports "not implemented", so the selected tests are reported as failed and the command exits non-zero. See the [CLI Tools Reference](../references/cli-tools.md#vcts).
+    The runner reads the Provider and writes `results.json`, `junit.xml` and `report.md`, but it does not execute the steps of a specification: every `create`, `update`, `delete`, `wait` and `validate` step reports "not implemented", so each selected test fails at its first step and the command exits non-zero. Only `vsphere` and `libvirt` Providers select any test; for other Provider types, or outside a checkout, zero tests are selected and the command exits 0. See the [CLI Tools Reference](../references/cli-tools.md#vcts).
 
 #### list
 
@@ -150,7 +150,7 @@ Development toolkit for provider projects outside this repository; it edits loca
 ### Global Flags
 
 ```bash
--v, --verbose       Enable verbose output
+-v, --verbose       Accepted, no effect
 --version           Print the version
 -h, --help          Help for vrtg-provider
 ```
@@ -218,7 +218,7 @@ Write a catalog entry for a provider. Source: [`cmd/vrtg-provider/publish.go`](h
 | `--tag` | No | `latest` | Image tag |
 | `--license` | No | `Apache-2.0` | SPDX license identifier |
 | `--skip-verify` | No | `false` | Skip the build and test step |
-| `--dry-run` | No | `false` | Print the catalog entry without writing it |
+| `--dry-run` | No | `false` | Print the catalog entry without writing it (the build and tests still run unless `--skip-verify`) |
 | `--catalog` | No | auto-detect | Path to `providers/catalog.yaml` |
 
 `publish` builds and tests the project, then records the conformance profile `core` as `skip` (not run) with a "not run" badge; it never claims a pass, with or without `--skip-verify`. It writes a local catalog file and does not open a pull request.
@@ -237,7 +237,7 @@ vrtg-provider publish \
 vrtg-provider version
 ```
 
-Prints the version and git SHA compiled into the binary (`dev` / `unknown` for a locally built binary).
+Prints the version and git SHA: a release binary reports its release tag and `Git SHA: unknown`; a local build reports `dev` and `unknown`.
 
 ## virtrigaud-loadgen
 
@@ -341,7 +341,7 @@ The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typ
 ### Load Testing with virtrigaud-loadgen
 
 1. **Use a dedicated namespace**, and `--dry-run` first.
-2. **Create the Provider, VMClass and VMImage** named in the defaults or in your `--config` file before a real run.
+2. **Create the Provider, VMClass and VMImage** named in the defaults or in your `--config` file before a real run; the tool does not check that they exist, and VMs with missing references are created but do not reconcile.
 3. **Remember what is simulated**: power, reconfigure, snapshot and clone are not sent to the API, so give them weight 0 unless you want them in the mix.
 4. **Clean up** the VMs left at the end with `kubectl delete virtualmachine -n <namespace> -l generated-by=loadgen`.
 

@@ -241,14 +241,14 @@ git clone --branch v0.4.0 https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud && go build -o vcts ./cmd/vcts
 
 # Validate the specification files (works today)
-vcts validate test/conformance/specs/
+./vcts validate test/conformance/specs/
 
 # Run conformance tests against a Provider resource in the cluster
-vcts run --provider my-provider --namespace virtrigaud-system
+./vcts run --provider my-provider --namespace virtrigaud-system
 ```
 
 !!! warning "`vcts run` cannot pass yet"
-    In v0.4.0 the conformance runner implements no steps: every `create`, `update`, `delete`, `wait` and `validate` step reports "not implemented", so the selected tests are reported as failed and `vcts run` exits non-zero. It also selects tests only for `vsphere` and `libvirt` Providers. `vcts validate` and `vcts list` work. Until the runner executes steps, test your provider with your own VM lifecycle checks against a real cluster.
+    In v0.4.0 the conformance runner implements no steps: every `create`, `update`, `delete`, `wait` and `validate` step reports "not implemented", so each selected test fails at its first step and `vcts run` exits non-zero. It selects tests only for `vsphere` and `libvirt` Providers (for other types, or outside a checkout, it selects none and exits 0). `vcts validate` and `vcts list` work. Until the runner executes steps, test your provider with your own VM lifecycle checks against a real cluster.
 
 ### 3. Publish to Catalog
 
@@ -281,7 +281,7 @@ See [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud
 
 To be included in the catalog, providers must:
 
-- ✅ Pass VCTS core profile tests (`vcts run` cannot pass yet because the runner implements no steps; see the [CLI Tools Reference](cli-tools.md#vcts))
+- ✅ Pass VCTS core profile tests (`vcts run` cannot pass yet because the runner implements no steps; see the [CLI Tools Reference](cli-tools.md#vcts)); until it can, describe in your pull request how you tested the provider
 - ✅ Include comprehensive documentation
 - ✅ Provide Helm chart for deployment
 - ✅ Follow security best practices
