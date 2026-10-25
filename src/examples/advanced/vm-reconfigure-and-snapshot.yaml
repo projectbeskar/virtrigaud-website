@@ -15,7 +15,15 @@
 #   provisioned at create time only). See the VMClass below and the Libvirt
 #   provider guide at https://projectbeskar.github.io/virtrigaud/providers/libvirt/
 #   for details.
-#   vSphere and Proxmox support online reconfigure unconditionally.
+#   vSphere needs the same flags for a running VM (a change it cannot take is refused
+#   with ResizePendingPowerOff until the VM is powered off); Proxmox ignores them.
+#
+# NOTE — this file is a tour of the resource kinds, not a runnable stack:
+#   - VMPlacementPolicy is used by the scheduler of clustered libvirt Providers
+#     only. Attached to a vSphere VM (as here) it is accepted and NOT enforced.
+#   - VMSet has no controller in v0.4.0: it reports Ready=False /
+#     ControllerNotImplemented and creates no VMs.
+#   - Providers, networks and the image are placeholders to adapt.
 
 ---
 # Placement policy for production workloads
@@ -63,9 +71,9 @@ spec:
 # VM Class defining resource tiers
 # cpuHotAddEnabled / memoryHotAddEnabled (Libvirt-specific):
 #   When true, the Libvirt provider provisions hotplug headroom at VM create time
-#   so that CPU and memory can be raised live (no power cycle) up to ~4× the
-#   initial values (vCPU ceiling capped at 64). These flags are ignored by the
-#   vSphere and Proxmox providers, which support online reconfigure unconditionally.
+#   so that CPU and memory can be raised live (no power cycle) up to 4× the
+#   initial values (vCPU ceiling capped at 64). vSphere applies the flags too (CPU
+#   hot-add is skipped for a nested-virtualization class); Proxmox ignores them.
 #   VMs created without these flags (including all VMs created before v0.3.9) still
 #   require a power cycle for any reconfiguration on Libvirt.
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -153,11 +161,11 @@ spec:
 
 ---
 # Create a pre-change snapshot
-# memory: true — requests a RAM-inclusive checkpoint.
+# includeMemory: true — requests a RAM-inclusive checkpoint.
 #   Libvirt: full system checkpoint (disk + RAM) when the VM is running;
-#            silently downgraded to disk-only with a WARN if the VM is stopped.
+#            a stopped VM gets a disk-only snapshot.
 #   Proxmox: supports memory snapshots.
-#   vSphere:  full memory-inclusive snapshot via CreateSnapshot(memory=true) when the VM is powered on.
+#   vSphere: full memory-inclusive snapshot when the VM is powered on.
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMSnapshot
 metadata:
@@ -168,7 +176,7 @@ spec:
     name: web-server-01
   snapshotConfig:
     name: "pre-upgrade-snapshot"
-    includeMemory: true  # Include memory state (Libvirt/Proxmox only; see comment above)
+    includeMemory: true  # Include memory state (see the comment above)
     description: "Snapshot before CPU/memory upgrade"
   retentionPolicy:
     maxAge: "168h"  # Keep for 7 days

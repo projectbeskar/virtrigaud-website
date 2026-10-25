@@ -8,15 +8,22 @@
 # NOTE — Libvirt online reconfigure:
 #   For CPU/memory changes to apply WITHOUT a power cycle on Libvirt/KVM, the VM
 #   must have been CREATED from a VMClass with cpuHotAddEnabled: true and/or
-#   memoryHotAddEnabled: true. The new values must also fall within the ~4×
-#   ceiling provisioned at create time (vCPU ceiling is hard-capped at 64).
-#   If either condition is not met, the provider logs a WARN and the controller
-#   orchestrates a graceful power cycle instead.
+#   memoryHotAddEnabled: true. The new values must also fall within the 4×
+#   ceiling provisioned at create time (vCPU ceiling is hard-capped at 64), and a
+#   memory shrink of a running VM never applies live. If a condition is not met,
+#   the change is written to the persistent definition only: the VM reports
+#   Reconfiguring=True / RestartRequired until it is power cycled (off, then on).
+#   The controller never powers a VM off by itself.
 #   For disk expansion: Libvirt grows the primary disk live via virsh blockresize
 #   (grow-only). A best-effort in-guest FS grow runs via the guest agent; if the
 #   guest agent is absent the block device is enlarged but the filesystem must be
 #   extended manually or via cloud-init.
-#   vSphere and Proxmox support online reconfigure and disk expansion unconditionally.
+# NOTE — vSphere: a powered-on VM takes a CPU or memory change only with the
+#   matching hot-add enabled on the VMClass (performanceProfile); otherwise the
+#   change is refused with Reconfiguring=False / ResizePendingPowerOff and is
+#   applied after you set spec.powerState: "Off". vSphere never resizes the root disk.
+# NOTE — Proxmox: CPU and memory changes are sent to PVE; a change PVE keeps pending
+#   (hot-plug not enabled for it) is currently reported as applied.
 
 ---
 # Upgrade web-server-01 resources.
@@ -42,14 +49,14 @@ spec:
     cpu: 4            # Upgrade from 2 to 4 CPUs
     memoryMiB: 8192    # Upgrade from 4096 MiB (4Gi) to 8192 MiB (8Gi)
 
-  # Expand the data disk
+  # Expand the data disk (vSphere only: the libvirt and Proxmox providers attach no
+  # spec.disks and report DisksApplied=False / NotSupportedByProvider). Only a disk
+  # that was attached at create can grow; an entry added later is not attached, and a
+  # smaller size is refused. Disk sizes travel with a CPU or memory change, which this
+  # patch also makes: a disk-size change alone does not trigger a Reconfigure.
   disks:
     - name: "data"
       sizeGiB: 100    # Expand from 50GB to 100GB
-      type: "thin"
-    # Add a new disk
-    - name: "logs"
-      sizeGiB: 20
       type: "thin"
 
 # The controller detects any change between the VM's effective resources
@@ -58,14 +65,11 @@ spec:
 # Reconfiguring=False/ValidationError and never sent to the provider) and
 # status.currentResources, then sends ONE Reconfigure request per provider
 # reconcile:
-# 1. The provider applies what it can online (see the Libvirt note above;
-#    vSphere and Proxmox apply CPU/memory online when the guest OS and
-#    hypervisor allow it).
-# 2. Anything that cannot be applied online is written to the VM's offline
-#    configuration instead and takes effect on its next power cycle — the
-#    controller does NOT power the VM off and back on for you. The provider
-#    logs a WARN when this happens; check it (or the guest's actual CPU/
-#    memory) if you need the new size to take effect immediately.
+# 1. The provider applies what it can online (see the notes above).
+# 2. On libvirt, anything that cannot be applied online is written to the VM's
+#    persistent definition instead and takes effect on its next power cycle —
+#    the controller does NOT power the VM off and back on for you. The VM
+#    reports Reconfiguring=True / RestartRequired until it has been power cycled.
 # 3. status.currentResources, status.lastReconfigureTime and the
 #    Reconfiguring condition are updated once the provider confirms the
 #    request — never before, and never to a size that was not actually sent.

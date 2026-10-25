@@ -30,7 +30,9 @@ spec:
     virtualizationBasedSecurity: false  # May conflict with some nested hypervisors
     cpuHotAddEnabled: true
     memoryHotAddEnabled: true
-    latencySensitivity: low  # Better performance for nested workloads
+    # latencySensitivity and hyperThreadingPolicy are accepted by the API but not
+    # applied by any provider in v0.4.0.
+    latencySensitivity: low
     hyperThreadingPolicy: prefer
   
   # Security profile configuration
@@ -41,10 +43,11 @@ spec:
     # TPM can be enabled if needed by nested VMs
     tpmEnabled: false
     
-    # Enable VT-d/AMD-Vi for better I/O performance
+    # Expose an IOMMU to the guest (vSphere vvtd.enable; libvirt adds an intel iommu device)
     vtdEnabled: true
   
-  # Resource limits and reservations
+  # Resource limits and reservations: accepted by the API but not applied by any
+  # provider in v0.4.0.
   resourceLimits:
     # Reserve CPU for consistent performance
     cpuReservation: 4000  # 4GHz reserved

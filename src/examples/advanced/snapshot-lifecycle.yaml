@@ -121,8 +121,11 @@ spec:
 #        -p '[{"op":"remove","path":"/spec/snapshot/revertToRef"}]'
 
 ---
-# Example CronJob for automated snapshot cleanup
-# (This would be deployed separately)
+# Example CronJob for automated snapshot cleanup (deploy separately).
+# The controller already deletes a VMSnapshot once its retentionPolicy.maxAge
+# has passed (checked about hourly), so a job like this is only for snapshots
+# without a maxAge. retentionPolicy.maxCount and spec.schedule are not acted on.
+# Replace the image with any image that has kubectl and a POSIX shell.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -142,13 +145,17 @@ spec:
             - /bin/sh
             - -c
             - |
-              # Delete snapshots older than retention policy
-              # In practice, this would be handled by the controller
-              echo "Cleanup would run here"
-              
-              # Delete old automated snapshots
-              kubectl delete vmsnapshots -l automated=true \
-                --field-selector='metadata.creationTimestamp<$(date -d "90 days ago" -Iso-8601)'
+              # Delete automated snapshots older than 90 days. A field selector
+              # cannot filter on creationTimestamp, so compare it here
+              # (ISO 8601 UTC timestamps compare correctly as strings).
+              cutoff=$(date -u -d "@$(( $(date +%s) - 90 * 86400 ))" +%Y-%m-%dT%H:%M:%SZ)
+              kubectl get vmsnapshots -l automated=true \
+                -o jsonpath='{range .items[*]}{.metadata.creationTimestamp} {.metadata.name}{"\n"}{end}' |
+              while read -r created name; do
+                if [ "$(expr "$created" '<' "$cutoff")" = 1 ]; then
+                  kubectl delete vmsnapshot "$name"
+                fi
+              done
           restartPolicy: OnFailure
 
 ---

@@ -119,7 +119,7 @@ The sections below give the detail.
 
 ## RPC support
 
-- **Validate**: `virsh version` over the SSH connection.
+- **Validate**: `virsh list --all --name` over the SSH connection (the provider also runs `virsh version` once at startup). A clustered Provider checks instead that its host registry loaded at least one host; per-host reachability is reported through `ListHosts` / `GetHostInfo`.
 - **Create**: names the domain `<namespace>.<name>`, stamps it with its owner, copies or creates the qcow2 root disk in the `default` pool, builds a private NoCloud seed ISO, defines the domain. The VM is left **powered off**; the `VirtualMachine` controller powers it on when `spec.powerState` is `On`.
 - **Delete**: undefines the domain and removes only the files that are provably its own (see [Delete](#delete)).
 - **Power**: start / shutdown / destroy / reboot, idempotent.
@@ -160,7 +160,7 @@ The libvirt provider reads credentials from the Secret mounted at `/etc/virtriga
 |------------|-----------|----------|
 | `username` | `/etc/virtrigaud/credentials/username` | SSH username (also taken from the endpoint URI) |
 | `password` | `/etc/virtrigaud/credentials/password` | Password authentication |
-| `ssh-privatekey` | `/etc/virtrigaud/credentials/ssh-privatekey` | SSH private key in PEM (preferred) |
+| `ssh-privatekey` | `/etc/virtrigaud/credentials/ssh-privatekey` | SSH private key in PEM (ignored when `password` is also present, see below) |
 | `known_hosts` | `/etc/virtrigaud/credentials/known_hosts` | Pinned host keys, see [SSH host-key verification](#ssh-host-key-verification) |
 
 At least one of `password` or `ssh-privatekey` is required. **If both are present the password is used**, not the key (`sshAuthMethods` in `sshclient.go`): put only the key in the Secret unless you mean to use the password.

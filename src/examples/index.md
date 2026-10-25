@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Examples
 
-These examples mirror the `examples/` directory of the VirtRigaud repository at **v0.4.0**. All of them use the `infra.virtrigaud.io/v1beta1` API, and every `infra.virtrigaud.io` object in them is checked in CI against the v0.4.0 CRDs (strict server-side dry-run), so an unknown field, a wrong type or an invalid enum value would fail the build. Provider images are pinned to `ghcr.io/projectbeskar/virtrigaud/provider-<type>:v0.4.0`.
+These examples mirror the `examples/` directory of the VirtRigaud repository at **v0.4.0**. All of them use the `infra.virtrigaud.io/v1beta1` API, and every `infra.virtrigaud.io` object in them was checked against the v0.4.0 CRDs with a strict server-side dry-run (CRD schema and CEL rules), so none carries an unknown field, a wrong type or an invalid enum value. The webhooks are not part of that check. Provider images are pinned to `ghcr.io/projectbeskar/virtrigaud/provider-<type>:v0.4.0`.
 
 !!! warning "Replace the placeholders before you apply anything"
     Endpoints (`vcenter.example.com`, `pve.example.com`, `192.0.2.x`), Secret names, datastores, template names and image URLs are placeholders. Credential Secrets contain `REDACTED` values.
@@ -22,7 +22,7 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 | File | What it shows |
 |------|---------------|
 | [complete-example.yaml](complete-example.yaml) | End to end on vSphere: Secret, Provider, VMClass, VMImage, VMNetworkAttachment and VirtualMachine |
-| [vm-ubuntu-small.yaml](vm-ubuntu-small.yaml) | A small Ubuntu VirtualMachine with a graceful-shutdown lifecycle configuration |
+| [vm-ubuntu-small.yaml](vm-ubuntu-small.yaml) | A small Ubuntu VirtualMachine (its `spec.lifecycle` block is accepted by the API but not executed in v0.4.0) |
 | [vmclass-small.yaml](vmclass-small.yaml) | A VMClass (CPU, memory, disk defaults, firmware, guest-tools policy, `extraConfig`) |
 | [vmimage-ubuntu.yaml](vmimage-ubuntu.yaml) | A VMImage |
 | [vmnetwork-app.yaml](vmnetwork-app.yaml) | A VMNetworkAttachment |
@@ -63,7 +63,7 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 | [vm-scsi-controllers.yaml](vm-scsi-controllers.yaml) | Disks on several SCSI controllers (vSphere only) |
 | [vsphere-static-ip.yaml](vsphere-static-ip.yaml) | A static IPv4 address through `guestinfo.network.*` (vSphere; the template must contain an agent that reads the keys) |
 | [disk-sizing-examples.yaml](disk-sizing-examples.yaml) | Disk sizes from the VMClass, per provider, with the cross-namespace grants the VMs need |
-| [graceful-shutdown-examples.yaml](graceful-shutdown-examples.yaml) | `OffGraceful` power state and the shutdown configuration |
+| [graceful-shutdown-examples.yaml](graceful-shutdown-examples.yaml) | `OffGraceful` and `Off` power states ([Graceful shutdown](../guides/advanced/graceful-shutdown.md)); the `spec.lifecycle` block is accepted but not executed |
 | [nested-virtualization.yaml](nested-virtualization.yaml) | VMClasses and VMs with nested virtualization (see [Nested virtualization](../guides/advanced/nested-virtualization.md)) |
 | [v021-feature-showcase.yaml](v021-feature-showcase.yaml) | The v0.2.1 feature set in one file (historical; kept valid against the current schema) |
 

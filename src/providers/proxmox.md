@@ -11,7 +11,7 @@ This page is aligned to **VirtRigaud v0.4.0**. Capability claims trace back to `
 
 ## Status
 
-The Proxmox provider is listed as **Production-beta** in the [capability matrix](providers-capabilities.md). It implements the VM lifecycle, snapshot, clone, image and disk-migration RPCs (not `HardwareUpgrade`, `ListHosts` or `GetHostInfo`), but it has had the least production burn-in of the three providers, and part of its behaviour is limited:
+The Proxmox provider is listed as **Beta** in the [capability matrix](providers-capabilities.md). It implements the VM lifecycle, snapshot, clone, image and disk-migration RPCs (not `HardwareUpgrade`, `ListHosts` or `GetHostInfo`), but it has had the least production burn-in of the three providers, and part of its behaviour is limited:
 
 - Most of the Proxmox logic (owner stamps, re-bind, in-flight guards, clone and create error classes) is covered by tests against an in-repo PVE fake. The v0.4.0 release candidates were also run in the project's lab on a **single** Proxmox VE 9.2 node (cloud-init drive storage, power-task phase, network settings, snapshot revert, migration); behaviour that needs a multi-node cluster has not been exercised.
 - It applies only part of `spec.userData` (see [Cloud-init](#cloud-init-what-the-provider-applies)).
@@ -57,7 +57,7 @@ For the full cross-provider matrix and resilience / observability story:
 
 ## RPC support
 
-- **Validate**: finds a node on the cluster and checks the credentials and the default storage setting.
+- **Validate**: checks that the default storage setting is a valid storage ID, then finds a node. Without `PROVIDER_NODE_SELECTOR` that is a `GET /nodes` call, which exercises the credentials; with a selector set, the first entry is used without contacting PVE.
 - **Create**: clones a PVE template (by VMID), or builds a bare VM, or builds a VM from a migration's staged disk. Stamps the VM with its owner.
 - **Delete**: stops the VM if it is running, then destroys it with `purge=1` and waits for the task. Never destroys a template.
 - **Power**: `start` / `stop` / `shutdown` / `reboot`, idempotent; returns a task.
@@ -104,10 +104,17 @@ Create the token in PVE:
 # As root@pam on a PVE node
 pveum user add virtrigaud@pve --comment "VirtRigaud"
 pveum user token add virtrigaud@pve vrtg-token --privsep 1
-# With --privsep 1 the token needs its own ACL (see "PVE privileges" below):
+# With --privsep 1 a token gets only the permissions that BOTH the user and the
+# token itself hold (PVE docs), so grant the role to the user and to the token:
+pveum acl modify / --users virtrigaud@pve --roles PVEVMAdmin
 pveum acl modify / --tokens 'virtrigaud@pve!vrtg-token' --roles PVEVMAdmin
+# PVEVMAdmin does not include Datastore.AllocateSpace (PVE docs): also grant
+# Datastore.AllocateSpace and Datastore.Audit on the storages VMs and cloud-init
+# drives are created on (for example with the built-in PVEDatastoreUser role),
+# again to the user and to the token.
 # Or use a tighter custom role (the privilege list is in "PVE privileges"):
 # pveum role add VirtRigaud --privs "VM.Allocate,VM.Audit,..."
+# pveum acl modify / --users virtrigaud@pve --roles VirtRigaud
 # pveum acl modify / --tokens 'virtrigaud@pve!vrtg-token' --roles VirtRigaud
 ```
 
@@ -189,9 +196,10 @@ VirtRigaud does not publish a complete, tested PVE role. What the v0.4.0 documen
 | `VM.Audit` | Reading VM config (every `Describe`, every owner check) | PVE docs |
 | `VM.PowerMgmt` | Start / stop / shutdown / reboot | PVE docs |
 | `VM.Config.CPU`, `VM.Config.Memory` | `Reconfigure` and the VMClass sizing applied at create | PVE docs |
-| `VM.Config.Options` | The **owner stamp** (VM description / Notes) on every create, clone and adopted VM; boot order; `ciuser`/`sshkeys` | VirtRigaud docs; `PVEVMAdmin` includes it |
+| `VM.Config.Options` | The **owner stamp** (VM description / Notes) on every create, clone and adopted VM; the boot order of a clone with user-data | VirtRigaud docs (the stamp); PVE docs (boot order); `PVEVMAdmin` includes it |
 | `VM.Config.Network` | Setting a VM's `netN` (new VM's NICs, a clone's named NICs) | VirtRigaud docs |
 | `VM.Config.Cloudinit` | `ipconfigN` and `nameserver` (static IP and DNS on a clone, the DHCP `ipconfigN` of a clone with user-data) | VirtRigaud docs |
+| `VM.Config.Cloudinit` (same privilege) | `ciuser` and `sshkeys`, written from the user-data | PVE docs |
 | `SDN.Use` on `/sdn/zones/<zone>/<bridge>` (and `/<bridge>/<tag>` for a VLAN) | Every bridge a VM is put on, for any token that is not root. A plain Linux bridge such as `vmbr0` is in the `localnetwork` zone | VirtRigaud docs |
 | `VM.Config.Disk`, `Datastore.AllocateSpace` | The cloud-init drive and disks on the target storage | PVE docs |
 | `Datastore.Audit` | Reading storage | PVE docs |

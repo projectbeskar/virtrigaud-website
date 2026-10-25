@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VM Cloning (VMClone)
 
-The **VMClone** controller clones an existing, provisioned `VirtualMachine` into a new one through a declarative resource. It shipped in **v0.3.8**; v0.4.0 adds libvirt full clones (v0.3.9), a new cloud-init identity for every clone, owner stamping and idempotent re-sends, and the cross-namespace target grant.
+The **VMClone** controller clones an existing, provisioned `VirtualMachine` into a new one through a declarative resource. It shipped in **v0.3.8** and gained libvirt support in v0.3.9; v0.4.0 adds a new cloud-init identity for every clone, owner stamping and idempotent re-sends, the cross-namespace target grant, and, on libvirt, a powered-off source requirement and the disabling of linked clones.
 
 This page covers the scope and limits, the per-provider rules, what a clone boots with, what the controller produces, the cross-namespace rules, and clean-up.
 
@@ -166,7 +166,7 @@ The VMClone's status:
 
 The provider stamps each clone with its **target** VirtualMachine's identity (namespace, name, UID): vSphere in ExtraConfig, libvirt in the domain metadata, Proxmox in the VM description. A clone never claims the source's owner stamp. So a `Clone` sent again for the same target (the manager restarted, or an answer was lost) **returns the clone an earlier attempt made instead of making a second one**; a VM of the clone's name that is not provably the target's is refused (`AlreadyExists`). The manager only re-sends to a provider that reports `supportsOwnerRebind`; for an older provider image an unknown outcome fails the clone rather than risk a second VM.
 
-While a clone is held, the VMClone is `Pending` with `Ready=False` and one of these reasons: `CloneRetrying` (nothing was done; retried 15 s doubling to 5 min), `CloneOutcomeUnknown` (the answer was lost; the `Clone` is sent again), `SourceMustBePoweredOff` (libvirt). Terminal failures are `Failed`: `ProviderConflict` (the provider refused a first attempt with `AlreadyExists`), `TargetConflict`, `LinkedCloneUnsupported`, `UnsupportedSource`, `Unsupported`, `ProviderError`. Details: [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/main/docs/provider-call-outcomes.md).
+While a clone is held, the VMClone is `Pending` with `Ready=False` and one of these reasons: `CloneRetrying` (nothing was done; retried 15 s doubling to 5 min), `CloneOutcomeUnknown` (the answer was lost; the `Clone` is sent again), `SourceMustBePoweredOff` (libvirt). On a clustered Provider a clone also waits (re-checked every 2 minutes) while the source VM's host cannot take it: `SourceHostGone`, `SourceHostNotReady`, `SourceHostCordoned` or `SourceHostExcluded`. Terminal failures are `Failed`: `ProviderConflict` (the provider refused a first attempt with `AlreadyExists`), `TargetConflict`, `LinkedCloneUnsupported`, `UnsupportedSource`, `Unsupported`, `ProviderError`. Details: [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/main/docs/provider-call-outcomes.md).
 
 ## Cross-namespace targets
 

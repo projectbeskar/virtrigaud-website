@@ -98,9 +98,8 @@ Use the image that matches your manager release; all are published under `ghcr.i
 | `provider-vsphere:v0.4.0` | vSphere, using govmomi |
 | `provider-libvirt:v0.4.0` | libvirt/KVM, using `virsh` and `qemu-img` over SSH |
 | `provider-proxmox:v0.4.0` | Proxmox VE (REST API plus SSH for disk transfer) |
-| `provider-mock:v0.4.0` | Mock provider for tests |
 
-`spec.runtime.image` accepts `image:tag`, `image@sha256:<digest>` or `image:tag@sha256:<digest>`. **A Provider pins its image: upgrading VirtRigaud does not change `spec.runtime.image`.** Roll providers by editing the field (see [Upgrading provider images](#upgrading-provider-images)); keep the manager and its providers on the same release.
+The mock provider (`provider-mock`) is a development and conformance-testing image built from the source tree; it is not one of the release images. `spec.runtime.image` accepts `image:tag`, `image@sha256:<digest>` or `image:tag@sha256:<digest>`. **A Provider pins its image: upgrading VirtRigaud does not change `spec.runtime.image`.** Roll providers by editing the field (see [Upgrading provider images](#upgrading-provider-images)); keep the manager and its providers on the same release.
 
 ## TLS between manager and provider
 

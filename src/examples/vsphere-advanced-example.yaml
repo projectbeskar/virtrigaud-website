@@ -241,6 +241,6 @@ spec:
 # Example: How to gracefully shutdown this VM (v0.2.1+)
 # kubectl patch virtualmachine web-server-remote --type='merge' -p='{"spec":{"powerState":"OffGraceful"}}'
 # This will:
-# 1. Execute the preStop hook (stop nginx, stop my-web-app, sync)
-# 2. Attempt graceful shutdown using VMware Tools (120s timeout)
-# 3. Fall back to hard power off if graceful shutdown fails
+# 1. Attempt graceful shutdown using VMware Tools (fixed 60s timeout; the preStop hook
+#    and gracefulShutdownTimeout above are not used in v0.4.0)
+# 2. Fall back to hard power off if Tools are not running, the shutdown fails or times out

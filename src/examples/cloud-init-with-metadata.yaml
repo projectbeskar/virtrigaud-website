@@ -132,7 +132,7 @@ spec:
 ---
 # Example: VirtualMachine with default metadata (no metaData specified)
 # When metaData is not specified, VirtRigaud uses the default:
-# {"instance-id": "<vm-name>"}
+# instance-id: "<vm-name>" (vSphere)
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VirtualMachine
 metadata:
@@ -155,8 +155,8 @@ spec:
             sudo: ALL=(ALL) NOPASSWD:ALL
   
   # No metaData specified - will use default:
-  # guestinfo.metadata = {"instance-id": "vm-default-metadata"}
-  # guestinfo.metadata.encoding = "json"
+  # guestinfo.metadata = base64 of: instance-id: "vm-default-metadata"
+  # guestinfo.metadata.encoding = "base64"
   
   networks:
     - name: default

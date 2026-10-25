@@ -189,7 +189,7 @@ Rules:
 
 ## Image preparation
 
-A `VMImage` describes where an image comes from. For providers that import images (libvirt URL sources, vSphere OVA sources, Proxmox sources), the VirtualMachine controller prepares the image **lazily, right before the first create**, and only when the Provider advertises `status.reportedCapabilities.supportsImageImport`; otherwise the VM is created by reference and preparation is skipped. Example: [`vmimage-prepare-on-create.yaml`](../../examples/vmimage-prepare-on-create.yaml).
+A `VMImage` describes where an image comes from. For providers that import images (libvirt URL sources, vSphere OVA/OVF URL sources), the VirtualMachine controller prepares the image **lazily, right before the first create**, and only when the Provider advertises `status.reportedCapabilities.supportsImageImport`; otherwise the VM is created by reference and preparation is skipped. Proxmox clones a template that already exists (`source.proxmox.templateID`); its URL import (`source.http`) is not supported in v0.4.0 and is refused with `InvalidSource`. Example: [`vmimage-prepare-on-create.yaml`](../../examples/vmimage-prepare-on-create.yaml).
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1
@@ -278,7 +278,7 @@ Metrics, from `internal/obs/metrics` (see [Observability](../../operations/obser
 | `virtrigaud_vm_operations_total{operation,provider_type,provider,outcome}` | VM operations by outcome |
 | `virtrigaud_provider_rpc_requests_total`, `virtrigaud_provider_rpc_latency_seconds` | Provider RPCs by method and code |
 | `virtrigaud_provider_tasks_inflight` | Asynchronous provider tasks in flight |
-| `virtrigaud_errors_total{reason}` | Controller errors by reason (for example `provider-ref-mismatch`, `force-delete-not-allowed`) |
+| `virtrigaud_errors_total{reason,component}` | Controller errors by reason (for example `provider-ref-mismatch`, `force-delete-not-allowed`) |
 | `virtrigaud_ip_discovery_duration_seconds` | Time until a VM shows an address |
 
 Events you will see on a VM: `SnapshotRevertStarted`, `SnapshotRevertSucceeded`, `SnapshotRevertFailed`, `Orphaned`, `VMLeftOnHypervisor`, `DeleteBlocked`, `NotSupportedByProvider`, `ProviderRefMismatch`, `ConsumerNotAllowed`, `CreateOutcomeUnknown`. On a `VMSnapshot`: `SnapshotReady`, `SnapshotFailed`, `SnapshotDeleting`, `SnapshotDeleted`, `SnapshotDeleteFailed`.

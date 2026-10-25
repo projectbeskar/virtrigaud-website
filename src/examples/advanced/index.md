@@ -13,12 +13,12 @@ These examples cover the operations beyond creating a VM: snapshots and revertin
 | File | What it shows |
 |------|---------------|
 | [snapshot-lifecycle.yaml](snapshot-lifecycle.yaml) | `VMSnapshot` objects with retention policies, a weekly-backup pattern, how to revert a VM to a snapshot with `spec.snapshot.revertToRef`, and a CronJob for snapshot cleanup |
-| [vm-reconfigure-and-snapshot.yaml](vm-reconfigure-and-snapshot.yaml) | A VMClass with hot-add enabled, a VM, a snapshot before a resize, a `VMPlacementPolicy`, a `VMClone` and a `VMSet` |
+| [vm-reconfigure-and-snapshot.yaml](vm-reconfigure-and-snapshot.yaml) | A VMClass with hot-add enabled, a VM, a snapshot before a resize, a `VMPlacementPolicy`, a `VMClone` and a `VMSet` (the policy only matters to clustered libvirt Providers, and `VMSet` has no controller) |
 | [vm-reconfigure-patch.yaml](vm-reconfigure-patch.yaml) | A resize applied with `kubectl patch`, and the libvirt hot-add and disk-grow rules |
 | [vsphere-clone-example.yaml](vsphere-clone-example.yaml) | Several VMs created from one vSphere template, and a `VMClone` of an existing VM |
 | [proxmox-clone-example.yaml](proxmox-clone-example.yaml) | Full and linked `VMClone` objects on Proxmox VE |
-| [vsphere-task-tracking.yaml](vsphere-task-tracking.yaml) | Following long-running vSphere operations (create, reconfigure) through the VM's task status |
-| [console-access-example.yaml](console-access-example.yaml) | Reading the console URL of a vSphere VM (web console) and a libvirt VM (VNC) |
+| [vsphere-task-tracking.yaml](vsphere-task-tracking.yaml) | Following long-running vSphere operations (a large create, a reconfigure) through the VM's phase, conditions, events and the provider log |
+| [console-access-example.yaml](console-access-example.yaml) | `status.consoleURL`: a vSphere Client link for a vSphere VM, and a loopback-only VNC URL (reach it through an SSH tunnel) for a libvirt VM |
 
 For `VMClone` without a Provider around it, see [`vmclone-basic.yaml`](../vmclone-basic.yaml) in the main examples.
 
@@ -66,10 +66,10 @@ kubectl patch vm web-server-01 --patch-file vm-reconfigure-patch.yaml --type mer
 
 The reconfigure results are described in [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md#reconfiguration).
 
-## Console access and task tracking
+## Console access and long-running operations
 
-- [console-access-example.yaml](console-access-example.yaml): `status.consoleURL` holds the vSphere web console URL or the libvirt VNC URL. Use an SSH tunnel for VNC; do not expose the VNC port.
-- [vsphere-task-tracking.yaml](vsphere-task-tracking.yaml): the manager follows a vSphere task until it finishes, so a slow create or reconfigure shows progress on the VM instead of a hung call.
+- [console-access-example.yaml](console-access-example.yaml): `status.consoleURL` holds a link to the VM in the vSphere Client, or the libvirt VNC URL. The libvirt VNC display listens on `127.0.0.1` of the libvirt host only: reach it through an SSH tunnel and do not expose the port.
+- [vsphere-task-tracking.yaml](vsphere-task-tracking.yaml): the vSphere provider waits for each vCenter task inside the call and reports no task progress. A slow create or reconfigure shows as `status.phase` `Provisioning` or `Reconfiguring` with the conditions, events and provider log behind it; vCenter's Tasks & Events view has the task itself.
 
 ## Getting started
 
@@ -95,7 +95,7 @@ kubectl get vm <vm-name> -o jsonpath='{.status.ips}'
 |---------|-------|
 | A `VMClone` stays `Pending` | `kubectl get vmclone <name> -o jsonpath='{.status.conditions}'`: reasons include `SourceNotFound`, `SourceMustBePoweredOff` (libvirt), `TargetNamespaceNotAllowed`, `ConsumerNotAllowed`, `CloneRetrying` and `CloneOutcomeUnknown` |
 | A `VMClone` is `Failed` | The reason names it: `LinkedCloneUnsupported`, `UnsupportedSource`, `TargetConflict`, `ProviderConflict`. `Failed` is terminal: fix the spec and create a new `VMClone` |
-| No console URL | Check the VM is powered on and its provider supports console access; see the provider logs |
+| No console URL | The VM is created (vSphere) or powered on (libvirt); see the provider logs |
 | A snapshot delete does not finish | `kubectl describe vmsnapshot <name>`: `DeleteBlocked` means the provider refused it (for example a libvirt snapshot another snapshot depends on); the message says what to delete first |
 
 ## See also

@@ -144,7 +144,7 @@ spec:
           - ls -la /dev/kvm
 ```
 
-The `VMImage` source above is a libvirt URL source; on vSphere or Proxmox use a template source (`source.vsphere.templateName`, `source.proxmox.templateName`).
+The `VMImage` source above is a libvirt URL source; on vSphere or Proxmox use a template source (`source.vsphere.templateName`, or `source.proxmox.templateID`, the VMID of an existing Proxmox template).
 
 ## Provider details
 

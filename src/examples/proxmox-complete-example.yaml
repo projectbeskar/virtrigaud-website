@@ -100,7 +100,7 @@ metadata:
 spec:
   source:
     proxmox:
-      templateName: "ubuntu-22-template"  # Existing template in Proxmox VE
+      templateID: 9000  # VMID of an existing template in Proxmox VE (the provider clones by VMID)
   metadata:
     description: "Ubuntu 22.04 LTS Cloud Image"
 

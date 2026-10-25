@@ -183,7 +183,7 @@ spec:
 ---
 # v0.2.1 Usage Examples:
 
-# 1. Graceful shutdown (uses preStop hook + VMware Tools):
+# 1. Graceful shutdown (VMware Tools; the preStop hook above is not executed):
 # kubectl patch virtualmachine demo-web-server --type='merge' -p='{"spec":{"powerState":"OffGraceful"}}'
 
 # 2. Regular hard shutdown:
