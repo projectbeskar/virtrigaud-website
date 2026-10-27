@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # CLI Reference
 
-VirtRigaud provides several command-line tools for inspecting resources, validating conformance specs, developing providers, and load testing. This reference covers v0.4.0 and lists the commands and flags the tools define. For longer explanations and caveats see the [CLI Tools Reference](../references/cli-tools.md).
+VirtRigaud provides several command-line tools for inspecting resources, validating conformance specs, developing providers, and load testing. This reference covers v0.4.1 and lists the commands and flags the tools define. For longer explanations and caveats see the [CLI Tools Reference](../references/cli-tools.md).
 
 ## Overview
 
@@ -24,8 +24,8 @@ VirtRigaud provides several command-line tools for inspecting resources, validat
 Each release publishes one binary per tool and platform, named `<tool>-<os>-<arch>` (`.exe` on Windows), plus a `checksums.txt`. Platforms are `linux` and `darwin` (each `amd64` and `arm64`) and `windows` (`amd64`).
 
 ```bash
-# Download v0.4.0
-curl -fsSL "https://github.com/projectbeskar/virtrigaud/releases/download/v0.4.0/vrtg-linux-amd64" -o vrtg
+# Download v0.4.1
+curl -fsSL "https://github.com/projectbeskar/virtrigaud/releases/download/v0.4.1/vrtg-linux-amd64" -o vrtg
 chmod +x vrtg
 sudo mv vrtg /usr/local/bin/
 ```
@@ -39,7 +39,7 @@ There are no `make` targets for the CLI tools; build them with `go build` from a
 ```bash
 git clone https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
-git checkout v0.4.0
+git checkout v0.4.1
 
 mkdir -p bin
 for tool in vrtg vcts vrtg-provider virtrigaud-loadgen; do
@@ -47,7 +47,7 @@ for tool in vrtg vcts vrtg-provider virtrigaud-loadgen; do
 done
 ```
 
-`go install github.com/projectbeskar/virtrigaud/cmd/<tool>@v0.4.0` is not supported: the root `go.mod` has `replace` directives for the local `proto/` and `sdk/` modules, which `go install` with a version suffix rejects.
+`go install github.com/projectbeskar/virtrigaud/cmd/<tool>@v0.4.1` is not supported: the root `go.mod` has `replace` directives for the local `proto/` and `sdk/` modules, which `go install` with a version suffix rejects.
 
 ## vrtg
 
@@ -353,6 +353,6 @@ The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typ
 
 ## Version Information
 
-This reference covers VirtRigaud CLI tools v0.4.0.
+This reference covers VirtRigaud CLI tools v0.4.1.
 
 For older versions, see the [releases page](https://github.com/projectbeskar/virtrigaud/releases).

@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # VM Migration Guide - architecture and internals
 
 This page is the **architectural deep dive** for VirtRigaud's `VMMigration` flow in
-v0.4.0. It complements the practical [User Guide](user-guide.md) and the
+v0.4.1. It complements the practical [User Guide](user-guide.md) and the
 field-by-field [API Reference](api-reference.md).
 
 If you want to migrate a VM today, start with the User Guide. If you want to

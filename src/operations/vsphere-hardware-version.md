@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # vSphere Hardware Version Management
 
-This page is aligned to **VirtRigaud v0.4.0**. It describes how the vSphere
+This page is aligned to **VirtRigaud v0.4.1**. It describes how the vSphere
 provider's `HardwareUpgrade` gRPC RPC works, what the manager controller
 currently does (and does *not*) do with it, how to set a hardware version when a
 VM is created, and what an operator needs from vCenter / ESXi for it to succeed.

@@ -57,7 +57,7 @@ Given a reference to a provisioned source `VirtualMachine` in the same namespace
 | **`spec.customization` applied** | Hostname/domain in the cloud-init meta-data; other fields logged, not applied | Not applied | `hostname`, `domain`, `userData.cloudInit.inline`; other fields logged, not applied | Same as single host |
 
 !!! note "Not verified on every provider"
-    The Proxmox linked-clone path is covered by the in-repo PVE fake; the lab validation of v0.4.0 covered clones on libvirt and vSphere. Treat a Proxmox linked clone as untested on your PVE version until you have run one.
+    The Proxmox linked-clone path is covered by the in-repo PVE fake; the lab validation of v0.4.1 covered clones on libvirt and vSphere. Treat a Proxmox linked clone as untested on your PVE version until you have run one.
 
 ## libvirt full clones
 
@@ -197,7 +197,7 @@ A libvirt **linked** clone into another namespace is refused (it would keep read
 
 ## Related resources
 
-- **VMSet** has no controller in v0.4.0 (it reports `ControllerNotImplemented`); see [Advanced VM lifecycle](advanced-lifecycle.md#placement-and-sets).
+- **VMSet** has no controller in v0.4.1 (it reports `ControllerNotImplemented`); see [Advanced VM lifecycle](advanced-lifecycle.md#placement-and-sets).
 - **VMPlacementPolicy** is used by the scheduler of clustered libvirt Providers; `spec.target.placementRef` is copied onto the target VM.
 
 ## See also

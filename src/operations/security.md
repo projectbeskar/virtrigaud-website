@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Security Guide
 
-This is the canonical operator-facing security reference for VirtRigaud **v0.4.0**. It describes the current security posture honestly: what the code and the Helm chart actually do, what the operator is expected to provide, and what remains out of scope for a regulated (e.g. banking) deployment.
+This is the canonical operator-facing security reference for VirtRigaud **v0.4.1**. It describes the current security posture honestly: what the code and the Helm chart actually do, what the operator is expected to provide, and what remains out of scope for a regulated (e.g. banking) deployment.
 
 !!! info "What changed in v0.4.0"
     v0.4.0 is a large security-hardening release, mostly about **multi-tenancy**: several namespaces (tenants) sharing one hypervisor account. In summary (each item is described below, with the main-repository document that holds the detail):
@@ -50,7 +50,7 @@ This is the canonical operator-facing security reference for VirtRigaud **v0.4.0
 
 ### STRIDE quick-reference
 
-| Threat                  | Where VirtRigaud is exposed                                          | Mitigation status in v0.4.0                                                                         |
+| Threat                  | Where VirtRigaud is exposed                                          | Mitigation status in v0.4.1                                                                         |
 |-------------------------|----------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
 | **Spoofing**            | A rogue Provider CR could point the manager at an attacker endpoint; a spoofed provider service could intercept manager RPCs; a tenant could forge the manager's provenance annotations on a `VirtualMachine`. | RBAC on the Provider CR plus **mTLS**: the manager verifies the provider's server cert (TLS 1.3, SNI anchored to the Service FQDN) and the provider rejects any caller whose client cert is not signed by the configured CA / not on the SAN allow-list. The [reserved-keys admission policy](#reserved-keys-admission-policy) stops tenants forging the manager's annotations. |
 | **Tampering**           | Provider gRPC traffic on the pod network; one tenant's `Create`, `Clone` or image import overwriting another's VM, disk or template. | gRPC is **encrypted with mTLS by default**. Owner stamps, per-tenant domain/landing names and stamped image artifacts make providers refuse to bind to, or reuse, anything they cannot prove is the requester's. |
@@ -96,7 +96,7 @@ A **clustered** libvirt Provider's hosts use the Secret named by `Host.spec.cred
 
 - VirtRigaud logs **length-only diagnostics** (e.g. `username_length=12 password_length=24`) to confirm credentials were mounted, never the values.
 - The vSphere provider uses `url.UserPassword` for the SOAP client, so credentials are not visible in process listings.
-- The libvirt provider connects to hosts with an in-process SSH client; every command it sends over SSH is shell-quoted (v0.4.0), which closes a command-injection path through domain names, image paths and snapshot descriptions. The Proxmox data plane uses the `ssh` client with a mounted key or `sshpass`.
+- The libvirt provider connects to hosts with an in-process SSH client; every command it sends over SSH is shell-quoted (since v0.4.0), which closes a command-injection path through domain names, image paths and snapshot descriptions. The Proxmox data plane uses the `ssh` client with a mounted key or `sshpass`.
 
 ### Where credentials are NOT exposed
 
@@ -158,7 +158,7 @@ For the tenant-facing view (what each check does, which refusals you will see an
 
 ## Who can grant what
 
-Tenant isolation in v0.4.0 is a set of **grants** that two kinds of identities control. The manager itself has cluster-wide rights, so the rule is "refuse unless a grant exists", and the grants are only as strong as the RBAC around them:
+Tenant isolation in v0.4.1 is a set of **grants** that two kinds of identities control. The manager itself has cluster-wide rights, so the rule is "refuse unless a grant exists", and the grants are only as strong as the RBAC around them:
 
 | Grant | Set by | Who can change it |
 |---|---|---|
@@ -284,7 +284,7 @@ With `crdUpgrade.enabled` (the default) the chart runs a `pre-install,pre-upgrad
 
 ### Values that look like security settings but are not wired
 
-The chart's `security.podSecurityProfile`, `security.tls.*` and `config.*` (circuit breaker, retry, rate limit, workers) blocks are not consumed by any template or by the manager in v0.4.0. Setting them changes nothing. Use `manager.securityContext` / `manager.podSecurityContext`, the Provider's `spec.runtime.service.tls` and `providerTLS`, and the settings documented on this page instead.
+The chart's `security.podSecurityProfile`, `security.tls.*` and `config.*` (circuit breaker, retry, rate limit, workers) blocks are not consumed by any template or by the manager in v0.4.1. Setting them changes nothing. Use `manager.securityContext` / `manager.podSecurityContext`, the Provider's `spec.runtime.service.tls` and `providerTLS`, and the settings documented on this page instead.
 
 ## Container hardening
 
@@ -353,7 +353,7 @@ roleRef:
   name: prometheus-metrics-scraper
 ```
 
-!!! note "The default is still plain HTTP in v0.4.0"
+!!! note "The default is still plain HTTP in v0.4.1"
     `--metrics-secure=false` remains the default. Operators in regulated environments should secure the manager endpoint with this flag **and** restrict who can reach port 8080 with a NetworkPolicy.
 
 The webhook and metrics servers pin an explicit **TLS 1.2 minimum** (the floor is active on the always-TLS webhook server, and on the metrics server when it is served over HTTPS). HTTP/2 is disabled unless `--enable-http2` is set.

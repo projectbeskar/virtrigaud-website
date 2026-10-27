@@ -5,19 +5,19 @@ SPDX-License-Identifier: Apache-2.0
 
 # VM Migration User Guide
 
-This page is aligned to **VirtRigaud v0.4.0**. It is the practical "how do I move a
+This page is aligned to **VirtRigaud v0.4.1**. It is the practical "how do I move a
 VM?" guide. For the field-by-field CRD reference see
 [API Reference](api-reference.md); for the architectural model see
 [VM Migration Guide](vm-migration-guide.md).
 
-## What VirtRigaud v0.4.0 supports
+## What VirtRigaud v0.4.1 supports
 
 A `VMMigration` is a **cold, single-disk copy**: it moves the primary disk of a VM from
 one Provider to another through a staging backend, then creates a new
 `VirtualMachine` that uses the copied disk. It is not live migration, and it does not
 move the VM's additional disks.
 
-| Backend (`spec.storage.type`) | Status in v0.4.0 |
+| Backend (`spec.storage.type`) | Status in v0.4.1 |
 |-------------------------------|------------------|
 | `s3` | Recommended. All three providers, as source and target. The provider **pod** is the S3 client (`relay`; `direct` is not implemented). |
 | `nfs` | Recommended. All three providers. libvirt and vSphere use `qemu-img`'s libnfs driver; Proxmox mounts the export on the node. Needs `nfs.uid`/`nfs.gid` for cross-provider moves. |
@@ -152,7 +152,7 @@ In order, all driven by the migration controller:
   [Held provider calls](#a-migration-held-with-outcomeunknown)); where the backend is
   re-send safe the call is sent again 35 minutes after the request, at most 3 times, and
   each attempt has the same deadline. A disk that cannot be exported or imported within
-  30 minutes therefore does not complete in v0.4.0. This is derived from the code, not a
+  30 minutes therefore does not complete in v0.4.1. This is derived from the code, not a
   measured limit; test with a representative disk.
 
 ## Quick start: libvirt to vSphere over NFS
@@ -642,7 +642,7 @@ kubectl get vmmigration my-vm-to-libvirt \
 kubectl get events --field-selector involvedObject.name=my-vm-to-libvirt
 ```
 
-`status.progress` is not populated in v0.4.0.
+`status.progress` is not populated in v0.4.1.
 
 ## Performance guidance
 
@@ -653,7 +653,7 @@ kubectl get events --field-selector involvedObject.name=my-vm-to-libvirt
 | vSphere pod `/tmp` | An import stages about twice the disk in the pod's `/tmp`, which has an `emptyDir` `sizeLimit` (512Gi by default for vSphere providers). A pod that writes more is evicted. See the chart README. |
 | Per-call deadline | 30 minutes per `ExportDisk` and per `ImportDisk` call. |
 | `options.compress` | Asks the source to compress a `qcow2` export. Only worth it on slow networks. |
-| `options.timeout` | In v0.4.0 it bounds only the wait for a source snapshot task, not the migration. The 2-hour default applies only when `options` is omitted; once `options` exists the schema defaults `timeout` to `4h`. |
+| `options.timeout` | In v0.4.1 it bounds only the wait for a source snapshot task, not the migration. The 2-hour default applies only when `options` is omitted; once `options` exists the schema defaults `timeout` to `4h`. |
 
 ## Disk-size limit
 
@@ -742,7 +742,7 @@ Example: [`examples/vmmigration-into-clustered.yaml`](https://github.com/project
 
 A migration copies the disk, not the NIC. What the guest does on first boot depends on
 the target ([ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0014-migrated-guest-network.md),
-**known limitation R36, not fixed in v0.4.0**):
+**known limitation R36, not fixed in v0.4.1**):
 
 | Target | Result with a Linux cloud-image guest whose netplan matches the NIC by MAC address (Ubuntu cloud images do) |
 |--------|---------|

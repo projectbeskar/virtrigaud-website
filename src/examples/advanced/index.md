@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Advanced VirtRigaud Examples
 
-These examples cover the operations beyond creating a VM: snapshots and reverting to them, reconfiguration, cloning, console access and task tracking. They mirror `examples/advanced/` of the repository at **v0.4.0** and are valid against the v0.4.0 CRDs. For the behaviour behind them see [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md) and [VM cloning](../../guides/advanced/vm-cloning.md).
+These examples cover the operations beyond creating a VM: snapshots and reverting to them, reconfiguration, cloning, console access and task tracking. They mirror `examples/advanced/` of the repository at **v0.4.1** and are valid against the v0.4.1 CRDs. For the behaviour behind them see [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md) and [VM cloning](../../guides/advanced/vm-cloning.md).
 
 !!! note "Placeholders"
     Endpoints, Secret names, datastores and templates are placeholders. Each Provider in these files has the `runtime.service.tls` block that v0.4.0 requires (see [the examples index](../index.md#read-this-before-applying-an-example)); create the TLS Secret it names or set `enabled: false` in a lab.

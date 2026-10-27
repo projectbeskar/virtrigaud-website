@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # VM Status Reference
 
 This page explains what a `VirtualMachine` reports about itself in
-**VirtRigaud v0.4.0**: the `kubectl get vm` columns, how `status.phase` is
+**VirtRigaud v0.4.1**: the `kubectl get vm` columns, how `status.phase` is
 derived, which conditions and reasons you can see and what to do about each,
 what `status.ips` contains, and what the manager does when a provider call
 fails without a definite answer.

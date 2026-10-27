@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Writing a Provider
 
-This page is aligned to **VirtRigaud v0.4.0** and describes how to build a
+This page is aligned to **VirtRigaud v0.4.1** and describes how to build a
 provider against the public SDK in
 [`sdk/provider/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/sdk/provider).
 External providers are first-class — they implement the same gRPC contract
@@ -74,7 +74,7 @@ modules to the commit of the release tag and redirect the `proto` requirement
 to the same commit:
 
 ```bash
-REV=$(git -C /path/to/virtrigaud rev-list -n1 v0.4.0)
+REV=$(git -C /path/to/virtrigaud rev-list -n1 v0.4.1)
 
 go get github.com/projectbeskar/virtrigaud/proto@$REV
 
@@ -96,7 +96,7 @@ Check `go.mod` afterwards: `sdk`, the root module and `proto` should all name th
 local `replace` directives, as the root `go.mod` does.) The generated Go
 bindings are imported from `github.com/projectbeskar/virtrigaud/proto/rpc/provider/v1`.
 
-## Contract surface (v0.4.0)
+## Contract surface (v0.4.1)
 
 The gRPC contract lives in
 [`proto/provider/v1/provider.proto`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/proto/provider/v1/provider.proto)
@@ -306,7 +306,7 @@ func main() {
 ```
 
 `lookupVM` and `describeVM` stand for your own hypervisor code. The skeleton
-above (minus those two helpers) compiles against the v0.4.0 SDK.
+above (minus those two helpers) compiles against the v0.4.1 SDK.
 
 ### Why the `Unimplemented` embedding matters
 
@@ -360,7 +360,7 @@ Capabilities the manager reads from `GetCapabilitiesResponse`
 `Clone` return a non-linked synthetic response is the kind of drift that
 caused real audit findings against the in-tree libvirt provider
 (see [Libvirt Host Prep](../operations/libvirt-host-prepare.md#linked-clones-qcow2-backing-files)).
-In v0.4.0 the in-tree libvirt provider implements full clones and advertises
+In v0.4.1 the in-tree libvirt provider implements full clones and advertises
 `supports_linked_clones: false` (it refuses a linked clone because the source
 disk is not frozen), so a [VMClone](../guides/advanced/vm-cloning.md) that asks
 for a linked clone against a libvirt source is refused cleanly rather than

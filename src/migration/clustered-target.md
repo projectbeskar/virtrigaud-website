@@ -10,7 +10,7 @@ Since **v0.4.0** a `VMMigration` can target a libvirt Provider with
 `Validating`.
 
 !!! warning "Experimental"
-    Clustered Providers are experimental in v0.4.0 and may still change. This
+    Clustered Providers are experimental in v0.4.1 and may still change. This
     page covers what is different when the **target** is clustered. Everything
     else about `VMMigration` (staging backends, source options, phases, the
     cleanup policies) is in the [User Guide](user-guide.md), the
@@ -260,12 +260,12 @@ migration could not delete its unbound target VM. Delete the target
 - **A leader-election overlap during the target's `Create`** can still fail the
   migration with `TargetVMNotOwned`. This fails closed: delete the target VM it
   created and create the migration again.
-- **Guest network.** As for every cross-hypervisor migration in v0.4.0, a guest
+- **Guest network.** As for every cross-hypervisor migration in v0.4.1, a guest
   whose netplan matches its NIC by MAC address can boot without network on a
   vSphere or Proxmox target, and on a libvirt target it gets a new cloud-init
   identity (instance-id, hostname, SSH host keys). The fix is designed in
   [ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0014-migrated-guest-network.md)
-  and is not in v0.4.0.
+  and is not in v0.4.1.
 
 ## What was tested
 

@@ -31,7 +31,7 @@ spec:
     cpuHotAddEnabled: true
     memoryHotAddEnabled: true
     # latencySensitivity and hyperThreadingPolicy are accepted by the API but not
-    # applied by any provider in v0.4.0.
+    # applied by any provider in v0.4.1.
     latencySensitivity: low
     hyperThreadingPolicy: prefer
   
@@ -47,7 +47,7 @@ spec:
     vtdEnabled: true
   
   # Resource limits and reservations: accepted by the API but not applied by any
-  # provider in v0.4.0.
+  # provider in v0.4.1.
   resourceLimits:
     # Reserve CPU for consistent performance
     cpuReservation: 4000  # 4GHz reserved

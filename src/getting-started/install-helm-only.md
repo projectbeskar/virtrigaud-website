@@ -23,7 +23,7 @@ helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
 helm repo update virtrigaud
 ```
 
-### Install VirtRigaud v0.4.0
+### Install VirtRigaud v0.4.1
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
@@ -143,16 +143,16 @@ and [README](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/charts/virt
 # Manager pod is running
 kubectl get pods -n virtrigaud-system
 
-# Helm release is at v0.4.0
+# Helm release is at v0.4.1
 helm list -n virtrigaud-system
 # NAME         NAMESPACE          REVISION  CHART                APP VERSION
-# virtrigaud   virtrigaud-system  1         virtrigaud-0.4.0     v0.4.0
+# virtrigaud   virtrigaud-system  1         virtrigaud-0.4.1     v0.4.1
 ```
 
 Expected output from `helm list`:
 
-- `CHART` column: `virtrigaud-0.4.0`
-- `APP VERSION` column: `v0.4.0`
+- `CHART` column: `virtrigaud-0.4.1`
+- `APP VERSION` column: `v0.4.1`
 
 ### Verify the manager image tag
 
@@ -172,7 +172,7 @@ curl -s http://localhost:8080/metrics | grep '^virtrigaud_build_info'
 Expected:
 
 ```
-virtrigaud_build_info{component="manager",git_sha="<sha>",go_version="go1.26.x",version="v0.4.0"} 1
+virtrigaud_build_info{component="manager",git_sha="<sha>",go_version="go1.26.x",version="v0.4.1"} 1
 ```
 
 Metric families (seeded to 0 at boot before any Provider CRs are created):
@@ -280,7 +280,7 @@ spec:
   source:
     chart: virtrigaud
     repoURL: https://projectbeskar.github.io/virtrigaud
-    targetRevision: "0.4.0"
+    targetRevision: "0.4.1"
     helm:
       values: |
         manager:

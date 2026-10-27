@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Security Model and Multi-Tenancy
 
-This page describes what VirtRigaud **v0.4.0** enforces when several teams
+This page describes what VirtRigaud **v0.4.1** enforces when several teams
 (namespaces) share a cluster, a `Provider` or a hypervisor, and what you have
 to configure for it. It covers VM ownership, cross-namespace references, the
 admission policy, the `Provider` in-use finalizer, prepared-image identity,
@@ -93,7 +93,7 @@ must read `status.id` instead.
 | libvirt, clustered | Stamped; fails closed. | Every routed call is owner-checked. See [Clustered operations](clustered/operations.md). |
 | Proxmox | Stamped; a re-sent `Create` or `Clone` re-binds the VM it made earlier instead of making a second VMID. | Owner-checked on every call, so a reused VMID is never read, powered, resized, snapshotted, exported or deleted as if it were the `VirtualMachine`'s. |
 
-The protection needs **both** the manager and the provider image of v0.4.0. A
+The protection needs **both** the manager and the provider image of v0.4.1. A
 request without an owner (an older manager) or a provider that ignores it
 behaves as before. Roll the providers right after the manager.
 
@@ -167,7 +167,7 @@ because a detached domain keeps running outside the capacity accounting.
   path) can exploit that. Do not grant `VM.Allocate` where VirtRigaud's VMs
   live to anyone but the provider's own tokens and your administrators.
   [ADR-0012](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0012-proxmox-legacy-unstamped-name-rule.md)
-  describes how the rule is to be retired; none of that is in v0.4.0.
+  describes how the rule is to be retired; none of that is in v0.4.1.
 - **A stamp is tamper-evident, not tamper-proof.** Whoever can edit the VM
   configuration on the hypervisor (vSphere `AdvancedConfig`, libvirt metadata,
   Proxmox `VM.Config.Options`) can rewrite the stamp. The hypervisor's ACLs are
@@ -632,7 +632,7 @@ attached in place. vSphere `templateName` must name a real template. Details:
 
 A libvirt VM's cloud-init seed ISO carries its user-data, which may hold
 passwords, keys and tokens. Earlier releases built it under the world-listable
-`/tmp` at the SSH user's umask. In v0.4.0 seeds are built in a dedicated
+`/tmp` at the SSH user's umask. In v0.4.1 seeds are built in a dedicated
 directory that only the provider's SSH user can list:
 
 - **Where:** `VIRTRIGAUD_LIBVIRT_SEED_DIR` on the provider pod (set it in the
@@ -676,7 +676,7 @@ user-data. Remove the ones no domain references (compare with
 ## Migration storage
 
 Provider pods hold hypervisor credentials, so what is mounted into them is a
-trust decision. In v0.4.0, a `VMMigration` with `spec.storage.type: pvc` gets
+trust decision. In v0.4.1, a `VMMigration` with `spec.storage.type: pvc` gets
 its storage mounted like this:
 
 - A PVC is mounted into the source and target `Provider` pods only while a
@@ -766,7 +766,7 @@ What the limit does not cover: it bounds the sizes VirtRigaud asks for, per
 disk. A primary disk that comes from an image already larger than the limit is
 not checked, and totals per VM or namespace are not limited; use hypervisor
 storage quotas for those. The clone and migration checks need provider images
-of v0.4.0: an older image does not report disk sizes, so while a limit applies
+of v0.4.1: an older image does not report disk sizes, so while a limit applies
 clones through it are refused.
 
 ## Upgrade impact
@@ -795,7 +795,7 @@ are the changes from this page that can break an existing setup.
 | The disk-size limit | Nobody, unless `manager.maxDiskSize` is set | No change when unset | Set it if you need it |
 
 Roll the providers promptly after the manager. Most of the checks above need the
-v0.4.0 provider image as well as the manager, and a manager ahead of its
+v0.4.1 provider image as well as the manager, and a manager ahead of its
 providers holds some operations (for example, image prepares are held on a
 provider that does not report artifact identity, and a `Create` whose outcome
 is unknown is not sent again to a provider that does not report owner re-bind).

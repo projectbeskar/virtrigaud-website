@@ -11,7 +11,7 @@ answering, how to cordon a host, the guard that protects disks on shared
 storage, how to let go of a VM, which metrics to watch, and a troubleshooting
 table.
 
-!!! warning "Experimental in v0.4.0"
+!!! warning "Experimental in v0.4.1"
     Clustered Providers are experimental; see
     [Clustered libvirt: overview and setup](index.md). VirtRigaud detects and
     reports a failed host. It does **not** restart VMs on another host.
@@ -28,7 +28,7 @@ stamp is missing, unreadable or belongs to another UID is answered
 [Security model and multi-tenancy](../security-model.md) for the ownership
 model.
 
-What a clustered libvirt Provider routes in v0.4.0:
+What a clustered libvirt Provider routes in v0.4.1:
 
 | Operation | Behaviour on a clustered Provider |
 |-----------|-----------------------------------|
@@ -350,7 +350,7 @@ full a host is. They show how full each host is **across tenants**: expose
 `networkPolicy.monitoringNamespaceSelector`) or by running the manager with
 `--metrics-secure=true`.
 
-There is no metric for `Host` health or `HostPool` counts in v0.4.0. Read the
+There is no metric for `Host` health or `HostPool` counts in v0.4.1. Read the
 `Host` and `HostPool` status, or export them with a custom-resource state
 exporter.
 

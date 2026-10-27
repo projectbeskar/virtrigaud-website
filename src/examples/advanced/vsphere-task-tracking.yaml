@@ -4,7 +4,7 @@
 # vSphere Long-Running Operations Example
 # Shows how to follow slow vSphere operations (a large create, a reconfigure).
 #
-# How it works in v0.4.0:
+# How it works in v0.4.1:
 # - The vSphere provider waits for each vCenter task inside the gRPC call and
 #   answers without a task reference, so there is no per-task progress
 #   percentage. (Providers whose operations return a task, such as Proxmox for

@@ -21,7 +21,7 @@ The tools are separate from the operator. They talk to the cluster with your kub
 
 `vrtg`, `vcts run` and `virtrigaud-loadgen` need the VirtRigaud CRDs installed in the cluster and permission to read (`vrtg`, `vcts run`) or to create and delete (`virtrigaud-loadgen`) the resources they touch. `vcts validate` and `vcts list` read local files only and need no cluster.
 
-!!! note "Limits in v0.4.0"
+!!! note "Limits in v0.4.1"
     - `vcts run` cannot pass yet: the conformance runner does not execute the steps of a specification, so the selected tests are reported as failed. `vcts validate` and `vcts list` work.
     - `virtrigaud-loadgen` simulates its `power`, `reconfigure`, `snapshot` and `clone` operations; only `create`, `delete` and `describe` call the API.
     - Some `vrtg` subcommands exist in the command tree but are not implemented; they exit non-zero and name the alternative.
@@ -36,7 +36,7 @@ The tools are separate from the operator. They talk to the cluster with your kub
 Each release publishes one binary per tool and platform, named `<tool>-<os>-<arch>` (plus `.exe` on Windows), together with a `checksums.txt`. Platforms are `linux`, `darwin` (each `amd64` and `arm64`) and `windows` (`amd64` only). The tools are `vrtg`, `vcts`, `vrtg-provider` and `virtrigaud-loadgen`.
 
 ```bash
-export VIRTRIGAUD_VERSION="v0.4.0"
+export VIRTRIGAUD_VERSION="v0.4.1"
 export PLATFORM="linux-amd64"  # or linux-arm64, darwin-amd64, darwin-arm64
 
 for tool in vrtg vcts vrtg-provider virtrigaud-loadgen; do
@@ -51,12 +51,12 @@ sudo mv vrtg vcts vrtg-provider virtrigaud-loadgen /usr/local/bin/
 
 ### From Source
 
-There is no `make` target for the CLI tools (the Makefile builds the manager and the providers). Build them with `go build`; the Go version is the one in `go.mod` (1.26.10 in v0.4.0).
+There is no `make` target for the CLI tools (the Makefile builds the manager and the providers). Build them with `go build`; the Go version is the one in `go.mod` (1.26.10 in v0.4.1).
 
 ```bash
 git clone https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
-git checkout v0.4.0
+git checkout v0.4.1
 
 mkdir -p bin
 for tool in vrtg vcts vrtg-provider virtrigaud-loadgen; do
@@ -66,8 +66,8 @@ done
 sudo install -m 0755 bin/vrtg bin/vcts bin/vrtg-provider bin/virtrigaud-loadgen /usr/local/bin/
 ```
 
-!!! note "`go install ...@v0.4.0` does not work"
-    The root `go.mod` carries `replace` directives for the local `proto/` and `sdk/` modules, so `go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.4.0` is refused by the Go toolchain. Build from a checkout as shown above.
+!!! note "`go install ...@v0.4.1` does not work"
+    The root `go.mod` carries `replace` directives for the local `proto/` and `sdk/` modules, so `go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.4.1` is refused by the Go toolchain. Build from a checkout as shown above.
 
 ### Completion
 
@@ -192,7 +192,7 @@ vrtg provider status vsphere-provider -n virtrigaud-system -o json
 
 #### Subcommands that are not implemented
 
-These commands exist so the command tree is stable. They are **not implemented** in v0.4.0: each exits with a non-zero status and an error that names what to use instead. None defines flags.
+These commands exist so the command tree is stable. They are **not implemented** in v0.4.1: each exits with a non-zero status and an error that names what to use instead. None defines flags.
 
 | Command | Aliases | Arguments | Use instead |
 |---------|---------|-----------|-------------|
@@ -568,7 +568,7 @@ operations:                       # relative weights, not percentages; at least 
   clone: 0
 ```
 
-An unknown key, an unparsable duration or an unusable value (no providers, all weights zero, a missing `classRef` or `imageRef`, ...) is an error and nothing is created. The keys `vmCount` (only echoed in the start-up banner), `rampUpTime`, `steadyState`, `rampDownTime`, the `*Interval` keys, `vmTemplate.annotations` and `vmTemplate.resources` are accepted but not used in v0.4.0.
+An unknown key, an unparsable duration or an unusable value (no providers, all weights zero, a missing `classRef` or `imageRef`, ...) is an error and nothing is created. The keys `vmCount` (only echoed in the start-up banner), `rampUpTime`, `steadyState`, `rampDownTime`, the `*Interval` keys, `vmTemplate.annotations` and `vmTemplate.resources` are accepted but not used in v0.4.1.
 
 **What each operation does:**
 
@@ -696,7 +696,7 @@ jobs:
 
       - name: Install vcts
         run: |
-          curl -fsSL "https://github.com/projectbeskar/virtrigaud/releases/download/v0.4.0/vcts-linux-amd64" -o vcts
+          curl -fsSL "https://github.com/projectbeskar/virtrigaud/releases/download/v0.4.1/vcts-linux-amd64" -o vcts
           chmod +x vcts
 
       - name: Validate specs

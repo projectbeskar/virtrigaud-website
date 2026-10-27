@@ -38,7 +38,7 @@ spec:
   
   # The lifecycle block below only shows the schema.
   # NOTE: spec.lifecycle hooks and gracefulShutdownTimeout are accepted by the API but not
-  # executed or sent to the provider in v0.4.0 (see the "Advanced VM lifecycle" guide).
+  # executed or sent to the provider in v0.4.1 (see the "Advanced VM lifecycle" guide).
   lifecycle:
     gracefulShutdownTimeout: "90s"  # 90 seconds for graceful shutdown
     

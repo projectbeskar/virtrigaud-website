@@ -161,7 +161,7 @@ spec:
   
   # v0.2.1: Enhanced lifecycle management
   # NOTE: spec.lifecycle hooks and gracefulShutdownTimeout are accepted by the API but not
-  # executed or sent to the provider in v0.4.0 (see the "Advanced VM lifecycle" guide).
+  # executed or sent to the provider in v0.4.1 (see the "Advanced VM lifecycle" guide).
   lifecycle:
     gracefulShutdownTimeout: "120s"  # Allow 2 minutes for graceful shutdown
     preStop:
@@ -242,5 +242,5 @@ spec:
 # kubectl patch virtualmachine web-server-remote --type='merge' -p='{"spec":{"powerState":"OffGraceful"}}'
 # This will:
 # 1. Attempt graceful shutdown using VMware Tools (fixed 60s timeout; the preStop hook
-#    and gracefulShutdownTimeout above are not used in v0.4.0)
+#    and gracefulShutdownTimeout above are not used in v0.4.1)
 # 2. Fall back to hard power off if Tools are not running, the shutdown fails or times out

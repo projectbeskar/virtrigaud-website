@@ -31,7 +31,7 @@ The observed `status.powerState` of a VM that is down is `Off` whichever of `Off
 
 ## How each provider shuts down
 
-The manager sends the graceful shutdown with a **fixed timeout of 60 seconds**. The timeout is not configurable in v0.4.0.
+The manager sends the graceful shutdown with a **fixed timeout of 60 seconds**. The timeout is not configurable in v0.4.1.
 
 !!! warning "`spec.lifecycle.gracefulShutdownTimeout` and the `preStop` hook have no effect"
     The `lifecycle` block (`gracefulShutdownTimeout`, `preStop`, `postStart`) is accepted by the API but is not read by any controller or provider in v0.4.0: the shutdown timeout stays at 60 seconds and no `preStop` command runs before the shutdown. The examples that still show the block carry a note to this effect. To run something inside the guest before a shutdown, do it before you change `spec.powerState` (for example over SSH or from your own automation). See [Advanced VM lifecycle](advanced-lifecycle.md#lifecycle-hooks).

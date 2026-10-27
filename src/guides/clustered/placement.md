@@ -10,7 +10,7 @@ manager chooses a host for it. This page describes how that choice is made,
 what a `VMPlacementPolicy` can and cannot do, how the choice is recorded on the
 VM, and what to do when no host fits.
 
-!!! warning "Experimental in v0.4.0"
+!!! warning "Experimental in v0.4.1"
     Clustered Providers are experimental. See
     [Clustered libvirt: overview and setup](index.md). The scheduler is
     deliberately simple: it filters hosts, then ranks the survivors. It runs
@@ -59,7 +59,7 @@ first one that fails is the reason reported for that host:
 | 11 | VM (anti-)affinity | Required VM affinity and anti-affinity terms (below) |
 
 Two checks exist in the scheduler but are **never active for an ordinary VM
-in v0.4.0**: a required storage pool (`storage.virtrigaud.io/pool-<name>`) and
+in v0.4.1**: a required storage pool (`storage.virtrigaud.io/pool-<name>`) and
 a required machine type. The controller does not derive either from a VM, so
 those labels and `Host.status.machineTypes` do not influence placement.
 
@@ -195,9 +195,9 @@ already runs one.
 ### What is wired and what is not
 
 The scheduler reads a subset of the policy. Everything else in the CRD is
-accepted by the schema and **has no effect** on a clustered Provider in v0.4.0.
+accepted by the schema and **has no effect** on a clustered Provider in v0.4.1.
 
-| Field | Effect in v0.4.0 |
+| Field | Effect in v0.4.1 |
 |-------|------------------|
 | `hard.hosts`, `hard.excludedHosts` | **Hard filter.** Host names; `hosts` is an allow-list when non-empty |
 | `hard.nodeSelector` | **Hard filter.** Each key/value must equal `Host.spec.labels` |

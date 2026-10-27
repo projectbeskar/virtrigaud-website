@@ -9,9 +9,9 @@ This document describes all Custom Resource Definitions provided by VirtRigaud.
 
 API group: `infra.virtrigaud.io` / Version: `v1beta1`
 
-VirtRigaud ships **12 CRDs** at v0.4.0. For the full auto-generated field reference, see [generated-crd-docs.md](generated-crd-docs.md).
+VirtRigaud ships **12 CRDs** at v0.4.1. For the full auto-generated field reference, see [generated-crd-docs.md](generated-crd-docs.md).
 
-**Controller status at v0.4.0:**
+**Controller status at v0.4.1:**
 
 | CRD | Controller status |
 |-----|-------------------|
@@ -602,7 +602,7 @@ Full schema: [generated-crd-docs.md#hostpool](generated-crd-docs.md#hostpool). S
 | `overcommit` | `OvercommitSpec` | No | `cpu` and `memory` ratios as decimal strings (for example `"4.0"`) |
 | `storagePools` | `[]` | No | Named storage pools available in the pool (`name`) |
 | `networks` | `[]` | No | Named networks available in the pool (`name`) |
-| `migration` | `MigrationPolicy` | No | Default migration policy: `defaultLive`, `defaultStorageMode`, `requireTLS`, `bandwidthMbps`, `maxDowntimeMs`. Host-to-host migration is not implemented in v0.4.0 |
+| `migration` | `MigrationPolicy` | No | Default migration policy: `defaultLive`, `defaultStorageMode`, `requireTLS`, `bandwidthMbps`, `maxDowntimeMs`. Host-to-host migration is not implemented in v0.4.1 |
 
 ### Status
 
@@ -735,7 +735,7 @@ spec:
 
 ## VMSet
 
-!!! warning "Not functional in v0.4.0"
+!!! warning "Not functional in v0.4.1"
     The `VMSet` CRD is defined and accepted by the API server, but the controller is a stub. Every VMSet resource receives a `Ready=False` condition with reason `ControllerNotImplemented` and message `"VMSet has no active controller in this release (#179)"`. No replica management, scaling, or VM creation occurs. Do not use VMSet in production.
 
 The `VMSet` CRD is intended to manage a fleet of identically-configured VirtualMachines (analogous to a ReplicaSet for VMs). The controller has not yet been implemented.
@@ -874,7 +874,7 @@ spec:
 
 ---
 
-## CRD count at v0.4.0
+## CRD count at v0.4.1
 
 The 12 CRDs in `infra.virtrigaud.io/v1beta1`: `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMMigration`, `VMSnapshot`, `VMSet`, `VMPlacementPolicy`, `VMClone`, `Host`, `HostPool`.
 

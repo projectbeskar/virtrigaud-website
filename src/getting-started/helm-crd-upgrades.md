@@ -35,7 +35,7 @@ No field is removed. The admission rules (`spec.providerRef` and `spec.type` imm
     helm hook applies the CRDs in the same `helm upgrade` that rolls the manager. Apply the CRDs yourself first:
 
     ```bash
-    kubectl apply --server-side --force-conflicts -f config/crd/bases   # from the v0.4.0 release checkout
+    kubectl apply --server-side --force-conflicts -f config/crd/bases   # from the v0.4.1 release checkout
     # set spec.consumerNamespaceSelector on the shared objects, then:
     helm upgrade virtrigaud virtrigaud/virtrigaud --version 0.4.1 -n virtrigaud-system --reset-then-reuse-values
     ```
@@ -212,7 +212,7 @@ metadata:
 spec:
   source:
     chart: virtrigaud
-    targetRevision: 0.4.0
+    targetRevision: 0.4.1
     helm:
       values: |
         crdUpgrade:

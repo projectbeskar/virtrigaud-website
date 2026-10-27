@@ -10,8 +10,8 @@ libvirt Provider (`Provider.spec.topology: cluster`) comes back from a backup,
 a GitOps re-apply or a delete-and-recreate, and how an administrator
 re-attaches it to the libvirt domain that is still running.
 
-!!! warning "Experimental in v0.4.0"
-    Clustered Providers are experimental in v0.4.0. See
+!!! warning "Experimental in v0.4.1"
+    Clustered Providers are experimental in v0.4.1. See
     [Clustered libvirt: overview and setup](index.md) for the feature as a
     whole. Single-host libvirt, vSphere and Proxmox Providers are not changed
     by the guards on this page; their recovery is in
@@ -395,7 +395,7 @@ nothing, and the VM is created as new.
 
 ## Re-attach runbook
 
-Re-attaching is manual in v0.4.0. The steps need root (or the provider's SSH
+Re-attaching is manual in v0.4.1. The steps need root (or the provider's SSH
 user) on the hosts, and read access to VirtualMachines in all namespaces.
 
 !!! danger "Always name the connection: `virsh -c \"$CONN\" ...`"

@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Examples
 
-These examples mirror the `examples/` directory of the VirtRigaud repository at **v0.4.0**. All of them use the `infra.virtrigaud.io/v1beta1` API, and every `infra.virtrigaud.io` object in them was checked against the v0.4.0 CRDs with a strict server-side dry-run (CRD schema and CEL rules), so none carries an unknown field, a wrong type or an invalid enum value. The webhooks are not part of that check. Provider images are pinned to `ghcr.io/projectbeskar/virtrigaud/provider-<type>:v0.4.1`.
+These examples mirror the `examples/` directory of the VirtRigaud repository at **v0.4.1**. All of them use the `infra.virtrigaud.io/v1beta1` API, and every `infra.virtrigaud.io` object in them was checked against the v0.4.1 CRDs with a strict server-side dry-run (CRD schema and CEL rules), so none carries an unknown field, a wrong type or an invalid enum value. The webhooks are not part of that check. Provider images are pinned to `ghcr.io/projectbeskar/virtrigaud/provider-<type>:v0.4.1`.
 
 !!! warning "Replace the placeholders before you apply anything"
     Endpoints (`vcenter.example.com`, `pve.example.com`, `192.0.2.x`), Secret names, datastores, template names and image URLs are placeholders. Credential Secrets contain `REDACTED` values.
@@ -22,7 +22,7 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 | File | What it shows |
 |------|---------------|
 | [complete-example.yaml](complete-example.yaml) | End to end on vSphere: Secret, Provider, VMClass, VMImage, VMNetworkAttachment and VirtualMachine |
-| [vm-ubuntu-small.yaml](vm-ubuntu-small.yaml) | A small Ubuntu VirtualMachine (its `spec.lifecycle` block is accepted by the API but not executed in v0.4.0) |
+| [vm-ubuntu-small.yaml](vm-ubuntu-small.yaml) | A small Ubuntu VirtualMachine (its `spec.lifecycle` block is accepted by the API but not executed in v0.4.1) |
 | [vmclass-small.yaml](vmclass-small.yaml) | A VMClass (CPU, memory, disk defaults, firmware, guest-tools policy, `extraConfig`) |
 | [vmimage-ubuntu.yaml](vmimage-ubuntu.yaml) | A VMImage |
 | [vmnetwork-app.yaml](vmnetwork-app.yaml) | A VMNetworkAttachment |
@@ -45,7 +45,7 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 
 ## Clustered libvirt (experimental)
 
-`topology: cluster` is opt-in and experimental in v0.4.0. See the [Clustered libvirt guide](../guides/clustered/index.md).
+`topology: cluster` is opt-in and experimental in v0.4.1. See the [Clustered libvirt guide](../guides/clustered/index.md).
 
 | File | What it shows |
 |------|---------------|
@@ -179,7 +179,7 @@ examples/
 
 ## Version compatibility
 
-- **v0.4.0**: every example here is valid against the v0.4.0 CRDs.
+- **v0.4.1**: every example here is valid against the v0.4.1 CRDs.
 - **v0.3.x**: most examples apply unchanged, but several fields and behaviours differ (for example `VMClone` on libvirt, S3 and NFS migration, `consumerNamespaceSelector`). Use the examples of the matching release.
 - **v0.2.x and older**: not supported.
 

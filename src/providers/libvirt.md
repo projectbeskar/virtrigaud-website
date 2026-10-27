@@ -7,9 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 
 The libvirt provider manages VMs on KVM/QEMU hosts. It runs `virsh` and a few host tools (`qemu-img`, `genisoimage`, `isoinfo`) **on the libvirt host** over SSH. It is the provider that gained the most in v0.4.0: private cloud-init seeds, VM ownership stamps, snapshot revert, clone identity, honest reconfigure results, and an experimental clustered topology.
 
-This page is aligned to **VirtRigaud v0.4.0**. Capability claims trace back to `GetCapabilities` and `clusteredCapabilities` in `internal/providers/libvirt/server.go`.
+This page is aligned to **VirtRigaud v0.4.1**. Capability claims trace back to `GetCapabilities` and `clusteredCapabilities` in `internal/providers/libvirt/server.go`.
 
-!!! note "How the provider drives libvirt (v0.4.0)"
+!!! note "How the provider drives libvirt (v0.4.1)"
     Every operation that changes state, and every read the manager acts on, still goes through **`virsh` run on the hypervisor host**. The provider reaches the host with an **in-process SSH client** (`internal/providers/libvirt/sshclient.go`), one persistent connection per host, so the provider image carries no `ssh`/`sshpass` binary and no key is written to disk. There is no cgo and no `libvirt-dev` in the image.
 
     A pure-Go [`go-libvirt`](https://github.com/digitalocean/go-libvirt) client exists in the provider (ADR-0008) but is **dormant by default**. It can be switched on only as an opt-in **shadow** read: `VIRTRIGAUD_LIBVIRT_NATIVE=shadow:describe,shadow:list` makes the provider run `Describe` and `ListVMs` through both paths, return the `virsh` answer, and count any divergence in a metric. A `native:` mode is accepted but is downgraded to shadow at v0.4.0: **no read is served from go-libvirt**. See [Libvirt shadow-compare reads](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-shadow-reads.md).
@@ -87,7 +87,7 @@ The provider advertises the following via `GetCapabilities` (`internal/providers
 | `SupportsDiskExpansionOnline` | true | true | Live disk grow via `virsh blockresize` plus a best-effort in-guest filesystem grow; grow-only. |
 | `SupportsSnapshots` | true | true | `virsh snapshot-create-as`. |
 | `SupportsMemorySnapshots` | true | true | RAM-inclusive snapshots of a **running** VM. |
-| `SupportsLinkedClones` | **false** | **false** | Linked clones are **disabled** in v0.4.0 (see [Cloning](#cloning)). Full clones work. |
+| `SupportsLinkedClones` | **false** | **false** | Linked clones are **disabled** in v0.4.1 (see [Cloning](#cloning)). Full clones work. |
 | `SupportsImageImport` | true | not reported | `ImagePrepare` for `source.libvirt.url`. A clustered Provider does not prepare images. |
 | `SupportsImageArtifactIdentity` | true | not reported | Prepared images are named, stamped and published by `VMImage` identity (ADR-0009). |
 | `SupportsDiskExport` | true | true | `ExportDisk` / `GetDiskInfo` (export formats: `qcow2`, `raw`; clustered: `qcow2`). |
@@ -106,7 +106,7 @@ For the cross-provider matrix and the resilience / observability narrative:
 
 ## Behaviour at a glance: snapshot, revert, clone, reconfigure, disks
 
-| Area | libvirt behaviour at v0.4.0 | Code |
+| Area | libvirt behaviour at v0.4.1 | Code |
 |------|-----------------------------|------|
 | Snapshot create | A VM that is **off**, or a request without memory, gets an **external disk-only** snapshot; a **running** VM with `snapshotConfig.includeMemory: true` gets an **internal** full-system snapshot (RAM included). `includeMemory` on an off VM is downgraded to disk-only with a warning. A shut-off VM's CD-ROMs (the cloud-init seed) are ejected for the duration of the snapshot and put back. Synchronous (no task). | `server.go` (`snapshotCreateWith`), `snapshot_media.go` |
 | Snapshot revert | `spec.snapshot.revertToRef` on the `VirtualMachine`; the VM must be **powered off**; libvirt 9.9 or later for external snapshots. A disk-only snapshot taken **while the VM ran** (or by v0.3.11 or earlier) of a VM with a cloud-init CD-ROM is **refused** on revert. | `snapshot_readonly_disks.go`, `internal/controller/virtualmachine_snapshot_revert.go` |

@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # 15-Minute Quickstart
 
-This guide gets you up and running with VirtRigaud v0.4.0 in 15 minutes using a vSphere, Libvirt or Proxmox VE provider.
+This guide gets you up and running with VirtRigaud v0.4.1 in 15 minutes using a vSphere, Libvirt or Proxmox VE provider.
 
 ## Prerequisites
 
@@ -71,7 +71,7 @@ resource names differ from the Helm chart (the Deployment is
 image, and apply server-side because the CRDs are too large for client-side apply:
 
 ```bash
-git clone --branch v0.4.0 https://github.com/projectbeskar/virtrigaud.git
+git clone --branch v0.4.1 https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
 (cd config/manager && kustomize edit set image controller=ghcr.io/projectbeskar/virtrigaud/manager:v0.4.1)
 kubectl create namespace virtrigaud-system
@@ -103,7 +103,7 @@ Confirm the running version through the metrics endpoint:
 ```bash
 kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8080:8080 &
 curl -s http://localhost:8080/metrics | grep '^virtrigaud_build_info'
-# virtrigaud_build_info{component="manager",...,version="v0.4.0"} 1
+# virtrigaud_build_info{component="manager",...,version="v0.4.1"} 1
 ```
 
 The `virtrigaud_circuit_breaker_state` and `virtrigaud_provider_tasks_inflight` families
@@ -493,7 +493,7 @@ present its source's identity.
 !!! warning "VMSet controller not active"
     The `VMSet` CRD is installed but the controller is a stub. Any `VMSet`
     resource shows `Ready=False / Reason=ControllerNotImplemented`.
-    Do not use VMSet in v0.4.0.
+    Do not use VMSet in v0.4.1.
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1

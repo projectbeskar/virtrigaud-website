@@ -7,11 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 
 This page describes the actual versioning model VirtRigaud follows today, the API-stability commitment, and how the project chooses release tags.
 
-It is aligned to **VirtRigaud v0.4.0** (the current latest).
+It is aligned to **VirtRigaud v0.4.1** (the current latest).
 
 ## TL;DR
 
-- **Current latest**: `v0.4.0`. Helm chart `--version 0.4.1`. Provider images tagged `v0.4.0`.
+- **Current latest**: `v0.4.1`. Helm chart `--version 0.4.1`. Provider images tagged `v0.4.1`.
 - **CRD API version**: `infra.virtrigaud.io/v1beta1` is the **stable** API. Breaking changes need an ADR.
 - **Release pattern**: release candidates, a soak against real hypervisors, then the final tag. v0.4.0 went through nine release candidates.
 - **Support**: best-effort on the latest minor. The project does not maintain LTS branches. Upgrade to the latest patch within the current minor to get fixes.
@@ -24,12 +24,12 @@ VirtRigaud is composed of several artefacts that each carry a version label:
 |-----------|----------------|------------------|
 | Manager binary | `cmd/manager` → `ghcr.io/projectbeskar/virtrigaud/manager:v0.4.1` | Tracks the project release tag exactly. |
 | Provider binaries | `cmd/provider-{vsphere,libvirt,proxmox,mock}` → `ghcr.io/projectbeskar/virtrigaud/provider-*:v0.4.1` | Currently released in lockstep with the manager. |
-| Helm chart | `charts/virtrigaud` | Chart version matches the project release without the `v` (`0.4.0`); the release workflow sets `Chart.yaml` and the image tags in `values.yaml` when it packages the chart. |
+| Helm chart | `charts/virtrigaud` | Chart version matches the project release without the `v` (`0.4.1`); the release workflow sets `Chart.yaml` and the image tags in `values.yaml` when it packages the chart. |
 | CRD API | `api/infra.virtrigaud.io/v1beta1` | `v1beta1` — stable in the Kubernetes sense; see [API stability](#api-stability-v1beta1) below. |
 | gRPC contract | `proto/provider/v1/provider.proto` | Separate Go module. New RPCs land additively; breaking proto changes would require a major proto-package bump. |
 | Provider SDK | `sdk/` | Separate Go module. Used by external provider authors. |
 
-All of the above are tagged together as `v0.4.0` for the v0.4.0 release. The `mock` provider is a development image and is not published under release tags.
+All of the above are tagged together as `v0.4.1` for the v0.4.1 release. The `mock` provider is a development image and is not published under release tags.
 
 ## Semantic versioning
 
@@ -135,7 +135,7 @@ These categories are treated as breaking and require an ADR + a deprecation cycl
 | Older CR objects on a newer manager | Always valid (additive evolution only). |
 | Newer CR objects on an older manager | Not supported. The older manager will reject the unknown fields. Upgrade the manager first. |
 | Provider image newer than the manager | Best-effort. Do not pin a provider image to a release later than the manager; with a v0.3.11 manager, a v0.4.0 Proxmox provider fails every Proxmox-target `VMMigration` (it needs the manager's verified-stage fields). |
-| Manager newer than provider images | Supported while you stage the rollout (CRDs, manager, providers), with known degradations: for example a v0.4.0 manager holds import-style image prepares and clustered resizes until the provider reports `supportsImageArtifactIdentity` / `supportsHonestReconfigure`. |
+| Manager newer than provider images | Supported while you stage the rollout (CRDs, manager, providers), with known degradations: for example a v0.4.1 manager holds import-style image prepares and clustered resizes until the provider reports `supportsImageArtifactIdentity` / `supportsHonestReconfigure`. |
 
 For the canonical step-by-step upgrade (v0.3.11 → v0.4.0 has a required order and several breaking changes), see the [Upgrade Guide](../operations/upgrade.md).
 
@@ -164,6 +164,6 @@ If you operate VirtRigaud in a regulated environment, pin to a specific patch an
 
 ## API reference
 
-- [Capability matrix](providers-capabilities.md) — per-provider capabilities at v0.4.0.
+- [Capability matrix](providers-capabilities.md) — per-provider capabilities at v0.4.1.
 - [Generated CRD reference](../references/generated-crd-docs.md).
 - [Provider gRPC contract reference](../references/grpc-api.md).

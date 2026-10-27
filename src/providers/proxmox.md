@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The Proxmox provider manages VMs on Proxmox Virtual Environment (PVE) via the native PVE REST API, plus an SSH data plane to the PVE node that is used only for cross-hypervisor migration.
 
-This page is aligned to **VirtRigaud v0.4.0**. Capability claims trace back to `internal/providers/proxmox/capabilities.go` and the REST client in `internal/providers/proxmox/pveapi/`.
+This page is aligned to **VirtRigaud v0.4.1**. Capability claims trace back to `internal/providers/proxmox/capabilities.go` and the REST client in `internal/providers/proxmox/pveapi/`.
 
 ## Status
 
@@ -45,7 +45,7 @@ For the full cross-provider matrix and resilience / observability story:
 
 ## Behaviour at a glance: snapshot, revert, clone, reconfigure, disks
 
-| Area | Proxmox behaviour at v0.4.0 | Code |
+| Area | Proxmox behaviour at v0.4.1 | Code |
 |------|-----------------------------|------|
 | Snapshot create | `POST .../qemu/{vmid}/snapshot`; `snapshotConfig.includeMemory: true` sends `vmstate=1`. The snapshot id is the snapshot name (the name hint, or `snapshot-<unix time>`). Returns a PVE task the manager polls. | `server.go` (`SnapshotCreate`), `pveapi/client.go` (`CreateSnapshot`) |
 | Snapshot delete | Owner-checked on the VM's actual node. A snapshot that is provably absent is answered `NotFound`, so the delete is idempotent. | `server.go` (`SnapshotDelete`) |
@@ -449,7 +449,7 @@ Full rules and the `Create`/`Clone` error classes: [VM ownership](https://github
 
 `Reconfigure` writes **CPU and memory** from the VMClass with `PUT .../qemu/{vmid}/config`, after the owner check, and returns a PVE task.
 
-| Operation | At v0.4.0 |
+| Operation | At v0.4.1 |
 |-----------|-----------|
 | CPU / memory change | Sent to PVE. If PVE accepts it but stores it as *pending* (hot-plug not enabled for it), the provider **still reports it as applied**: it does not read PVE's `pending` config and never reports *restart required*. Check `qm config <vmid>` / `qm pending <vmid>` if a change does not take effect, and power-cycle the VM. |
 | Disk size | **Not applied.** `Reconfigure` resizes no disk: neither the VMClass `diskDefaults.size` nor `spec.disks[].sizeGiB` goes to a disk. The entries are logged. |

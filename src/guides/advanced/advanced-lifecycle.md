@@ -5,11 +5,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # Advanced VM Lifecycle Management
 
-This page describes how a `VirtualMachine` moves through its lifecycle in VirtRigaud **v0.4.0** beyond create and delete: phases and conditions, reconfiguration, snapshots and snapshot revert, cloning, image preparation, detaching and adopting VMs, and the resources that are not (or only partly) functional.
+This page describes how a `VirtualMachine` moves through its lifecycle in VirtRigaud **v0.4.1** beyond create and delete: phases and conditions, reconfiguration, snapshots and snapshot revert, cloning, image preparation, detaching and adopting VMs, and the resources that are not (or only partly) functional.
 
-## What is functional in v0.4.0
+## What is functional in v0.4.1
 
-| Area | Status in v0.4.0 |
+| Area | Status in v0.4.1 |
 |------|------------------|
 | `status.phase` | Set on every status write of the VirtualMachine controller ([phases](#phases)) |
 | Reconfiguration (CPU, memory, disk growth) | Functional; result is one of *applied*, *restart required* or *failed* ([details](#reconfiguration)) |
@@ -65,7 +65,7 @@ spec:
       snapshot: {name: pre-shutdown, includeMemory: false}
 ```
 
-!!! warning "The hooks are not executed in v0.4.0"
+!!! warning "The hooks are not executed in v0.4.1"
     The CRD stores these fields, but no controller or provider reads them: a `preStop` action does not run before a power-off, a `postStart` action does not run after a power-on, and `gracefulShutdownTimeout` is not passed to the provider. The manager always sends a graceful-shutdown timeout of 60 seconds (`internal/transport/grpc/client.go`). Do not rely on these fields; take a snapshot with a `VMSnapshot` and run guest-side commands with cloud-init or your own tooling. See [Graceful shutdown](graceful-shutdown.md) for what `OffGraceful` does.
 
 ## Reconfiguration
@@ -147,7 +147,7 @@ spec:
 
 - **vSphere** supports memory snapshots (they need the VM powered on). `snapshotConfig.quiesce` is accepted but not passed on: the vSphere provider always takes the snapshot without quiescing the guest file system.
 - **libvirt:** a snapshot of a powered-off VM, or without memory, is an external disk-only snapshot; a memory snapshot of a running VM is internal. `SnapshotCreate` of a **powered-off** VM briefly ejects the CD-ROMs (including the cloud-init seed) so the snapshot does not store them; a running VM is never ejected.
-- **libvirt, delete order with memory snapshots:** a memory snapshot taken after a disk-only snapshot is stored inside the disk-only snapshot's overlay. Deleting the disk-only snapshot first would destroy the memory snapshot's data, so in v0.4.0 the provider refuses (`DeleteBlocked`, naming the snapshots to delete first). **Delete the memory snapshots first, then the disk-only one.**
+- **libvirt, delete order with memory snapshots:** a memory snapshot taken after a disk-only snapshot is stored inside the disk-only snapshot's overlay. Deleting the disk-only snapshot first would destroy the memory snapshot's data, so in v0.4.1 the provider refuses (`DeleteBlocked`, naming the snapshots to delete first). **Delete the memory snapshots first, then the disk-only one.**
 - **libvirt:** while another domain uses the VM's disk (a linked clone made by an earlier release), snapshot create, delete and revert of that VM are refused (`VM_DISK_IN_USE`).
 - **Proxmox:** a snapshot revert is owner-checked and returns a task, which the manager polls.
 

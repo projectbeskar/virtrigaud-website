@@ -9,7 +9,7 @@
 #
 # Prerequisite: the referenced Provider (libvirt-cluster) is a CLUSTERED provider
 # (spec.topology: cluster; see provider-libvirt-clustered.yaml). Clustered
-# libvirt is experimental in v0.4.0. The Provider controller renders the Hosts
+# libvirt is experimental in v0.4.1. The Provider controller renders the Hosts
 # of this namespace into its "<provider>-hosts" Secret, the inventory sync fills
 # Host.status and HostPool.status, and the scheduler places VMs on the Hosts.
 # Host-to-host live migration is not implemented.

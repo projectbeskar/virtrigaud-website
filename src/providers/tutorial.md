@@ -5,13 +5,13 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Onboarding Tutorial
 
-This page walks you through bringing a `Provider` CR online end-to-end on a VirtRigaud v0.4.0 cluster. It uses the vSphere provider as the running example because that is the most common starting point; the same shape applies to libvirt and Proxmox with provider-type-specific tweaks called out inline.
+This page walks you through bringing a `Provider` CR online end-to-end on a VirtRigaud v0.4.1 cluster. It uses the vSphere provider as the running example because that is the most common starting point; the same shape applies to libvirt and Proxmox with provider-type-specific tweaks called out inline.
 
 If you are looking to build a **new** provider (a fresh hypervisor such as Firecracker or KubeVirt), that material lives in the developer-facing [provider development guide](../development/providers.md) — this page is for operators wiring up an existing provider against a real hypervisor.
 
 ## Prerequisites
 
-- A Kubernetes cluster with VirtRigaud v0.4.0 installed. If you do not have one yet, follow the [Helm-only install guide](../getting-started/install-helm-only.md).
+- A Kubernetes cluster with VirtRigaud v0.4.1 installed. If you do not have one yet, follow the [Helm-only install guide](../getting-started/install-helm-only.md).
 - `kubectl` configured against the cluster.
 - Cluster admin (or namespace admin in `virtrigaud-system`) — you need to create `Secret`s, `Provider`s, and at least one `VirtualMachine`.
 - Access to the hypervisor you are wiring up (vCenter / libvirt host / PVE cluster) with credentials of an account that can lifecycle VMs.
@@ -41,10 +41,10 @@ kubectl get pods -n virtrigaud-system
 ```bash
 kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8080:8080 &
 curl -s http://localhost:8080/metrics | grep ^virtrigaud_build_info
-# virtrigaud_build_info{component="manager", ...version="v0.4.0"} 1
+# virtrigaud_build_info{component="manager", ...version="v0.4.1"} 1
 ```
 
-If you see `virtrigaud_build_info{version="v0.4.0"} 1`, the manager is up and the metric surface is wired. See [Observability](../operations/observability.md) for the full metric catalog.
+If you see `virtrigaud_build_info{version="v0.4.1"} 1`, the manager is up and the metric surface is wired. See [Observability](../operations/observability.md) for the full metric catalog.
 
 ## Step 2 — Create the credentials Secret
 
@@ -229,7 +229,7 @@ curl -s http://localhost:8080/metrics | grep -E '^(virtrigaud_circuit_breaker_st
 Expected (your provider name will differ):
 
 ```
-virtrigaud_build_info{component="manager", ...version="v0.4.0"} 1
+virtrigaud_build_info{component="manager", ...version="v0.4.1"} 1
 virtrigaud_circuit_breaker_state{provider_type="vsphere", provider="vsphere-lab"} 0
 virtrigaud_provider_tasks_inflight{provider_type="vsphere", provider="vsphere-lab"} 0
 ```

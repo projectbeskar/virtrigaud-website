@@ -10,7 +10,7 @@ SPDX-License-Identifier: Apache-2.0
 
     This behaviour landed in v0.3.7 (a change from v0.3.6, where the `Provider.spec.runtime.service.tls` field was parsed but had no runtime effect) and is **unchanged in v0.4.0** — there are no new mTLS features or breaking mTLS changes in v0.4.0. See the historical [v0.3.6 → v0.3.7 upgrade note](#breaking-change-v036-v037-historical) below.
 
-This page describes how to enable and operate mTLS for manager↔provider gRPC in v0.4.0: the Provider CR `tls` block, how the manager and provider enforce it, the SAN allow-list, the secure-by-default/fail-closed behaviour, certificate rotation and its limitation, the Helm `providerTLS` block for chart-templated providers, the `TLSConfigured` status condition, and a worked cert-manager example for producing the TLS Secret.
+This page describes how to enable and operate mTLS for manager↔provider gRPC in v0.4.1: the Provider CR `tls` block, how the manager and provider enforce it, the SAN allow-list, the secure-by-default/fail-closed behaviour, certificate rotation and its limitation, the Helm `providerTLS` block for chart-templated providers, the `TLSConfigured` status condition, and a worked cert-manager example for producing the TLS Secret.
 
 ## Trust model
 
@@ -287,7 +287,7 @@ For a regulated deployment:
 
 ## See also
 
-- [Operations -> Security](../../operations/security.md) — overall v0.4.0 security posture, including the [resolved-gap inventory](../../operations/security.md#v036-security-gap-inventory).
+- [Operations -> Security](../../operations/security.md) — overall v0.4.1 security posture, including the [resolved-gap inventory](../../operations/security.md#v036-security-gap-inventory).
 - [Bearer Token Authentication](bearer-token.md) — the other half of the gRPC-channel and hypervisor-credential auth story.
 - [Network Policies](network-policies.md) — defence-in-depth, and the required compensating control for any Provider you run with `tls.enabled=false`.
 - [Resilience](../../operations/resilience.md) — per-Provider CircuitBreaker limits the blast radius of a degraded or spoofed provider.

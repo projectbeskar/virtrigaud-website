@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Capabilities Matrix
 
-This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.4.0**.
+This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.4.1**.
 
 Cells marked ✅ / ❌ in this matrix are cross-referenced against each provider's `GetCapabilities` gRPC response (`internal/providers/{vsphere,libvirt,proxmox}/server.go`) and the capability builder registrations in `internal/providers/{proxmox}/capabilities.go` / `sdk/provider/capabilities/`. Where a feature is implemented in code but not yet exposed through the capability flag (or vice versa), the cell carries a footnote rather than being silently changed.
 
@@ -172,7 +172,7 @@ A revert discards what was written to the disks since the snapshot. Walkthrough,
 | **Cross-Provider Migration — S3 backend** | ✅[^migrate] | ✅[^migrate] | ✅[^migrate] | n/a | `VMMigration` over S3-compatible object storage (`relay`). Validated at v0.3.11 as source **and** target for every pair among the three providers (ADR-0006 Slices 1–3, #236); see [what was validated](../migration/user-guide.md#what-virtrigaud-v040-supports). |
 | **Cross-Provider Migration — NFS backend** | ✅[^migratenfs] | ✅[^migratenfs] | ✅[^migratenfs] | n/a | `VMMigration` over an NFS export via `qemu-img` (ADR-0006 Slice 4, #236). vSphere pod-side libnfs, libvirt host-side libnfs, **Proxmox kernel-mount**. Validated at v0.3.11 for libvirt ⇄ libvirt, libvirt ⇄ vSphere and libvirt ⇄ Proxmox; **vSphere ⇄ Proxmox over NFS has not been run** ([details](../migration/user-guide.md#what-virtrigaud-v040-supports)). |
 
-A clustered libvirt Provider is also accepted as a `VMMigration` **target** over S3 or NFS (experimental, v0.4.0): the target VM is created and placed first on a host whose `default` pool has room for the disk, and the disk is imported onto that host. It was run from single-host libvirt, vSphere and Proxmox (S3) sources. Host-to-host migration is not implemented.
+A clustered libvirt Provider is also accepted as a `VMMigration` **target** over S3 or NFS (experimental, v0.4.1): the target VM is created and placed first on a host whose `default` pool has room for the disk, and the disk is imported onto that host. It was run from single-host libvirt, vSphere and Proxmox (S3) sources. Host-to-host migration is not implemented.
 
 This is VirtRigaud's **storage-backend-agnostic, any-direction** cross-hypervisor
 migration (ADR-0006): the disk is staged on a pluggable backend (S3 or NFS) and
@@ -268,7 +268,7 @@ Enable enforcement once you have confirmed (via `status.reportedCapabilities`) t
 
 ### Provider capability flags for clustered and security contracts
 
-Beyond the flags shown on `Provider.status.reportedCapabilities`, `GetCapabilities` carries flags the manager reads at runtime to decide whether it may send a call or must hold an operation. The table shows what each provider reports in v0.4.0 (source: each provider's `GetCapabilities`). A manager holds the matching operation when the flag is missing, rather than sending a call the provider would not honour.
+Beyond the flags shown on `Provider.status.reportedCapabilities`, `GetCapabilities` carries flags the manager reads at runtime to decide whether it may send a call or must hold an operation. The table shows what each provider reports in v0.4.1 (source: each provider's `GetCapabilities`). A manager holds the matching operation when the flag is missing, rather than sending a call the provider would not honour.
 
 | Flag | vSphere | Libvirt (single) | Libvirt (clustered) | Proxmox | Mock |
 |------|:---:|:---:|:---:|:---:|:---:|
@@ -462,4 +462,4 @@ Support is best-effort and there is no long-term-support line; see [Versioning](
 
 ---
 
-*This document reflects VirtRigaud v0.4.0 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*
+*This document reflects VirtRigaud v0.4.1 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*

@@ -5,14 +5,14 @@ SPDX-License-Identifier: Apache-2.0
 
 # VMMigration API Reference
 
-This page is aligned to **VirtRigaud v0.4.0** and reflects the
+This page is aligned to **VirtRigaud v0.4.1** and reflects the
 `infra.virtrigaud.io/v1beta1` `VMMigration` CRD and its controller as they ship.
 The authoritative sources are the Go types at
 `api/infra.virtrigaud.io/v1beta1/vmmigration_types.go` and the controller in
 `internal/controller/vmmigration_*.go`. For the generated field list see the
 [Full CRD Reference](../references/generated-crd-docs.md#vmmigration).
 
-!!! info "What v0.4.0 supports"
+!!! info "What v0.4.1 supports"
     `VMMigration` moves a VM's **primary disk** between `vsphere`, `libvirt` and
     `proxmox` providers, staged on an `s3` or `nfs` backend (`pvc` is the legacy
     compatibility path, see [storage.pvc](#storagepvc-pvcstorageconfig-compat-only)).
@@ -21,8 +21,8 @@ The authoritative sources are the Go types at
     [User Guide](user-guide.md#what-virtrigaud-v040-supports) lists which
     directions and backends were validated in a lab and which were not.
 
-!!! warning "Fields in the schema that the v0.4.0 controller does not use"
-    Several fields exist in the CRD but nothing reads or writes them in v0.4.0.
+!!! warning "Fields in the schema that the v0.4.1 controller does not use"
+    Several fields exist in the CRD but nothing reads or writes them in v0.4.1.
     Setting them has no effect, and the status fields stay empty:
 
     - **Spec:** `options.validationChecks.*` (no post-import check runs, so
@@ -53,7 +53,7 @@ source's advertised `supportedExportBackends` and the target's
 the requested `storage.type`, otherwise the migration fails with
 `storage backend "<type>" not supported by source provider ...`.
 
-The Helm chart in v0.4.0 has no value for `--enforce-provider-capabilities` or for
+The Helm chart in v0.4.1 has no value for `--enforce-provider-capabilities` or for
 `--migration-storage-allowed-hosts`. Add them to the manager Deployment's
 arguments yourself (for example with a Helm post-renderer or a kustomize patch).
 
@@ -86,7 +86,7 @@ namespace.
 | Source   | `.spec.source.vmRef.name`             | |
 | Target   | `.spec.target.name`                   | |
 | Phase    | `.status.phase`                       | |
-| Progress | `.status.progress.percentage`         | Always empty in v0.4.0 (not written). |
+| Progress | `.status.progress.percentage`         | Always empty in v0.4.1 (not written). |
 | Age      | `.metadata.creationTimestamp`         | |
 
 ## Spec
@@ -115,7 +115,7 @@ spec:
 !!! note "Only the primary disk is migrated"
     The controller sends one `ExportDisk` with an empty disk ID, which each provider
     resolves to the VM's primary (first, bootable) disk, and records one imported
-    disk on the target. Additional disks are not migrated in v0.4.0.
+    disk on the target. Additional disks are not migrated in v0.4.1.
 
 ### `spec.target` (`MigrationTarget`, required)
 
@@ -154,7 +154,7 @@ spec:
 | `diskFormat` | `qcow2`, `vmdk`, `raw` | `qcow2` | Format hint passed to the source provider's `ExportDisk`. The staged object is the source provider's native flattened format for `s3` (`vmdk` from vSphere, `qcow2` from libvirt and Proxmox) and always `qcow2` for `nfs`; the **target provider** converts on import. |
 | `compress` | bool | `false` | Asks the source provider to compress the export. Honoured for `qcow2` by providers that advertise export compression. |
 | `verifyChecksums` | bool | `true` | The import verifies the checksum the export reported. On `s3` that is an end-to-end SHA-256. On `nfs` no byte checksum exists (`qemu-img` computes none): integrity rests on the target's `qemu-img` check of the converted image. |
-| `timeout` | duration | `4h` in the schema | In v0.4.0 it **only bounds the wait for a source snapshot task**. It is not a limit on the whole migration. The schema defaults it to `4h` whenever `options` exists; the 2 h built-in default applies only when `options` is omitted. Each `ExportDisk` and `ImportDisk` call has its own 30-minute deadline in the manager's gRPC client. |
+| `timeout` | duration | `4h` in the schema | In v0.4.1 it **only bounds the wait for a source snapshot task**. It is not a limit on the whole migration. The schema defaults it to `4h` whenever `options` exists; the 2 h built-in default applies only when `options` is omitted. Each `ExportDisk` and `ImportDisk` call has its own 30-minute deadline in the manager's gRPC client. |
 | `retryPolicy` | `MigrationRetryPolicy` | unset | **Without a `retryPolicy` a failed migration is final.** See [Retry](#retry). |
 | `cleanupPolicy` | `Always`, `OnSuccess`, `Never` | `OnSuccess` | What happens to the staged disk, the landed disk, the source snapshot and the PVC. See [Cleanup](#cleanup). |
 | `validationChecks` | | | **Not used.** |
@@ -246,7 +246,7 @@ spec:
 
 | Layout | Name | Used by |
 |--------|------|---------|
-| `v2` | `vmmigrations_<namespace>_<name>_export.qcow2` | every migration that stages under v0.4.0 |
+| `v2` | `vmmigrations_<namespace>_<name>_export.qcow2` | every migration that stages under v0.4.1 |
 | `v1` | `vmmigrations-<namespace>-<name>-export.qcow2` | a migration an older manager already staged; it keeps the name for its import and its delete |
 
 The layout is recorded in `status.storageInfo.stagingLayout`. `v1` was ambiguous
@@ -635,7 +635,7 @@ do about it:
 ## Status
 
 All fields are optional; the controller fills them in as it progresses. "Not written"
-means the v0.4.0 controller never sets the field.
+means the v0.4.1 controller never sets the field.
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -668,7 +668,7 @@ means the v0.4.0 controller never sets the field.
 
 Fields `currentPhase`, `totalBytes`, `transferredBytes`, `percentage`, `eta`,
 `transferRate` and `phaseStartTime` exist in the schema. **None is written in
-v0.4.0**, so the `Progress` column stays empty. The export and import are single
+v0.4.1**, so the `Progress` column stays empty. The export and import are single
 synchronous provider calls; follow `status.phase` and the provider log.
 
 ### `status.diskInfo` (`MigrationDiskInfo`)

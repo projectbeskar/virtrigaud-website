@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Operations Guide
 
-Operator-facing reference for running VirtRigaud **v0.4.0** in production. The
+Operator-facing reference for running VirtRigaud **v0.4.1** in production. The
 pages linked from here are the authoritative source for each topic; this index
 is a router, not a duplicate.
 
@@ -62,7 +62,7 @@ SDK. They are kept **honest about what is and is not wired**:
 | Page | When you need it |
 |------|------------------|
 | [vSphere Hardware Versions](vsphere-hardware-version.md) | Setting the `vmx-N` compatibility level at VM creation (VMClass `extraConfig`) and upgrading existing VMs via the `HardwareUpgrade` gRPC RPC (no controller path yet). vSphere-only. |
-| [Libvirt Host Preparation](libvirt-host-prepare.md) | Preparing a Libvirt/KVM host so the libvirt provider can drive it: SSH user and host-key verification, the `default` pool and image directories, the cloud-init seed directory (required in v0.4.0), sudo rules for disk reads and copies, bridged networking and placement labels for clustered hosts, AppArmor/SELinux. |
+| [Libvirt Host Preparation](libvirt-host-prepare.md) | Preparing a Libvirt/KVM host so the libvirt provider can drive it: SSH user and host-key verification, the `default` pool and image directories, the cloud-init seed directory (required in v0.4.1), sudo rules for disk reads and copies, bridged networking and placement labels for clustered hosts, AppArmor/SELinux. |
 
 ## Production-readiness checklist
 
@@ -70,7 +70,7 @@ Use this before promoting a VirtRigaud deployment to production. Each item links
 to the page that actually covers it.
 
 - [ ] **CRDs installed at the v0.4.0 schema** — `helm pull virtrigaud/virtrigaud --version 0.4.1 --untar && kubectl apply --server-side --force-conflicts -f virtrigaud/crds/`. See [Upgrade Guide](upgrade.md).
-- [ ] **Manager + provider images pinned to v0.4.0** — release artifacts are tagged in lockstep; do not mix versions across the manager/providers/CRDs trio. Provider images are set per `Provider` in `spec.runtime.image`; the chart does not change them.
+- [ ] **Manager + provider images pinned to v0.4.1** — release artifacts are tagged in lockstep; do not mix versions across the manager/providers/CRDs trio. Provider images are set per `Provider` in `spec.runtime.image`; the chart does not change them.
 - [ ] **Shared `Provider`/`VMClass`/`VMImage` have a consumer grant** — `spec.consumerNamespaceSelector` on every object another namespace uses (v0.4.0); unset means own namespace only. See the [Upgrade Guide](upgrade.md#breaking-changes).
 - [ ] **Hypervisor accounts and hosts prepared** — vSphere: `VirtualMachine.Config.AdvancedConfig` and `System.Read`; Proxmox: `VM.Config.Network`, `VM.Config.Cloudinit`, `SDN.Use`; libvirt: [seed directory, sudo rules, image directories](libvirt-host-prepare.md).
 - [ ] **Admission policy understood** — on Kubernetes 1.30+ the chart installs a ValidatingAdmissionPolicy that reserves the manager-owned `virtrigaud.io` keys; exempt your backup/restore tooling (`admissionPolicy.reservedKeys`).

@@ -5,14 +5,14 @@ SPDX-License-Identifier: Apache-2.0
 
 # Libvirt Host Preparation
 
-This page is aligned to **VirtRigaud v0.4.0**. It describes what an operator
+This page is aligned to **VirtRigaud v0.4.1**. It describes what an operator
 must set up on a Libvirt/KVM host so the in-tree libvirt provider
 (`internal/providers/libvirt/`) can drive it over SSH, for a single-host
 `Provider` and for every `Host` of a clustered (`topology: cluster`,
 experimental) one.
 
 !!! warning "Upgrading from v0.3.11: three host changes are required before the provider rolls"
-    A v0.4.0 libvirt provider **fails every VM create on a host** that lacks the
+    A v0.4.1 libvirt provider **fails every VM create on a host** that lacks the
     [cloud-init seed directory](#cloud-init-seed-directory), and cannot read
     libvirt's snapshot overlays without the
     [`VR_DISK_READ` sudo rule](#sudo-rules-for-disk-reads-and-copies) (unless the SSH
@@ -410,7 +410,7 @@ Since v0.4.0 the provider builds every seed in a dedicated directory that only
 the SSH user can list, and makes each seed file private. The directory **must
 exist on every host that creates VMs** (every host of a clustered Provider and
 the target host of a migration into libvirt), owned by the SSH user, before the
-v0.4.0 libvirt provider runs:
+v0.4.1 libvirt provider runs:
 
 ```bash
 install -d -m 0711 -o <ssh user> -g <ssh user> /var/lib/libvirt/virtrigaud-seeds
@@ -546,7 +546,7 @@ raw, never probed); those checks are defence in depth, not a substitute.
 
 ### Linked clones (qcow2 backing files)
 
-Libvirt `VMClone` of type `LinkedClone` is **refused** in v0.4.0 (the clone would
+Libvirt `VMClone` of type `LinkedClone` is **refused** in v0.4.1 (the clone would
 read its source's live disk, and powering the source on corrupts it): use
 `FullClone`. A full clone needs a powered-off source. Existing linked clones keep
 working, but their source VM cannot be deleted, reverted or snapshotted while
@@ -711,7 +711,7 @@ sudo aa-status | grep libvirt
 ### SELinux (RHEL/CentOS/Fedora)
 
 !!! warning "Not tested"
-    The v0.4.0 seed directory and snapshot paths were validated on Ubuntu 24.04
+    The v0.4.1 seed directory and snapshot paths were validated on Ubuntu 24.04
     with AppArmor (libvirt 10.0). VirtRigaud has not been run with SELinux
     enforcing against them. On an SELinux host libvirt relabels a domain's disk
     sources at start; if a seeded VM does not start, look for AVC denials on the
@@ -787,7 +787,7 @@ another tenant's VM; the provider log does.
 ### `Permission denied` when a VM starts
 
 Symptom: the VM fails to start and the libvirt log shows `Cannot access storage
-file ... Permission denied`. VM disks created by v0.4.0 are `0640
+file ... Permission denied`. VM disks created by v0.4.1 are `0640
 libvirt-qemu:kvm`; disks created by earlier releases are `0777`. Common causes:
 
 1. The disk's owner or mode was changed by hand, or the `chown` after the write
@@ -868,7 +868,7 @@ ssh <user>@<vm-ip> "cloud-init status"     # should print: status: done
 ```
 
 Without `spec.userData` the default cloud-init provisions **no login user, SSH
-key, password or sudo grant** (v0.4.0); supply your own. For the
+key, password or sudo grant** (v0.4.1); supply your own. For the
 network-configuration defaults injected into cloud-init meta-data, see
 [Providers / Libvirt](../providers/libvirt.md).
 

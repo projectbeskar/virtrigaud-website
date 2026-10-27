@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The vSphere provider manages virtual machines on VMware vSphere (vCenter Server and standalone ESXi) via the `govmomi` SDK. It is the most mature provider in the VirtRigaud tree.
 
-This page is aligned to **VirtRigaud v0.4.0**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/vsphere/server.go`.
+This page is aligned to **VirtRigaud v0.4.1**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/vsphere/server.go`.
 
 ## Capabilities at a glance
 
@@ -37,7 +37,7 @@ For the full cross-provider matrix and resilience / observability story, see:
 
 ## Behaviour at a glance: snapshot, revert, clone, reconfigure, disks
 
-| Area | vSphere behaviour at v0.4.0 | Code |
+| Area | vSphere behaviour at v0.4.1 | Code |
 |------|-----------------------------|------|
 | Snapshot create | `CreateSnapshot(name, description, includeMemory, quiesce=false)`; waits for the task in the call (no `TaskRef`). The snapshot id is the snapshot's managed-object id. A template or an image artifact is refused (`VM_IS_IMAGE_ARTIFACT`). | `server.go` (`SnapshotCreate`), `vm_artifact_guard.go` |
 | Snapshot revert | `spec.snapshot.revertToRef`; finds the snapshot by id or name and calls `RevertToSnapshot_Task` with `suppressPowerOn=false`, waiting in the call. A snapshot taken **with memory** powers the VM on; the controller then applies `spec.powerState`. | `server.go` (`SnapshotRevert`) |

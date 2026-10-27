@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # Nested Virtualization Support
 
 !!! note "Provider support differs, and none of it is covered by end-to-end tests"
-    The VMClass field `spec.performanceProfile.nestedVirtualization` exists in the API. In v0.4.0 it is **applied by the vSphere and libvirt providers and ignored by the Proxmox provider** (see [the support table](#what-each-provider-does)). VirtRigaud does not run end-to-end nested-virtualization scenarios in CI or in its lab validation of v0.4.0. If you need it for a production workload, validate the configuration on your own hosts first.
+    The VMClass field `spec.performanceProfile.nestedVirtualization` exists in the API. In v0.4.1 it is **applied by the vSphere and libvirt providers and ignored by the Proxmox provider** (see [the support table](#what-each-provider-does)). VirtRigaud does not run end-to-end nested-virtualization scenarios in CI or in its lab validation of v0.4.1. If you need it for a production workload, validate the configuration on your own hosts first.
 
 ## Overview
 
@@ -75,7 +75,7 @@ spec:
 | `performanceProfile.latencySensitivity`, `hyperThreadingPolicy`, `resourceLimits` | Not applied | Not applied | Not applied |
 
 !!! warning "libvirt requires both `vmx` and `svm`"
-    The libvirt provider adds **both** features as required, whatever the host CPU is. A host CPU exposes only one of them (Intel `vmx`, AMD `svm`), and libvirt may refuse to start a domain that requires a CPU feature the host does not offer. This has not been validated on Intel and AMD hosts for v0.4.0; if a VM from a nested class does not start on libvirt, check the domain's start error for the missing feature.
+    The libvirt provider adds **both** features as required, whatever the host CPU is. A host CPU exposes only one of them (Intel `vmx`, AMD `svm`), and libvirt may refuse to start a domain that requires a CPU feature the host does not offer. This has not been validated on Intel and AMD hosts for v0.4.1; if a VM from a nested class does not start on libvirt, check the domain's start error for the missing feature.
 
 ## Complete example
 

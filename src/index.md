@@ -122,7 +122,7 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6), and one gRP
 
 ## Custom Resources
 
-VirtRigaud v0.4.0 ships **12 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
+VirtRigaud v0.4.1 ships **12 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
 
 | Kind | Purpose |
 |---|---|
@@ -133,7 +133,7 @@ VirtRigaud v0.4.0 ships **12 Custom Resource Definitions** in the `infra.virtrig
 | `VMNetworkAttachment` | Logical network the VM attaches to (resolved per-provider). |
 | `VMSnapshot` | A point-in-time snapshot of a VirtualMachine. |
 | `VMMigration` | Inter-provider VM migration (export → import) through S3 or NFS staging (a legacy PVC backend also exists). |
-| `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.4.0. |
+| `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.4.1. |
 | `VMPlacementPolicy` | Placement / anti-affinity rules. Applied via `VirtualMachine.spec.placementRef`; the clustered libvirt scheduler uses it as its constraint language. There is no standalone controller. |
 | `VMClone` | One-shot clone of an existing VM (vSphere, Proxmox and Libvirt). libvirt supports full clones only; linked clones are not supported there. |
 | `Host` | One hypervisor host behind a clustered libvirt Provider, with its live capacity and health in `status`. |
@@ -143,7 +143,7 @@ The manager also runs a `VMAdoption` reconciler (not a CRD — it reconciles `Pr
 
 ## Version Information
 
-This documentation covers **VirtRigaud v0.4.0**.
+This documentation covers **VirtRigaud v0.4.1**.
 
 !!! warning "Upgrading from v0.3.11"
     v0.4.0 is a security-hardening release with breaking changes (cross-namespace references need a grant, `spec.providerRef` is immutable once bound, vSphere needs a new vCenter privilege, libvirt hosts need a seed directory, and more). Read the [Upgrade Guide](operations/upgrade.md) and [Helm CRD Upgrades](getting-started/helm-crd-upgrades.md) before upgrading.

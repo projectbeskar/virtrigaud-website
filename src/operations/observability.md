@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 This is the operator's guide to what VirtRigaud **v0.4.0** emits, what it means, and how to build dashboards and alerts from it. For the machine-readable catalog (exact help strings, label sets, histogram buckets) see the [Metrics Reference](../api-reference/metrics.md). For circuit-breaker lifecycle details and the semantics of provider calls whose outcome is unknown see [Resilience](resilience.md). For migration recipes from v0.3.5 metrics see [Upgrade Guide](upgrade.md).
 
 !!! note "Metrics are only part of the signal"
-    Several v0.4.0 behaviours that matter operationally have **no metric**: held provider calls (`...OutcomeUnknown`), `DeleteBlocked`, restore holds, placement decisions and `HostPool` health. They are reported as **status conditions and Events** on the objects themselves; see [Status conditions and events worth alerting on](#status-conditions-and-events-worth-alerting-on). Alert on those through `kube-state-metrics` custom-resource state metrics (or your own exporter), not through `virtrigaud_*`.
+    Several v0.4.1 behaviours that matter operationally have **no metric**: held provider calls (`...OutcomeUnknown`), `DeleteBlocked`, restore holds, placement decisions and `HostPool` health. They are reported as **status conditions and Events** on the objects themselves; see [Status conditions and events worth alerting on](#status-conditions-and-events-worth-alerting-on). Alert on those through `kube-state-metrics` custom-resource state metrics (or your own exporter), not through `virtrigaud_*`.
 
 ## What VirtRigaud emits
 
@@ -31,7 +31,7 @@ Three families of metrics live on the manager endpoint:
 
 ---
 
-## The `virtrigaud_*` catalog (v0.4.0)
+## The `virtrigaud_*` catalog (v0.4.1)
 
 Metrics 1 to 11 are unchanged in name and labels since v0.3.8 (new `kind` and `reason` values are noted). Metrics 12 to 14, the provider-process metrics and the libvirt driver-transition metrics are new in v0.4.0.
 
@@ -324,7 +324,7 @@ sum by (provider) (virtrigaud_provider_tasks_inflight)
 **`state` values:** `verified`, `missing`, `unknown`  
 **Added:** v0.4.0
 
-Whether the installed CRDs carry the fields the v0.4.0 security model relies on: the `VirtualMachine` provider binding (`status.boundProvider` and the `spec.providerRef` immutability rule), `spec.consumerNamespaceSelector` on `Provider`, `VMClass` and `VMImage`, and the per-Provider `VMImage` prepare state (`status.providerStatus[]`) and `Provider` `status.reportedCapabilities.supportsImageArtifactIdentity` that identity-safe image preparation needs. Exactly one of the three series is `1`:
+Whether the installed CRDs carry the fields the v0.4.1 security model relies on: the `VirtualMachine` provider binding (`status.boundProvider` and the `spec.providerRef` immutability rule), `spec.consumerNamespaceSelector` on `Provider`, `VMClass` and `VMImage`, and the per-Provider `VMImage` prepare state (`status.providerStatus[]`) and `Provider` `status.reportedCapabilities.supportsImageArtifactIdentity` that identity-safe image preparation needs. Exactly one of the three series is `1`:
 
 - `verified` — every required field is present.
 - `missing` — at least one installed CRD is older than the manager. The manager's **readiness probe fails** until the CRDs are upgraded, and each check adds one `virtrigaud_errors_total{reason="vm-crd-security-features-missing"}`.
@@ -397,7 +397,7 @@ The libvirt provider is moving from `virsh` subprocess reads to a pure-Go `go-li
 
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
-| `virtrigaud_libvirt_active_driver` | Gauge | `family`, `driver` | The effective driver per read family (`describe`, `list`): `1` for the active driver (`virsh`, `shadow` or `native`), `0` for the others. A family configured `native` runs as `shadow` in v0.4.0 and reads `shadow`: the metric reports what is happening, not what was requested. |
+| `virtrigaud_libvirt_active_driver` | Gauge | `family`, `driver` | The effective driver per read family (`describe`, `list`): `1` for the active driver (`virsh`, `shadow` or `native`), `0` for the others. A family configured `native` runs as `shadow` in v0.4.1 and reads `shadow`: the metric reports what is happening, not what was requested. |
 | `virtrigaud_libvirt_shadow_compare_total` | Counter | `family`, `result` | Shadow-compare runs by result: `equal`, `divergent`, `error`, `panic`. The denominator for the divergence rate, and proof that the harness is running. `error` and `panic` are recovered; the caller always gets virsh's answer. |
 | `virtrigaud_libvirt_shadow_divergence_total` | Counter | `family`, `field` | Semantic divergences between the two drivers, by field. This is the ADR-0008 flip-gate metric: a read family may flip to native only after it reads `0` over the soak window. |
 
@@ -408,7 +408,7 @@ Enable shadow mode per family through the Provider's `spec.runtime.env` (`VIRTRI
 ## Deprecated: `virtrigaud_queue_depth`
 
 **Deprecated in:** v0.3.6 (G7.4 / PR #131)  
-**Removal:** not removed in v0.4.0; the helper is still compiled in and still registered  
+**Removal:** not removed in v0.4.1; the helper is still compiled in and still registered  
 **Help string:** `[DEPRECATED v0.3.6 — use controller-runtime's workqueue_depth{name} instead. See CHANGELOG.] Current depth of work queue by kind.`
 
 This gauge is redundant with controller-runtime's standard `workqueue_depth{name}` metric, which has been present on `/metrics` since v0.3.0. Production code in this repository no longer calls `SetQueueDepth`, so the series is never written. Do not build new dashboards on it.
@@ -439,7 +439,7 @@ This gauge is redundant with controller-runtime's standard `workqueue_depth{name
 
 ## Status conditions and events worth alerting on
 
-These have no `virtrigaud_*` metric. They are the operator-visible signal for the v0.4.0 safety behaviours. Read them with `kubectl get -o yaml` / `kubectl describe`, or export them with `kube-state-metrics` custom-resource state metrics.
+These have no `virtrigaud_*` metric. They are the operator-visible signal for the v0.4.1 safety behaviours. Read them with `kubectl get -o yaml` / `kubectl describe`, or export them with `kube-state-metrics` custom-resource state metrics.
 
 ### VirtualMachine
 
@@ -489,7 +489,7 @@ For the reasons on a VM (`Ready`, `Placed`, `DeleteBlocked`, the `...OutcomeUnkn
 
 ## Logs
 
-- **Manager.** The manager logs through controller-runtime's `zap` logger (`logr`), one structured record per event with the standard controller-runtime keys (`controller`, `controllerKind`, `namespace`, `name`, `reconcileID`). It is started with controller-runtime's `zap` flags (`--zap-devel`, `--zap-log-level`, `--zap-encoder`, …) and **Development-mode defaults** (console encoder). The chart (v0.4.0) does not have a values key for extra manager arguments, and the `VIRTRIGAUD_LOG_LEVEL` / `VIRTRIGAUD_LOG_FORMAT` / `VIRTRIGAUD_TRACING_*` entries in `manager.env` and the `observability.tracing` block of `values.yaml` are **not read by the manager** in v0.4.0. To change the manager's log flags, patch the Deployment `args` (for example with Kustomize `patches` on the rendered chart).
+- **Manager.** The manager logs through controller-runtime's `zap` logger (`logr`), one structured record per event with the standard controller-runtime keys (`controller`, `controllerKind`, `namespace`, `name`, `reconcileID`). It is started with controller-runtime's `zap` flags (`--zap-devel`, `--zap-log-level`, `--zap-encoder`, …) and **Development-mode defaults** (console encoder). The chart (v0.4.1) does not have a values key for extra manager arguments, and the `VIRTRIGAUD_LOG_LEVEL` / `VIRTRIGAUD_LOG_FORMAT` / `VIRTRIGAUD_TRACING_*` entries in `manager.env` and the `observability.tracing` block of `values.yaml` are **not read by the manager** in v0.4.1. To change the manager's log flags, patch the Deployment `args` (for example with Kustomize `patches` on the rendered chart).
 - **Providers.** Set `spec.runtime.logLevel` (`debug`, `info`, `warn`, `error`) and `spec.runtime.logFormat` (`text`, `json`) on the `Provider`; the controller passes them to the provider pod as `LOG_LEVEL` / `LOG_FORMAT`. Provider logs use Go `slog`.
 - **What is never logged.** Secret values (credentials, TLS keys, cloud-init payloads) are not written to logs, events or status. The disk and ownership guards deliberately keep hypervisor paths, other tenants' namespaces and hostnames out of `status` and events: a `Conflict` message names only the requested object, and the details are in the **provider's** log. Look there for who owns a conflicting VM or which path was refused.
 - **Warnings worth grepping for.** The manager logs `WARNING:` lines when `insecureSkipVerify` is set on a Provider, when TLS is explicitly disabled, and when a CRD security feature is missing or cannot be verified.

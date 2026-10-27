@@ -5,9 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Catalog
 
-*Last updated: 2026-10-25T00:00:00Z — aligned to v0.4.0*
+*Last updated: 2026-10-25T00:00:00Z — aligned to v0.4.1*
 
-The VirtRigaud Provider Catalog lists all verified providers available for the VirtRigaud virtualization management platform. Providers listed here ship as part of the main repository at `v0.4.0`. The release publishes images for the vSphere, libvirt and Proxmox providers; the mock provider is built from source (see [Mock Provider](#mock-provider)).
+The VirtRigaud Provider Catalog lists all verified providers available for the VirtRigaud virtualization management platform. Providers listed here ship as part of the main repository at `v0.4.1`. The release publishes images for the vSphere, libvirt and Proxmox providers; the mock provider is built from source (see [Mock Provider](#mock-provider)).
 
 ## Provider Overview
 
@@ -25,7 +25,7 @@ The catalog publishes no conformance results. The test suite in the repository (
 
 ### Installing a Provider
 
-A provider is deployed by the VirtRigaud manager from a `Provider` resource: you create the credentials Secret and a `Provider` whose `spec.runtime.image` names the provider image, and the manager creates the provider Deployment and Service. Use the provider image at the same version as the manager (`v0.4.0`). The image names are `ghcr.io/projectbeskar/virtrigaud/provider-<type>:v0.4.1` for `<type>` in `vsphere`, `libvirt` and `proxmox`; the images are published for `linux/amd64` and `linux/arm64`.
+A provider is deployed by the VirtRigaud manager from a `Provider` resource: you create the credentials Secret and a `Provider` whose `spec.runtime.image` names the provider image, and the manager creates the provider Deployment and Service. Use the provider image at the same version as the manager (`v0.4.1`). The image names are `ghcr.io/projectbeskar/virtrigaud/provider-<type>:v0.4.1` for `<type>` in `vsphere`, `libvirt` and `proxmox`; the images are published for `linux/amd64` and `linux/arm64`.
 
 The example below installs a vSphere provider. Replace the endpoint with your vCenter and create the Secret first (see [Provider Details](#provider-details) for the credentials each provider reads):
 
@@ -189,7 +189,7 @@ The Proxmox provider manages VMs on Proxmox VE through the Proxmox API, supporti
 
 **Installation:** create the credentials Secret (`token_id` and `token_secret`, or `username` and `password`) and a `Provider` as in [Installing a Provider](#installing-a-provider), with `type: proxmox`, `endpoint: https://pve.example.com:8006` and `image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1`. See the [Proxmox provider](../providers/proxmox.md) page for the credentials the provider reads.
 
-## Reported Capabilities (v0.4.0)
+## Reported Capabilities (v0.4.1)
 
 Since v0.3.8, the manager fetches each provider's live capability set via the `GetCapabilities` gRPC RPC and surfaces the result in `Provider.status.reportedCapabilities`. A `CapabilitiesReported` status condition is also set on the Provider CR.
 
@@ -237,7 +237,7 @@ The VirtRigaud Conformance Test Suite (VCTS) is meant to be run against a deploy
 # Install the VCTS tool
 # `go install ...@latest` is refused (replace directives in go.mod): build from a checkout or
 # download the vcts-<os>-<arch> binary from the GitHub release
-git clone --branch v0.4.0 https://github.com/projectbeskar/virtrigaud.git
+git clone --branch v0.4.1 https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud && go build -o vcts ./cmd/vcts
 
 # Validate the specification files (works today)
@@ -248,7 +248,7 @@ cd virtrigaud && go build -o vcts ./cmd/vcts
 ```
 
 !!! warning "`vcts run` cannot pass yet"
-    In v0.4.0 the conformance runner implements no steps: every `create`, `update`, `delete`, `wait` and `validate` step reports "not implemented", so each selected test fails at its first step and `vcts run` exits non-zero. It selects tests only for `vsphere` and `libvirt` Providers (for other types, or outside a checkout, it selects none and exits 0). `vcts validate` and `vcts list` work. Until the runner executes steps, test your provider with your own VM lifecycle checks against a real cluster.
+    In v0.4.1 the conformance runner implements no steps: every `create`, `update`, `delete`, `wait` and `validate` step reports "not implemented", so each selected test fails at its first step and `vcts run` exits non-zero. It selects tests only for `vsphere` and `libvirt` Providers (for other types, or outside a checkout, it selects none and exits 0). `vcts validate` and `vcts list` work. Until the runner executes steps, test your provider with your own VM lifecycle checks against a real cluster.
 
 ### 3. Publish to Catalog
 
@@ -293,10 +293,10 @@ To be included in the catalog, providers must:
 
 | Provider | Kubernetes | VirtRigaud | Go Version | Platforms |
 |----------|------------|------------|------------|-----------|
-| Mock | 1.25+ | 0.4.0 | 1.26+ | built from source |
-| vSphere | 1.25+ | 0.4.0 | 1.26+ | linux/amd64, linux/arm64 |
-| Libvirt | 1.25+ | 0.4.0 | 1.26+ | linux/amd64, linux/arm64 |
-| Proxmox | 1.25+ | 0.4.0 | 1.26+ | linux/amd64, linux/arm64 |
+| Mock | 1.25+ | 0.4.1 | 1.26+ | built from source |
+| vSphere | 1.25+ | 0.4.1 | 1.26+ | linux/amd64, linux/arm64 |
+| Libvirt | 1.25+ | 0.4.1 | 1.26+ | linux/amd64, linux/arm64 |
+| Proxmox | 1.25+ | 0.4.1 | 1.26+ | linux/amd64, linux/arm64 |
 
 The Go version is the toolchain needed to build from source (`go 1.26.10` in `go.mod`). On Kubernetes 1.30+ the chart also renders the admission policy that reserves VirtRigaud's internal annotation keys; below 1.30 it is skipped.
 
@@ -304,7 +304,7 @@ Run each provider image at the same version as the manager and upgrade the manag
 
 ## Provider Security Documentation
 
-The following security guides apply to all providers deployed in v0.4.0:
+The following security guides apply to all providers deployed in v0.4.1:
 
 | Guide | Path | Summary |
 |-------|------|---------|

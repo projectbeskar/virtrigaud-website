@@ -5,11 +5,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # Creating Your First Virtual Machine
 
-This guide walks through creating a complete, working virtual machine from start to finish using VirtRigaud v0.4.0.
+This guide walks through creating a complete, working virtual machine from start to finish using VirtRigaud v0.4.1.
 
 ## Prerequisites
 
-- VirtRigaud v0.4.0 installed in your Kubernetes cluster
+- VirtRigaud v0.4.1 installed in your Kubernetes cluster
 - A configured Provider (vSphere, Libvirt, or Proxmox)
 - `kubectl` access to your cluster
 

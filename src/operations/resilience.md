@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Resilience Guide
 
-This document describes the resilience patterns and error-handling mechanisms in VirtRigaud as of **v0.4.0**: what the manager retries, what it never retries blindly, how the per-Provider circuit breaker decides, and how a host that stops answering is handled.
+This document describes the resilience patterns and error-handling mechanisms in VirtRigaud as of **v0.4.1**: what the manager retries, what it never retries blindly, how the per-Provider circuit breaker decides, and how a host that stops answering is handled.
 
 ## Overview
 
@@ -19,7 +19,7 @@ VirtRigaud's resilience model is layered:
 - **Host-unreachable handling for clustered libvirt providers** — one dead host never opens the Provider's breaker or blocks the Provider's other hosts ([A clustered host that stops answering](#a-clustered-host-that-stops-answering)).
 - **Provider-side connection resilience** — the vSphere provider keeps its vCenter session alive; the libvirt provider retries transient SSH connection failures ([below](#provider-side-connection-resilience-v038)).
 
-!!! note "Nothing in this page is tunable through the chart in v0.4.0"
+!!! note "Nothing in this page is tunable through the chart in v0.4.1"
     The circuit-breaker thresholds, the per-RPC deadlines and the retry delays are compiled in. The `config.circuitBreaker`, `config.retry` and `config.rateLimit` blocks in the chart's `values.yaml`, and ConfigMap keys such as `CB_FAILURE_THRESHOLD`, `RPC_TIMEOUT_MUTATING` or `RETRY_MAX_ATTEMPTS`, are **not read by the manager**. Values you set there have no effect.
 
 ## CircuitBreaker on the Provider gRPC Path (v0.3.6)
@@ -264,13 +264,13 @@ The manager has no generic retry loop around provider calls. A failed call is re
 controller-runtime applies its own exponential backoff on top when a reconcile returns an error.
 
 !!! note "The `resilience.Retry` helper is not used on the production path"
-    `internal/resilience` also contains a generic exponential-backoff helper (`Retry`, with `DefaultRetryConfig`: 5 attempts, 500 ms base, 30 s cap, ×2, up to 10% jitter, plus `AggressiveRetryConfig`, `ConservativeRetryConfig` and `NoRetryConfig` presets). No manager code calls it in v0.4.0; it exists for provider and controller authors. The delays in the table above are what actually happens.
+    `internal/resilience` also contains a generic exponential-backoff helper (`Retry`, with `DefaultRetryConfig`: 5 attempts, 500 ms base, 30 s cap, ×2, up to 10% jitter, plus `AggressiveRetryConfig`, `ConservativeRetryConfig` and `NoRetryConfig` presets). No manager code calls it in v0.4.1; it exists for provider and controller authors. The delays in the table above are what actually happens.
 
 ## Calls whose outcome is unknown
 
 A few provider calls make something that a second call could duplicate: the source snapshot, the disk export and the disk import of a `VMMigration`, the snapshot of a `VMSnapshot`, a single-host `Create`, a `Clone`, and a `SnapshotRevert`. If the manager restarts or leadership moves after such a call was sent but before its result was written to status, the result is lost. The same holds for a call that **fails without a definite answer**: it ran past its deadline, or the connection dropped after the request was written. The provider may still be completing it.
 
-In v0.4.0 the manager never re-sends such a call blindly:
+In v0.4.1 the manager never re-sends such a call blindly:
 
 1. **A durable marker is written first.** Before the call, the object's status records a condition of its own (`SnapshotRequested`, `ExportRequested`, `ImportRequested` on a `VMMigration`; `SnapshotRequested` on a `VMSnapshot`), written with the `resourceVersion` the reconcile read. If that write fails, **nothing is sent**. A VM's `Create` and a `spec.snapshot.revertToRef` revert are recorded the same way (reason `CreateRequested` on `Provisioning`; `status.snapshotRevert` with `phase: Reverting`).
 2. **A definite answer removes the marker.** The result, or a failure that proves what happened (the request never reached the provider, a clustered host was unreachable, the provider refused the call before doing anything), is written with the marker removed.
