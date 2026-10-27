@@ -171,8 +171,8 @@ A revert discards what was written to the disks since the snapshot. Walkthrough,
 | **Disk Import** | ✅[^7] | ✅[^8] | ✅ | ❌ | `ImportDisk` |
 | **Export Compression** | ✅ | ✅ | ✅[^proxmoxcomp] | ❌ | vSphere and libvirt honor `req.Compress`; Proxmox (#219) |
 | **Export Formats** | `vmdk`, `qcow2`, `raw` | `qcow2`, `raw` (clustered: `qcow2`) | `qcow2`, `raw`, `vmdk` | n/a | vSphere & Proxmox `GetCapabilities` advertise all three (#178 / #198) |
-| **Cross-Provider Migration — S3 backend** | ✅[^migrate] | ✅[^migrate] | ✅[^migrate] | n/a | `VMMigration` over S3-compatible object storage (`relay`). Validated at v0.3.11 as source **and** target for every pair among the three providers (ADR-0006 Slices 1–3, #236); see [what was validated](../migration/user-guide.md#what-virtrigaud-v040-supports). |
-| **Cross-Provider Migration — NFS backend** | ✅[^migratenfs] | ✅[^migratenfs] | ✅[^migratenfs] | n/a | `VMMigration` over an NFS export via `qemu-img` (ADR-0006 Slice 4, #236). vSphere pod-side libnfs, libvirt host-side libnfs, **Proxmox kernel-mount**. Validated at v0.3.11 for libvirt ⇄ libvirt, libvirt ⇄ vSphere and libvirt ⇄ Proxmox; **vSphere ⇄ Proxmox over NFS has not been run** ([details](../migration/user-guide.md#what-virtrigaud-v040-supports)). |
+| **Cross-Provider Migration — S3 backend** | ✅[^migrate] | ✅[^migrate] | ✅[^migrate] | n/a | `VMMigration` over S3-compatible object storage (`relay`). Validated at v0.3.11 as source **and** target for every pair among the three providers (ADR-0006 Slices 1–3, #236); see [what was validated](../migration/user-guide.md#what-virtrigaud-v041-supports). |
+| **Cross-Provider Migration — NFS backend** | ✅[^migratenfs] | ✅[^migratenfs] | ✅[^migratenfs] | n/a | `VMMigration` over an NFS export via `qemu-img` (ADR-0006 Slice 4, #236). vSphere pod-side libnfs, libvirt host-side libnfs, **Proxmox kernel-mount**. Validated at v0.3.11 for libvirt ⇄ libvirt, libvirt ⇄ vSphere and libvirt ⇄ Proxmox; **vSphere ⇄ Proxmox over NFS has not been run** ([details](../migration/user-guide.md#what-virtrigaud-v041-supports)). |
 
 A clustered libvirt Provider is also accepted as a `VMMigration` **target** over S3 or NFS (experimental, v0.4.1): the target VM is created and placed first on a host whose `default` pool has room for the disk, and the disk is imported onto that host. It was run from single-host libvirt, vSphere and Proxmox (S3) sources. Host-to-host migration is not implemented.
 
@@ -180,7 +180,7 @@ This is VirtRigaud's **storage-backend-agnostic, any-direction** cross-hyperviso
 migration (ADR-0006): the disk is staged on a pluggable backend (S3 or NFS) and
 moved with `qemu-img` — it **never traverses a CSI PVC**. Over S3 every pair among
 vSphere, Libvirt/KVM and Proxmox VE was lab-validated in both directions (v0.3.11); over NFS
-five pairs were, and vSphere ⇄ Proxmox VE was not ([what was validated](../migration/user-guide.md#what-virtrigaud-v040-supports)). A legacy `pvc` staging mode remains for the vSphere/libvirt
+five pairs were, and vSphere ⇄ Proxmox VE was not ([what was validated](../migration/user-guide.md#what-virtrigaud-v041-supports)). A legacy `pvc` staging mode remains for the vSphere/libvirt
 directions but is **compat-only** — it cannot reach host-resident libvirt disks or
 Proxmox node storage. Do not confuse this with the **vMotion/Migration** row in
 [Advanced Features](#advanced-features) below, which is *intra-hypervisor live*

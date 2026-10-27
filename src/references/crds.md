@@ -187,12 +187,12 @@ Full schema: [generated-crd-docs.md#vmclass](generated-crd-docs.md#vmclass)
 |-------|------|----------|---------|-------------|
 | `cpu` | `int32` | Yes | — | Number of virtual CPUs (1–128) |
 | `memory` | `resource.Quantity` | Yes | — | Memory allocation (e.g. `4Gi`, `8192Mi`) |
-| `firmware` | `FirmwareType` | No | `BIOS` | `BIOS`, `UEFI`, or `EFI` |
+| `firmware` | `FirmwareType` | No | `BIOS` | `BIOS`, `UEFI`, or `EFI`. vSphere and libvirt honour `UEFI` (libvirt since v0.4.1: the host needs an OVMF package, and the image must boot with UEFI); `BIOS`, `EFI` and an unset value select BIOS on libvirt. The Proxmox provider keeps the template's firmware. Applied at create only |
 | `diskDefaults` | `DiskDefaults` | No | — | Default disk settings for VMs using this class |
 | `guestToolsPolicy` | `string` | No | `install` | `install`, `skip`, `upgrade`, `uninstall` |
 | `resourceLimits` | `VMResourceLimits` | No | — | CPU/memory limits and reservations |
 | `performanceProfile` | `PerformanceProfile` | No | — | CPU hot-add, NUMA, latency sensitivity |
-| `securityProfile` | `SecurityProfile` | No | — | Secure boot, TPM, encryption |
+| `securityProfile` | `SecurityProfile` | No | — | Secure boot, TPM, VT-d, encryption. On libvirt `secureBoot` implies UEFI and `vtdEnabled` the `q35` machine type (both work since v0.4.1); see [libvirt firmware](../providers/libvirt.md#firmware-secure-boot-and-platform-features) |
 | `extraConfig` | `map[string]string` | No | — | Provider-specific configuration (max 50 keys) |
 | `consumerNamespaceSelector` | `LabelSelector` | No | unset | Namespaces, other than this one, whose VirtualMachines may use this class. Unset: own namespace only; `{}`: every namespace |
 
@@ -642,7 +642,7 @@ A clustered Provider is an ordinary `Provider` with `spec.topology: cluster`, `t
 
 ## VMMigration
 
-The `VMMigration` CRD migrates a virtual machine's disk from one provider to another (snapshot, export to staging storage, import, create the target VM). Disks are staged through **S3** or **NFS** (`pvc` is kept for compatibility). S3 was validated for every pair among vSphere, libvirt and Proxmox VE, and NFS for five pairs (not vSphere ⇄ Proxmox VE); a clustered libvirt Provider is also a valid target (experimental). Other combinations are unverified, see [what was validated](../migration/user-guide.md#what-virtrigaud-v040-supports). See the [Migration API reference](../migration/api-reference.md) for every field.
+The `VMMigration` CRD migrates a virtual machine's disk from one provider to another (snapshot, export to staging storage, import, create the target VM). Disks are staged through **S3** or **NFS** (`pvc` is kept for compatibility). S3 was validated for every pair among vSphere, libvirt and Proxmox VE, and NFS for five pairs (not vSphere ⇄ Proxmox VE); a clustered libvirt Provider is also a valid target (experimental). Other combinations are unverified, see [what was validated](../migration/user-guide.md#what-virtrigaud-v041-supports). See the [Migration API reference](../migration/api-reference.md) for every field.
 
 Full schema: [generated-crd-docs.md#vmmigration](generated-crd-docs.md#vmmigration)
 
@@ -820,7 +820,7 @@ spec:
 
 ## VMClone
 
-The `VMClone` CRD manages a clone operation: it creates a new VirtualMachine from a source VM and is active on vSphere, Proxmox and libvirt. See limitations below.
+The `VMClone` CRD manages a clone operation: it creates a new VirtualMachine from a source VM and is active on vSphere, Proxmox and libvirt. See limitations below. Most of `customization` and `options` is accepted by the API but not acted on in this release.
 
 Full schema: [generated-crd-docs.md#vmclone](generated-crd-docs.md#vmclone)
 
@@ -828,9 +828,9 @@ Full schema: [generated-crd-docs.md#vmclone](generated-crd-docs.md#vmclone)
 
 - **Source**: only `source.vmRef` (clone from a VM in the same namespace) is supported. `source.snapshotRef`, `source.templateRef` and `source.imageRef` set the VMClone to `Failed` with message `"clone source type not yet supported; use source.vmRef"`.
 - **Same-provider only**: the target is created on the source VM's Provider.
-- **Linked clones**: issued only when the provider reports `supportsLinkedClones`. vSphere and Proxmox do. On libvirt linked clones are disabled (`Ready=False/LinkedCloneUnsupported`); use `FullClone`. A libvirt full clone needs its source VM powered off (the clone waits with `SourceMustBePoweredOff`).
+- **Linked clones**: issued only when the provider reports `supportsLinkedClones`. Only vSphere does. On libvirt linked clones are disabled, and since v0.4.1 Proxmox no longer advertises them (it never made them): the clone fails with `LinkedCloneUnsupported`; use `FullClone`. A libvirt full clone needs its source VM powered off (the clone waits with `SourceMustBePoweredOff`).
 - **Power**: the target stays powered off unless `options.powerOn: true`.
-- **Identity**: a libvirt clone gets its own cloud-init instance id and SSH host keys. `create` on `VMClone` is read access to the source's data.
+- **Identity**: a clone gets its own cloud-init instance id and SSH host keys (on Proxmox, a clone of a VM with a seed, or with inline user-data, gets a seed of its own and does not carry its source's user-data). `create` on `VMClone` is read access to the source's data.
 - **Cross-namespace targets**: `target.namespace` other than the VMClone's needs the grant annotation `infra.virtrigaud.io/allowed-source-namespaces` on the target namespace.
 - **Clustered Providers**: a clone is admitted against its source host's free capacity and never moves to another host.
 - **Produced VM**: the controller creates a target `VirtualMachine` labeled `virtrigaud.io/adopted=true` with `status.id` seeded to the cloned VM's provider ID. Deleting a VMClone does **not** delete the produced VirtualMachine.
@@ -842,7 +842,7 @@ Full schema: [generated-crd-docs.md#vmclone](generated-crd-docs.md#vmclone)
 | `source` | `CloneSource` | Yes | `vmRef` only (see limitations above) |
 | `target` | `VMCloneTarget` | Yes | Destination `name` (required), `namespace`, `classRef`, `networks`, `disks`, `placementRef`, labels and annotations |
 | `options` | `CloneOptions` | No | `type`: `FullClone` (default), `LinkedClone` or `InstantClone`; `powerOn` (default `false`); `timeout` (default `30m`) |
-| `customization` | `VMCustomization` | No | Cloud-init or Ignition customization for the target VM |
+| `customization` | `VMCustomization` | No | Cloud-init customization for the target VM. The providers apply only `hostname`, `domain` and `userData.cloudInit.inline`. The fields that may hold a secret and that nothing acts on (`sysprep.productKey`, `sysprep.adminPassword.value`, `sysprep.joinDomain.password.value`, `sysprep.customCommands`, `certificates[].data`, `guestCommands[].command`/`.arguments`, `userData.ignition.inline`) are **not sent to the provider** since v0.4.1 but are stored in plaintext in the object: do not put a credential in them |
 | `metadata` | `CloneMetadata` | No | Labels/annotations for clone audit |
 
 ### Status

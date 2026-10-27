@@ -433,3 +433,4 @@ These are not scheduler rejections but appear on the VM's `Provisioning` or
 - Capacity accounting sees only VirtRigaud-managed VMs. Other domains on a host
   take real memory the scheduler does not know about.
 - There is no per-tenant quota: tenants share the pool first come, first served.
+- The scheduler does not consider firmware. A VMClass with `firmware: UEFI` or `securityProfile.secureBoot` needs an OVMF package on the host the VM is placed on; a VM placed on a host without one is refused (`ValidationError`) and is re-checked on that host (it keeps its pending host, and is never moved to another). Install the package on every host that can receive such a VM, or delete the VM. On a pool whose hosts have different OVMF packages, VMs of one VMClass can get different firmware builds. See [libvirt: firmware](../../providers/libvirt.md#firmware-secure-boot-and-platform-features).

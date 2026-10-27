@@ -9,7 +9,10 @@ Operator-facing reference for running VirtRigaud **v0.4.1** in production. The
 pages linked from here are the authoritative source for each topic; this index
 is a router, not a duplicate.
 
-!!! warning "Upgrading from v0.3.11? Read the Upgrade Guide first"
+!!! warning "Upgrading? Read the Upgrade Guide first"
+    From v0.4.0, [Upgrading from v0.4.0 to v0.4.1](upgrade.md#upgrading-from-v040-to-v041) lists three actions: SSH credentials for Proxmox Providers whose VMs carry user-data, a check of libvirt VMClasses with `firmware: UEFI`, and rotating secrets set in a `VMClone`'s `spec.customization`.
+
+    From v0.3.11:
     v0.4.0 is a security-hardening release with breaking changes (cross-namespace
     references need a grant, `providerRef` is immutable once bound, a new vCenter
     privilege, a libvirt seed directory that must exist before the provider rolls).
@@ -34,7 +37,7 @@ is a router, not a duplicate.
 | [Observability](observability.md) | What VirtRigaud exposes on `/metrics`: the `virtrigaud_*` families wired in code, with their labels and when they populate. No invented metrics. |
 | [Resilience](resilience.md) | The per-`Provider` CircuitBreaker (`internal/transport/grpc/client.go`), failure classification (`isInfraFailure`), default thresholds (`FailureThreshold=10`, `ResetTimeout=60s`, `HalfOpenMaxCalls=3`), and provider-side connection resilience (vSphere vCenter keepalive/reconnect, libvirt SSH retry, migration-PVC delete safety). |
 | [Security](security.md) | Canonical operator-facing security reference. STRIDE pass, credential-flow diagram, the mTLS/SSH host-key controls, the remaining gRPC-auth disclosure, and the compensating controls a regulated deployment must layer on top. |
-| [Upgrade Guide](upgrade.md) | **v0.3.11 → v0.4.0**: pre-flight checks, the required order (hosts and accounts, CRDs, consumer grants, manager, providers), every breaking change with its action, new privileges, changed chart values, in-flight migrations, upgrading from a release candidate, rollback caveats. Plus notes for older releases, GitOps and troubleshooting. |
+| [Upgrade Guide](upgrade.md) | **v0.4.0 → v0.4.1** (actions for Proxmox user-data, libvirt UEFI and `VMClone` secrets; what changed in status, backoff and logs; known limitations; verification), then **v0.3.11 → v0.4.0**: pre-flight checks, the required order (hosts and accounts, CRDs, consumer grants, manager, providers), every breaking change with its action, new privileges, changed chart values, in-flight migrations, upgrading from a release candidate, rollback caveats. Plus notes for older releases, GitOps and troubleshooting. |
 
 ### Security sub-pages
 
@@ -69,10 +72,10 @@ SDK. They are kept **honest about what is and is not wired**:
 Use this before promoting a VirtRigaud deployment to production. Each item links
 to the page that actually covers it.
 
-- [ ] **CRDs installed at the v0.4.0 schema** — `helm pull virtrigaud/virtrigaud --version 0.4.1 --untar && kubectl apply --server-side --force-conflicts -f virtrigaud/crds/`. See [Upgrade Guide](upgrade.md).
+- [ ] **CRDs installed at the v0.4.1 schema** (unchanged from v0.4.0 apart from descriptions) — `helm pull virtrigaud/virtrigaud --version 0.4.1 --untar && kubectl apply --server-side --force-conflicts -f virtrigaud/crds/`. See [Upgrade Guide](upgrade.md).
 - [ ] **Manager + provider images pinned to v0.4.1** — release artifacts are tagged in lockstep; do not mix versions across the manager/providers/CRDs trio. Provider images are set per `Provider` in `spec.runtime.image`; the chart does not change them.
 - [ ] **Shared `Provider`/`VMClass`/`VMImage` have a consumer grant** — `spec.consumerNamespaceSelector` on every object another namespace uses (v0.4.0); unset means own namespace only. See the [Upgrade Guide](upgrade.md#breaking-changes).
-- [ ] **Hypervisor accounts and hosts prepared** — vSphere: `VirtualMachine.Config.AdvancedConfig` and `System.Read`; Proxmox: `VM.Config.Network`, `VM.Config.Cloudinit`, `SDN.Use`; libvirt: [seed directory, sudo rules, image directories](libvirt-host-prepare.md).
+- [ ] **Hypervisor accounts and hosts prepared** — vSphere: `VirtualMachine.Config.AdvancedConfig` and `System.Read`; Proxmox: `VM.Config.Network`, `VM.Config.Cloudinit`, `SDN.Use`, and for VMs with user-data SSH credentials, `genisoimage` and `flock` on the node ([details](../providers/proxmox.md#seed-prerequisites)); libvirt: [seed directory, sudo rules, image directories, `curl`, and an OVMF package for UEFI VMClasses](libvirt-host-prepare.md).
 - [ ] **Admission policy understood** — on Kubernetes 1.30+ the chart installs a ValidatingAdmissionPolicy that reserves the manager-owned `virtrigaud.io` keys; exempt your backup/restore tooling (`admissionPolicy.reservedKeys`).
 - [ ] **Metrics scrape configured** — a `ServiceMonitor` (or equivalent) against the manager's `/metrics`. Expect the families documented in [Observability](observability.md), including the v0.3.8 `kind="VMClone"`/`kind="VMSet"` reconcile series.
 - [ ] **mTLS configured on every Provider CR** — enforced since v0.3.7 (#147).

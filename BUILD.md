@@ -34,7 +34,7 @@ sudo apt-get install golang-go
 # Or download from https://go.dev/dl/
 ```
 
-Go 1.26 or higher is required: the generators run `go` against the pinned VirtRigaud release (v0.4.0 declares `go 1.26.10` in its `go.mod`).
+Go 1.26 or higher is required: the generators run `go` against the pinned VirtRigaud release (v0.4.1 declares `go 1.26.10` in its `go.mod`).
 
 The generators are Go tools pinned in `tools/tool-versions.env` (`crd-ref-docs`, `buf`, `protoc-gen-doc`); `make install-crd-tools` and `make install-proto-tools` install exactly those versions.
 

@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider gRPC API Guide
 
-This page is the hand-written companion to the generated [Provider gRPC API reference](grpc-api.md). The reference lists every message, field and RPC as defined in `proto/provider/v1/provider.proto`; this page explains how the manager uses the contract and what changed in v0.4.0.
+This page is the hand-written companion to the generated [Provider gRPC API reference](grpc-api.md). The reference lists every message, field and RPC as defined in `proto/provider/v1/provider.proto`; this page explains how the manager uses the contract and what changed in v0.4.0 and v0.4.1.
 
 ## Overview
 
@@ -19,9 +19,21 @@ Task-creating RPCs (`Create`, `Delete`, `Power`, `Reconfigure`, `SnapshotCreate`
 
 ---
 
+## Changes in v0.4.1
+
+**The contract has no field, number, RPC or option change.** The generated Go bindings differ from v0.4.0's only in comments, so a manager and a provider of the two versions interoperate on the wire. What changed is what `provider.proto` and the generated [reference](grpc-api.md) say:
+
+- The comments no longer carry internal tracking references or roadmap wording, and say what each field does today.
+- The disk export and import contract comment is attached to `ExportDiskRequest`, and corrects the old statement that `transfer_mode` `auto` is chosen from the providers' capabilities: **the manager resolves `auto` to `relay`**, and no built-in provider implements `direct`. An empty value is treated as `relay`; the `nfs` backend ignores `transfer_mode`.
+- `CloneRequest.customize_json` is an **allow-listed subset** of `spec.customization` (`hostname`, `domain`, `userData.cloudInit.inline`, and the fields providers only report as not applied). The fields that hold or commonly hold secret values and that no provider acts on are never included, so a third-party provider no longer receives them. Do not rely on receiving them.
+- `CloneRequest.linked` is honoured only by providers that report `supports_linked_clones`: libvirt refuses it, and the Proxmox provider stopped reporting it in v0.4.1 and refuses a linked request.
+- `request_token`, `target_vm`, `source_owner` and the other v0.4.0 fields keep their meaning; the comments name the providers that act on each (for example `CreateRequest.owner` is stamped by libvirt, vSphere and Proxmox).
+
+Behaviour that changed without a contract change: the manager now reads `GetCapabilities` again after a provider roll (see [Provider capabilities](../providers/providers-capabilities.md#when-the-status-is-read-v041)); the Proxmox provider answers a VMID race "not performed" (`CREATE_NOT_PERFORMED`) when it can prove it; the libvirt provider answers a clustered export failure it can prove as a definite failure; and the SDK's `gRPC request completed` log carries the `code` and the status message the caller receives. CI checks the contract with `buf breaking` against the pull request's target branch since v0.4.1.
+
 ## Changes since v0.3.11
 
-The service has 23 RPCs in v0.4.0 (18 in v0.3.11). All changes since v0.3.11 are additive on the wire: new fields use new field numbers, and a provider or manager that does not know a field ignores it. The manager gates each new behaviour on a capability flag the provider reports in `GetCapabilitiesResponse`, so a provider image that predates a flag keeps the old behaviour (or the manager holds the operation; the flag descriptions below say which).
+The service has 23 RPCs in v0.4.0 and v0.4.1 (18 in v0.3.11). All changes since v0.3.11 are additive on the wire: new fields use new field numbers, and a provider or manager that does not know a field ignores it. The manager gates each new behaviour on a capability flag the provider reports in `GetCapabilitiesResponse`, so a provider image that predates a flag keeps the old behaviour (or the manager holds the operation; the flag descriptions below say which).
 
 ### New RPCs
 

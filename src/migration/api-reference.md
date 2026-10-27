@@ -18,7 +18,7 @@ The authoritative sources are the Go types at
     compatibility path, see [storage.pvc](#storagepvc-pvcstorageconfig-compat-only)).
     A libvirt Provider with `topology: cluster` is also a target
     (**experimental**, `s3` and `nfs` only). The
-    [User Guide](user-guide.md#what-virtrigaud-v040-supports) lists which
+    [User Guide](user-guide.md#what-virtrigaud-v041-supports) lists which
     directions and backends were validated in a lab and which were not.
 
 !!! warning "Fields in the schema that the v0.4.1 controller does not use"

@@ -39,7 +39,7 @@ failed migration, read on.
 
 ## What was validated
 
-The [User Guide](user-guide.md#what-virtrigaud-v040-supports) has the full tables. In
+The [User Guide](user-guide.md#what-virtrigaud-v041-supports) has the full tables. In
 short: v0.3.11 validated every pair among vSphere, libvirt and Proxmox over S3, and
 five pairs over NFS (libvirt to libvirt, libvirt and vSphere both ways, libvirt and
 Proxmox both ways). The v0.4.0 release candidates re-ran many of them, added migration

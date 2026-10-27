@@ -51,7 +51,7 @@ See [Provider Architecture](advanced/remote-providers.md) for the details.
 |----------|-------------|-------|
 | **vSphere** | [vSphere provider](../providers/vsphere.md) | VMware vSphere through govmomi |
 | **libvirt** | [Libvirt provider](../providers/libvirt.md) | KVM/QEMU over SSH; single host, or a [clustered Provider](clustered/index.md) (experimental) |
-| **Proxmox VE** | [Proxmox provider](../providers/proxmox.md) | PVE REST API plus SSH for disk transfer |
+| **Proxmox VE** | [Proxmox provider](../providers/proxmox.md) | PVE REST API plus SSH for the cloud-init seed (VMs with user-data) and disk transfer |
 
 Each setup guide covers prerequisites, credentials, the Provider configuration, a first VM and troubleshooting. Not all providers support the same features: see the [Provider capabilities matrix](../providers/providers-capabilities.md) for the authoritative comparison.
 
@@ -64,7 +64,7 @@ Each setup guide covers prerequisites, credentials, the Provider configuration, 
 | [VM status reference](vm-status.md) | Phases, conditions and their reasons, `status.ips`, and how to read and release a held (outcome unknown) provider call |
 | [Security model and multi-tenancy](security-model.md) | VM ownership, cross-namespace references, admission policy, the Provider in-use finalizer, identity-safe image preparation, private cloud-init seeds, migration storage, the disk-size limit, and what to check on upgrade |
 | [Advanced VM lifecycle](advanced/advanced-lifecycle.md) | Phases and conditions, reconfiguration results (`RestartRequired`, `ResizePendingPowerOff`), snapshots and `spec.snapshot.revertToRef`, `spec.disks` and `DisksApplied`, `status.ips`, image preparation, `orphan-on-delete`, adoption, `providerRef` immutability |
-| [VM cloning](advanced/vm-cloning.md) | `VMClone`: scope, per-provider rules (libvirt full clones need a powered-off source; libvirt linked clones are disabled), new cloud-init identity, owner stamping, cross-namespace targets |
+| [VM cloning](advanced/vm-cloning.md) | `VMClone`: scope, per-provider rules (libvirt full clones need a powered-off source; libvirt and Proxmox serve full clones only), new cloud-init identity, customization secrets that are not sent, owner stamping, cross-namespace targets |
 | [Graceful shutdown](advanced/graceful-shutdown.md) | `powerState: OffGraceful`: what each provider does and how it falls back |
 | [Nested virtualization](advanced/nested-virtualization.md) | `performanceProfile.nestedVirtualization`: what vSphere and libvirt apply, and that Proxmox ignores it |
 | [Provider architecture](advanced/remote-providers.md) | What the manager creates for a Provider, TLS, `consumerNamespaceSelector`, `topology`, the in-use finalizer, security model |
