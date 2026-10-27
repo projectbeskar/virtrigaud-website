@@ -74,12 +74,20 @@ Then roll each `Provider`'s `spec.runtime.image` to `v0.4.1` (the libvirt provid
 
 ### Proxmox: user-data needs the SSH data plane
 
-**Who is affected.** A Proxmox `Provider` whose `VirtualMachine`s carry `spec.userData`, or whose `VMClone`s carry `spec.customization.userData.cloudInit.inline` (or clone a VM that has a seed). A `VirtualMachine` without `spec.userData` needs nothing new. To list the VMs on Proxmox Providers that carry user-data:
+**Who is affected.** A Proxmox `Provider` whose `VirtualMachine`s carry `spec.userData`, or whose `VMClone`s carry `spec.customization.userData.cloudInit.inline` (or clone a VM that has a seed). A `VirtualMachine` without `spec.userData` needs nothing new. To list the VMs that carry user-data (keep the ones whose provider is a Proxmox Provider, `kubectl get providers -A`):
 
 ```bash
 kubectl get virtualmachines -A -o json | jq -r '.items[]
   | select(.spec.userData != null)
   | "\(.metadata.namespace)/\(.metadata.name) provider=\(.spec.providerRef.name)"'
+```
+
+For `VMClone`s with inline user-data:
+
+```bash
+kubectl get vmclones -A -o json | jq -r '.items[]
+  | select(.spec.customization.userData.cloudInit.inline != null)
+  | "\(.metadata.namespace)/\(.metadata.name)"'
 ```
 
 **What changed.** Up to v0.4.0 the provider read two things out of the user-data with a line scan (the first `name:` as the user, and the `ssh_authorized_keys:` block-list items as that user's keys) and dropped the rest silently, so `runcmd`, `write_files`, `packages` and a second user never reached the guest. From v0.4.1 the provider builds a NoCloud seed CD-ROM on the PVE node over SSH, and the **whole** user-data reaches cloud-init, as on libvirt and vSphere. The seed is used for a new VM (from a template or without one), for a clone that needs one and for a migration's imported disk, and not for a VM that already exists: **existing VMs keep their PVE cloud-init drive and are not converted.** → [Proxmox cloud-init](../providers/proxmox.md#cloud-init-the-nocloud-seed)
@@ -115,6 +123,7 @@ kubectl get virtualmachines -A -o json | jq -r '.items[]
 - **Linked clones.** A `VMClone` with `spec.options.type: LinkedClone` for a Proxmox Provider is refused with reason `LinkedCloneUnsupported`, before the provider is called. The provider never made linked clones and no longer advertises them. Use `FullClone`.
 - **A clone gets the class's memory** (it kept the source's memory before, whatever the class said), so a clone's memory can differ from v0.4.0's for the same `VMClone`.
 - **The boot order of a VM cloned from a template with user-data** names only its boot disk (the template's first boot disk, else its `bootdisk`, else the first disk) and no longer the cloud-init slot. Every VM that gets a seed ends with the seed out of its boot order. A `VMClone` and a template `Create` without user-data keep the template's or source's order. Prepare templates with `qm set <vmid> --boot order=<boot disk>` (for example `scsi0`).
+- **A template made from a VM that has a seed** gives its clones a CD-ROM that references the template's seed. A `Create` with user-data replaces it with the VM's own seed; a `Create` without user-data detaches it, so the VM gets no cloud-init source from the template.
 - **A cloud-init drive left on `local` by v0.4.0** can be moved with `qm set <vmid> --ide2 <storage>:cloudinit` on the node.
 - **A VMID race is "not performed".** Two `Create`s or `Clone`s that get the same VMID from `/cluster/nextid` at the same time end with one refused by PVE (a config lock timeout, an existing config, or an outright `unable to create VM <vmid>: config file already exists`). In v0.4.0 both were answered with an unknown outcome, so a `VirtualMachine` deleted before its `Create` was sent again was held (`CreateOutcomeUnknown`). The provider now answers "not performed" when it can show the other VM is another request's, and the `Create` is sent again with a new VMID. It stays unknown when it cannot (for example another PVE user's clone, or two Providers sharing an API token). A `VirtualMachine` already held for this reason stays held after the roll: check PVE for a VM stamped with its UID, then record its id or set the `virtrigaud.io/create-outcome` annotation its message names. → [Ownership](../providers/proxmox.md#ownership-and-the-name-rule)
 

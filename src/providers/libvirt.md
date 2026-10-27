@@ -146,7 +146,7 @@ The sections below give the detail.
 
 Host preparation (packages, SSH user, sudo grants, known_hosts, rate limits, pools) is in [Libvirt Host Preparation](../operations/libvirt-host-prepare.md). The authoritative description of the sudo rules and pool-directory permissions is [libvirt clones and the linked-clone dependency](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#what-the-copies-run-as-root).
 
-!!! warning "Seed directory on every host, before you roll the v0.4.0 provider"
+!!! warning "Seed directory on every host, before you roll the provider (required since v0.4.0)"
     New cloud-init seeds are built in `VIRTRIGAUD_LIBVIRT_SEED_DIR` (default `/var/lib/libvirt/virtrigaud-seeds`). If the directory is missing and the SSH user cannot create it, is not owned by the SSH user, or is readable or writable by group or others, **every create on that host fails** (and so does every clone of a VM that has a seed) with a retryable `refusing to stage cloud-init data`. Create it once on each host, including migration target hosts and every host of a clustered Provider:
 
     ```bash

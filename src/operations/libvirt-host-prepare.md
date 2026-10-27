@@ -837,8 +837,8 @@ The create-from-URL path runs `curl` on the host since v0.4.1 (`wget` is no long
 ### `Permission denied` when a VM starts
 
 Symptom: the VM fails to start and the libvirt log shows `Cannot access storage
-file ... Permission denied`. VM disks created by v0.4.1 are `0640
-libvirt-qemu:kvm`; disks created by earlier releases are `0777`. Common causes:
+file ... Permission denied`. VM disks created by v0.4.0 and later are `0640
+libvirt-qemu:kvm`; disks created by v0.3.11 and earlier are `0777`. Common causes:
 
 1. The disk's owner or mode was changed by hand, or the `chown` after the write
    failed (it is best effort; the provider logs it) and libvirt's dynamic

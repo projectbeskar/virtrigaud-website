@@ -189,7 +189,7 @@ TLS material mounts at `/etc/virtrigaud/tls` inside the provider pod. Both manag
 
 ## PVE privileges
 
-VirtRigaud does not publish a complete, tested PVE role. What the v0.4.0 documentation and code establish is below; anything marked *PVE docs* comes from the Proxmox API documentation and is **not exercised by the project's tests**, so confirm it with a restricted token before you rely on it.
+VirtRigaud does not publish a complete, tested PVE role. What the v0.4.1 documentation and code establish is below; anything marked *PVE docs* comes from the Proxmox API documentation and is **not exercised by the project's tests**, so confirm it with a restricted token before you rely on it.
 
 | Privilege | Needed for | Source |
 |-----------|------------|--------|
@@ -334,11 +334,11 @@ Not applied on Proxmox: the attachment's `firewall`, `rateLimit` and `mtu`; `VMN
 VMs that relied on the accidental `vmbr0` default change on their next create or clone; a VM that already exists is not modified. Full rules: [Proxmox networks](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/proxmox-networks.md).
 
 !!! warning "Migrated guests (R36)"
-    A Linux cloud-image guest whose netplan matches its NIC by MAC address (Ubuntu cloud images do) can boot **without network** on a Proxmox target, because the target NIC has a new MAC and cloud-init does not run again. The fix is designed ([ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0014-migrated-guest-network.md)) and planned after GA; only its Proxmox network plumbing is in v0.4.0. Until then, make the guest's netplan match its NIC by name or driver before you migrate, or fix its network from the console. See the [migration guide](../migration/user-guide.md).
+    A Linux cloud-image guest whose netplan matches its NIC by MAC address (Ubuntu cloud images do) can boot **without network** on a Proxmox target, because the target NIC has a new MAC and cloud-init does not run again. The fix is designed ([ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0014-migrated-guest-network.md)) and planned after GA; only its Proxmox network plumbing is in v0.4.1. Until then, make the guest's netplan match its NIC by name or driver before you migrate, or fix its network from the console. See the [migration guide](../migration/user-guide.md).
 
 ## Cloud-init: the NoCloud seed
 
-A `VirtualMachine` that carries `spec.userData` on a Proxmox Provider gets the **whole** user-data document in the guest, as on libvirt and vSphere: `users` with their own keys and `sudo`, `write_files`, `packages`, `runcmd`, `chpasswd`, `hostname` and every other cloud-config key reach cloud-init unchanged. Since v0.4.1 the provider does this with a **NoCloud seed** it builds on the PVE node over SSH. A VM **without** `spec.userData` is unchanged: no seed, no SSH session, PVE's own cloud-init handling as before.
+A `VirtualMachine` that carries `spec.userData` on a Proxmox Provider gets the **whole** user-data document in the guest, as on libvirt and vSphere: `users` with their own keys and `sudo`, `write_files`, `packages`, `runcmd`, `chpasswd`, `hostname` and every other cloud-config key reach cloud-init unchanged. Since v0.4.1 the provider does this with a **NoCloud seed** it builds on the PVE node over SSH. A VM **without** `spec.userData` keeps PVE's own cloud-init handling and opens no SSH session, with one exception: a seed CD-ROM inherited from a template made from a VM that has a seed is detached (see [Lifecycle](#lifecycle)).
 
 ```yaml
 spec:
@@ -377,7 +377,7 @@ A re-sent `Create` of the same `VirtualMachine` keeps its `instance-id`; a new `
 
 | Needed | Detail |
 |---|---|
-| SSH credentials in the Provider's Secret | `ssh_user` (must be `root`; `root` is the default), `ssh_privatekey` or `ssh_password`, and `known_hosts`. See [The SSH data plane](#the-ssh-data-plane-migration-and-user-data). |
+| SSH credentials in the Provider's Secret | `ssh_user` (use `root`, the default; the seed script runs `qm`, so another user fails at the seed step, not at validation), `ssh_privatekey` or `ssh_password`, and `known_hosts`. See [The SSH data plane](#the-ssh-data-plane-migration-and-user-data). |
 | `genisoimage` and `flock` on the PVE node | Both are on a stock PVE node (`genisoimage` is a dependency of `qemu-server`). A node without `flock` is not refused: the build cannot take its lock, the VM is kept with an unknown outcome and every re-send repeats it, so check `command -v genisoimage flock` first. |
 | The VM on the node SSH reaches | The API endpoint's host. In a cluster, set `PROVIDER_NODE_SELECTOR` (or `PVE_NODE_SELECTOR`) to that node. |
 | A storage with the `images` content type | See [Seed storage](#seed-storage). |
@@ -402,6 +402,7 @@ The user-data is stored in **plaintext** in the seed volume, on the VM's storage
 - **Existing VMs are not converted.** A VM made before v0.4.1 keeps its PVE cloud-init drive. A cloud-init drive left on `local` by v0.4.0 can be moved with `qm set <vmid> --ide2 <storage>:cloudinit` on the node.
 - **The seed is written once, at `Create`.** A later change to `spec.userData` does not rebuild it.
 - **A clone gets a seed of its own** and does not carry its source's user-data. See [Cloning](#cloning).
+- **A template made from a VM with a seed.** Its clones would reference the template's seed volume. A `Create` with user-data replaces it with the VM's own seed; a `Create` without user-data detaches it, so the VM gets no cloud-init source from the template. The template's volume is never freed.
 - **A migration import** with user-data gets a seed on the storage the disk was imported to; one without user-data gets no cloud-init source, as before.
 
 ### Boot order
@@ -510,7 +511,7 @@ Proxmox VMIDs are cluster-wide and reused, and PVE does not keep VM names unique
     | Unreadable or multiple stamp | `FailedPrecondition` + `OWNER_STAMP_UNREADABLE`; nothing is done |
 
     The VM controller shows these as `Ready=False/VMNotOwned` and `Ready=False/OwnerStampUnreadable` (phase `Failed`). `status.id` is kept and no VM is created in its place. A `VMMigration` or `VMClone` whose source fails the check fails with a constant message and copies nothing. A `Delete` additionally refuses templates outright (`VM_IS_IMAGE_ARTIFACT`). Every checked call except `Reconfigure` and `GetDiskInfo` costs one extra `GET .../config`.
-- **Known limits at v0.4.0.** The legacy name rule can be claimed by anyone who can create a VM at a freed VMID (grant `VM.Allocate` carefully, above). [ADR-0012](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0012-proxmox-legacy-unstamped-name-rule.md) plans to retire it in stages; none of that is in v0.4.0. A stamp can be copied by someone who knows the UID and holds `VM.Config.Options`. The owner check and the call are two requests, so a VMID freed and reused between them is not caught: do not delete VirtRigaud-managed VMs outside VirtRigaud; delete the `VirtualMachine`, or detach it with `virtrigaud.io/orphan-on-delete: "true"`. A VM adopted by an earlier release that still carries a previous owner's stamp is held `VMNotOwned` until you remove the stale `virtrigaud.owner` line.
+- **Known limits at v0.4.1.** The legacy name rule can be claimed by anyone who can create a VM at a freed VMID (grant `VM.Allocate` carefully, above). [ADR-0012](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0012-proxmox-legacy-unstamped-name-rule.md) plans to retire it in stages; none of that is in v0.4.1. A stamp can be copied by someone who knows the UID and holds `VM.Config.Options`. The owner check and the call are two requests, so a VMID freed and reused between them is not caught: do not delete VirtRigaud-managed VMs outside VirtRigaud; delete the `VirtualMachine`, or detach it with `virtrigaud.io/orphan-on-delete: "true"`. A VM adopted by an earlier release that still carries a previous owner's stamp is held `VMNotOwned` until you remove the stale `virtrigaud.owner` line.
 
 - **A VMID race is "not performed", not an unknown outcome (since v0.4.1).** The VMID comes from PVE's `/cluster/nextid`, so two `Create`s or `Clone`s of one Provider can get the same one. The loser's clone task ends on a config lock timeout, finds the new VMID's config already there, or PVE refuses its request outright (HTTP 5xx `unable to create VM <vmid>: config file already exists`). The provider now answers "not performed" (`CREATE_NOT_PERFORMED`) when it can show the VM at that VMID is another request's: a task it recorded for another owner is making it, and every other clone or create task of the provider's PVE user on the node is one it recorded for another owner too. The `Create` is then sent again and gets a new VMID, and the other request's VM is not touched. It stays an **unknown outcome** when the provider cannot show that (a temporary config with no known maker, such as another PVE user's clone; a task it did not record for another owner, such as one started before a provider restart or by another Provider that shares the API token; or a task list or config it cannot read). A `VirtualMachine` deleted at that point needs the `virtrigaud.io/create-outcome` annotation its message names. The provider asks PVE for up to 100000 active tasks (PVE lists 50 by default), so a busy node does not hide one of its own tasks.
 
