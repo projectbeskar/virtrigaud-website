@@ -216,7 +216,7 @@ libvirt details, host prerequisites and the secure boot trust model: [libvirt fi
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
 | **Cloud-Init** | ✅ | ✅ | ✅ | ✅ | vSphere guestinfo, libvirt NoCloud ISO (private, in the host seed directory), Proxmox NoCloud seed CD-ROM built over SSH (since v0.4.1; the whole user-data applies, and it needs SSH credentials in the Provider's Secret) |
-| **Cloud-Init on clone** | ✅ | ✅ | ⚠️ | ✅ | vSphere and libvirt clones re-run the source's user-data. A Proxmox clone does not: it gets a seed of its own with the `VMClone`'s inline user-data (else one that configures nothing) |
+| **Cloud-Init on clone** | ✅ | ✅ | ⚠️ | N/A | vSphere and libvirt clones re-run the source's user-data. A Proxmox clone does not: it gets a seed of its own with the `VMClone`'s inline user-data (else one that configures nothing) |
 | **Guest Tools** | ❌ | ❌ | ❌ | ❌ | `VMClass.spec.guestToolsPolicy` is passed to providers but none acts on it; install tools through cloud-init |
 | **Guest Agent** | ✅ | ✅ | ✅ | ✅ | VMware Tools (vSphere) or the QEMU guest agent report IPs |
 | **Guest Customization** | ⚠️ | ⚠️ | ❌ | ✅ | `VMClone` applies hostname, domain and inline cloud-init only (vSphere, libvirt); sysprep, networks and time zone are not applied. Proxmox clone ignores customization |
