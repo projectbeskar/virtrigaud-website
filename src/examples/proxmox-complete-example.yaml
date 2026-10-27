@@ -5,15 +5,19 @@
 # This example demonstrates all major features of the Proxmox provider
 #
 # ⚠️  IMPORTANT: Requires Active Proxmox VE Server
-# The Proxmox provider needs environment variables to connect to a real Proxmox VE server.
-# See charts/virtrigaud-provider-runtime/examples/values-proxmox.yaml for the provider
-# runtime settings, docs/proxmox-networks.md and docs/proxmox-cloud-init-storage.md.
+# The Proxmox provider reads the Secret named by credentialSecretRef (mounted at
+# /etc/virtrigaud/credentials) to reach the PVE API: token_id and token_secret,
+# or username and password. See the Proxmox provider page and
+# docs/proxmox-cloud-init-storage.md. Provider settings read from the
+# environment (for example PVE_DEFAULT_STORAGE) go in the Provider's
+# spec.runtime.env.
 #
-# NOTE on user-data: the Proxmox provider maps cloud-init user-data to PVE's own
-# cloud-init settings. It applies the user name (`ciuser`) and the SSH keys of an
-# `ssh_authorized_keys:` block list (`- key` items) only. Other keys in the
-# examples below (`packages`, `runcmd`, `sudo`, ...) are NOT applied on Proxmox
-# today; see "Known limitations" in the v0.4.1 release notes.
+# NOTE on user-data: the Proxmox provider applies the whole cloud-init user-data
+# (users, sudo, packages, runcmd, write_files, ...) through a NoCloud seed CD-ROM
+# it builds on the PVE node over SSH, with a meta-data and a network-config (from
+# spec.networks) it renders. A Provider whose VMs carry user-data therefore needs
+# the SSH keys in its Secret below; without them such a VM is refused
+# (InvalidSpec), never created without its user-data. Since v0.4.1.
 
 ---
 # Secret for Proxmox VE API credentials
@@ -27,7 +31,16 @@ stringData:
   # Use API token authentication (recommended)
   token_id: "virtrigaud@pve!vrtg-token"
   token_secret: "xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx"
-  
+
+  # For VMs with user-data (every VirtualMachine below), and for VMMigration to or
+  # from this provider: the SSH data plane to the PVE node (the API endpoint's
+  # host), as root. The seed is built and the migration disks are moved there.
+  #   ssh_user: "root"
+  #   ssh_privatekey: |
+  #     -----BEGIN OPENSSH PRIVATE KEY-----
+  #     ...
+  #   known_hosts: "pve.example.com ssh-ed25519 AAAA..."   # ssh-keyscan from a trusted host
+
   # Optional: CA certificate for self-signed Proxmox VE
   ca.crt: |
     -----BEGIN CERTIFICATE-----
@@ -111,7 +124,7 @@ spec:
 # Import the cloud image on the PVE node yourself, e.g.:
 #   qm create 9001 --name centos-stream-9 --memory 2048 --net0 virtio,bridge=vmbr0
 #   qm importdisk 9001 CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2 local-lvm
-#   qm set 9001 --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-9001-disk-0 --ide2 local-lvm:cloudinit
+#   qm set 9001 --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-9001-disk-0 --ide2 local-lvm:cloudinit --boot order=scsi0
 #   qm template 9001
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMImage
@@ -272,8 +285,11 @@ spec:
         runcmd:
           - systemctl enable nginx
           - systemctl start nginx
+          # Allow SSH before enabling the firewall; --force skips ufw's
+          # interactive prompt (runcmd has no terminal).
+          - ufw allow OpenSSH
           - ufw allow 'Nginx Full'
-          - ufw enable
+          - ufw --force enable
 
 ---
 # VM Snapshot for the web server
@@ -385,5 +401,7 @@ spec:
               - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... test@example.com"
         packages:
           - epel-release
-          - htop
           - tmux
+        runcmd:
+          # htop is in EPEL, which the packages step above only just enabled.
+          - dnf install -y htop

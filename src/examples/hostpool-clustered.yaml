@@ -49,7 +49,7 @@
 #
 # Host.spec.endpoint is validated at admission: only
 #   qemu+ssh://[user@]host[:port]/system   (or /session)
-#   grpc://host:port                        (accepted by the schema; no host agent exists yet)
+#   grpc://host:port                        (accepted by the schema; the libvirt provider connects with qemu+ssh:// only, so use qemu+ssh://)
 # is accepted (host = DNS name, IPv4, or [IPv6]); no query string, other path,
 # or percent-encoding.
 ---

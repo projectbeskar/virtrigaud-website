@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # Nested Virtualization Support
 
 !!! note "Provider support differs, and none of it is covered by end-to-end tests"
-    The VMClass field `spec.performanceProfile.nestedVirtualization` exists in the API. In v0.4.1 it is **applied by the vSphere and libvirt providers and ignored by the Proxmox provider** (see [the support table](#what-each-provider-does)). VirtRigaud does not run end-to-end nested-virtualization scenarios in CI or in its lab validation of v0.4.1. If you need it for a production workload, validate the configuration on your own hosts first.
+    The VMClass field `spec.performanceProfile.nestedVirtualization` exists in the API. In v0.4.1 it is **applied by the vSphere and libvirt providers and ignored by the Proxmox provider** (see [the support table](#what-each-provider-does)). On libvirt it never worked before v0.4.1: the VM required both `vmx` and `svm`, so it did not start. VirtRigaud does not run end-to-end nested-virtualization scenarios (a guest that runs its own VMs) in CI or in its lab validation; on libvirt the lab checked that the domain is defined and starts. If you need it for a production workload, validate the configuration on your own hosts first.
 
 ## Overview
 
@@ -25,7 +25,7 @@ These are requirements of the hypervisors, not checks VirtRigaud performs.
 
 ### libvirt
 
-- A KVM host whose CPU has VT-x or AMD-V, with nested virtualization enabled in the host kernel module (`kvm_intel nested=1` or `kvm_amd nested=1`).
+- A KVM host whose CPU has VT-x or AMD-V, with nested virtualization enabled in the host kernel module (`kvm_intel nested=1` or `kvm_amd nested=1`; `cat /sys/module/kvm_intel/parameters/nested` prints `Y` or `1`).
 
 ### Proxmox VE
 
@@ -67,15 +67,15 @@ spec:
 
 | `VMClass` field | vSphere | libvirt | Proxmox |
 |-----------------|---------|---------|---------|
-| `performanceProfile.nestedVirtualization` | Sets the `vhv.enable` and `vhv.allowNestedPageTables` ExtraConfig keys to `TRUE` at create | Adds `vmx` and `svm` CPU features (`policy='require'`) to a `host-model` CPU in the domain XML | **Ignored** |
+| `performanceProfile.nestedVirtualization` | Sets the `vhv.enable` and `vhv.allowNestedPageTables` ExtraConfig keys to `TRUE` at create | Gives the VM the host CPU (`<cpu mode='host-passthrough'>`), so the guest sees the host's VT-x or AMD-V (v0.4.1; it did not start before) | **Ignored** |
 | `performanceProfile.virtualizationBasedSecurity` | Sets `vbs.enable` | Not applied | Ignored |
 | `performanceProfile.cpuHotAddEnabled`, `memoryHotAddEnabled` | Applied (CPU hot-add skipped when nested virtualization is on) | Provision hot-plug headroom at create (see [Advanced VM lifecycle](advanced-lifecycle.md#per-provider)) | Ignored |
-| `securityProfile.vtdEnabled` | Sets `vvtd.enable` | Adds an `<iommu model='intel'/>` device | Ignored |
-| `securityProfile.secureBoot`, `tpmEnabled` | Applied; forces UEFI firmware | Applied (secure boot uses the `q35` machine and OVMF, TPM adds a TPM device) | Ignored |
+| `securityProfile.vtdEnabled` | Sets `vvtd.enable` | q35 machine with an emulated Intel IOMMU (v0.4.1; libvirt refused the old XML) | Ignored |
+| `securityProfile.secureBoot`, `tpmEnabled` | Applied; forces UEFI firmware | Applied (secure boot uses the `q35` machine and OVMF with keys enrolled, and works since v0.4.1; the host needs an OVMF package; TPM adds an emulated TPM 2.0 and needs `swtpm`). `firmware: UEFI` is honoured since v0.4.1 | Ignored |
 | `performanceProfile.latencySensitivity`, `hyperThreadingPolicy`, `resourceLimits` | Not applied | Not applied | Not applied |
 
-!!! warning "libvirt requires both `vmx` and `svm`"
-    The libvirt provider adds **both** features as required, whatever the host CPU is. A host CPU exposes only one of them (Intel `vmx`, AMD `svm`), and libvirt may refuse to start a domain that requires a CPU feature the host does not offer. This has not been validated on Intel and AMD hosts for v0.4.1; if a VM from a nested class does not start on libvirt, check the domain's start error for the missing feature.
+!!! note "libvirt: what changed in v0.4.1"
+    In v0.4.0 the libvirt provider added `vmx` and `svm` to the CPU as **required** features. A host CPU exposes only one of them (Intel `vmx`, AMD `svm`), so such a VM failed to start ("Host CPU does not provide required features"). It now uses `host-passthrough`, and the guest sees whatever the host CPU offers, provided nesting is enabled in the host's KVM module. VT-d, secure boot and `firmware: UEFI` also work now, on the `q35` machine type, and `firmware: UEFI` is honoured where it was ignored: see [libvirt: firmware, secure boot and platform features](../../providers/libvirt.md#firmware-secure-boot-and-platform-features) and check your VMClasses before you roll the libvirt provider. A VM that was created by v0.4.0 is not redefined.
 
 ## Complete example
 
@@ -154,16 +154,13 @@ At create, a VM from a nested class gets `vhv.enable = TRUE` and `vhv.allowNeste
 
 ### libvirt
 
-The domain XML gets a CPU definition with the two features:
+The domain XML gets the host CPU:
 
 ```xml
-<cpu mode='host-model' check='partial'>
-  <feature policy='require' name='vmx'/>
-  <feature policy='require' name='svm'/>
-</cpu>
+<cpu mode='host-passthrough' check='none'/>
 ```
 
-The host needs the `kvm_intel`/`kvm_amd` module loaded with `nested=1` (`cat /sys/module/kvm_intel/parameters/nested` prints `Y` or `1`).
+With `host-passthrough` the guest sees the host CPU model and its flags, including `vmx` or `svm`. Anyone who can edit a VMClass can turn nesting on; set the KVM module's `nested` parameter to `0` on hosts that must not run nested guests. With `vtdEnabled: true` the domain also gets an emulated Intel IOMMU on the `q35` machine type (the virtio devices do not go through it, so it is not DMA isolation of those devices). The host needs the `kvm_intel`/`kvm_amd` module loaded with `nested=1` (`cat /sys/module/kvm_intel/parameters/nested` prints `Y` or `1`).
 
 ### Proxmox VE
 
@@ -192,7 +189,7 @@ On a Windows guest, `systeminfo | findstr /i hyper` reports whether the hypervis
 | Symptom | Check |
 |---------|-------|
 | The guest does not show `vmx`/`svm` | The host CPU and BIOS support virtualization; the host module has `nested=1` (libvirt); the VMClass has `nestedVirtualization: true` **and the VM was created after that** (the setting is applied at create); on vSphere the hardware version is 9 or later; on Proxmox the VM's CPU type is `host` (VirtRigaud does not set it) |
-| A libvirt VM does not start after enabling nested virtualization | The domain requires both `vmx` and `svm`; see the warning above |
+| A libvirt VM does not start after enabling nested virtualization | The host's KVM module has nesting off, or libvirt refused the definition (the VM shows `Ready=False/ValidationError` with libvirt's reason and is re-checked with a backoff). A VM created by v0.4.0 required both `vmx` and `svm` and never started: delete it and create it again |
 | Poor performance in nested VMs | More CPU and memory, faster storage; on vSphere check the nested page-table setting is present |
 | The class is accepted but nothing changed on Proxmox | Expected: the Proxmox provider ignores `performanceProfile` |
 
@@ -200,7 +197,7 @@ On a Windows guest, `systeminfo | findstr /i hyper` reports whether the hypervis
 
 - The vSphere and libvirt settings are applied at create only; they are not retrofitted to existing VMs.
 - Proxmox: no support in the provider (configure the CPU type outside VirtRigaud).
-- libvirt: x86_64 only; see the `vmx`/`svm` warning.
+- libvirt: x86_64 only. Which flags the guest sees depends on the host CPU.
 - Nested virtualization carries a performance cost that depends on the workload, and some hypervisor features are unavailable in nested guests.
 - Not covered by VirtRigaud's end-to-end tests.
 
@@ -209,7 +206,7 @@ On a Windows guest, `systeminfo | findstr /i hyper` reports whether the hypervis
 | Provider | Applied by VirtRigaud | Host requirement | Notes |
 |----------|----------------------|------------------|-------|
 | vSphere | Yes (`vhv.enable`, `vhv.allowNestedPageTables`) | Hardware version 9+ (14+ recommended) | CPU hot-add is skipped for nested classes |
-| libvirt | Yes (`vmx` and `svm` CPU features) | `kvm_intel nested=1` or `kvm_amd nested=1` | Requires both features; not validated on Intel and AMD hosts |
+| libvirt | Yes (`host-passthrough` CPU, since v0.4.1) | `kvm_intel nested=1` or `kvm_amd nested=1` | The domain is defined and starts in the lab (libvirt 10.0); no nested guest was run |
 | Proxmox VE | No | CPU type `host`, set outside VirtRigaud | `performanceProfile` is ignored |
 
 For provider details see the [vSphere](../../providers/vsphere.md), [libvirt](../../providers/libvirt.md) and [Proxmox](../../providers/proxmox.md) provider pages.

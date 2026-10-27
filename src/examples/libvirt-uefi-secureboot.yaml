@@ -1,0 +1,98 @@
+# Copyright (c) 2026 VirtRigaud Creators
+# SPDX-License-Identifier: Apache-2.0
+
+# libvirt: UEFI and Secure Boot VMClasses (v0.4.1)
+#
+# On libvirt, `firmware: UEFI` makes UEFI (OVMF) VMs and
+# `securityProfile.secureBoot: true` makes Secure Boot VMs on the q35 machine type.
+# `firmware: UEFI` was ignored by the libvirt provider before v0.4.1; BIOS,
+# EFI and an unset value still select BIOS.
+#
+# Requirements, not checked here:
+#   - the libvirt host has an OVMF package (ovmf, edk2-ovmf, qemu-ovmf-x86_64) that
+#     installs firmware descriptors in /usr/share/qemu/firmware/. On a host that
+#     lists no UEFI firmware the create is refused (Ready=False/ValidationError).
+#     On a clustered Provider every host that can receive these VMs needs it.
+#   - the image boots with UEFI (an EFI system partition and a UEFI bootloader);
+#     for Secure Boot its boot chain must be signed with a key the firmware trusts
+#     (a distribution shim signed by Microsoft, for example).
+#   - tpmEnabled needs swtpm on the host; nestedVirtualization needs nesting enabled
+#     in the host's KVM module.
+#
+# The settings are applied when a VM is created. Editing a VMClass does not change
+# existing VMs. See the libvirt provider page ("Firmware, secure boot and platform
+# features") and docs/libvirt-firmware.md.
+
+---
+# UEFI without Secure Boot
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClass
+metadata:
+  name: libvirt-uefi
+  namespace: default
+spec:
+  cpu: 2
+  memory: "4Gi"
+  firmware: UEFI
+  diskDefaults:
+    size: "20Gi"
+
+---
+# UEFI with Secure Boot enforced from the first boot, an emulated TPM 2.0 and an
+# emulated IOMMU (VT-d)
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClass
+metadata:
+  name: libvirt-secureboot
+  namespace: default
+spec:
+  cpu: 4
+  memory: "8Gi"
+  firmware: UEFI
+  securityProfile:
+    secureBoot: true
+    tpmEnabled: true
+    vtdEnabled: true
+  diskDefaults:
+    size: "40Gi"
+
+---
+# A cloud image that boots with UEFI and a Secure Boot capable shim, already on the host
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMImage
+metadata:
+  name: ubuntu-2404-uefi
+  namespace: default
+spec:
+  source:
+    libvirt:
+      path: "/var/lib/libvirt/images/ubuntu-24.04-cloudimg.qcow2"
+
+---
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VirtualMachine
+metadata:
+  name: secure-vm
+  namespace: default
+spec:
+  providerRef:
+    name: libvirt-prod
+  classRef:
+    name: libvirt-secureboot
+  imageRef:
+    name: ubuntu-2404-uefi
+  powerState: "On"
+  userData:
+    cloudInit:
+      inline: |
+        #cloud-config
+        hostname: secure-vm
+        users:
+          - name: ubuntu
+            ssh_authorized_keys:
+              - "ssh-ed25519 AAAA... admin@example.com"
+        packages:
+          - mokutil
+        runcmd:
+          # prints "SecureBoot enabled" when the firmware enforces Secure Boot
+          - mokutil --sb-state

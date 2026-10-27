@@ -37,11 +37,11 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 | [provider-libvirt.yaml](provider-libvirt.yaml) | A single-host libvirt Provider |
 | [libvirt-complete-example.yaml](libvirt-complete-example.yaml) | A complete libvirt deployment, including the image-directory and seed-directory settings (`VIRTRIGAUD_LIBVIRT_IMAGE_DIRS`, `VIRTRIGAUD_LIBVIRT_SEED_DIR`) |
 | [libvirt-advanced-example.yaml](libvirt-advanced-example.yaml) | A libvirt Provider with a host-resident image, a network and a VM |
-| [proxmox-complete-example.yaml](proxmox-complete-example.yaml) | A complete Proxmox VE setup: credentials, Provider, classes, images, networks, VMs and snapshots |
+| [proxmox-complete-example.yaml](proxmox-complete-example.yaml) | A complete Proxmox VE setup: credentials (including the SSH keys a VM with user-data needs since v0.4.1), Provider, classes, images, networks, VMs and snapshots |
 | [multi-provider-example.yaml](multi-provider-example.yaml) | vSphere and libvirt Providers in one cluster, with shared classes |
 | [shared-provider-consumer-namespaces.yaml](shared-provider-consumer-namespaces.yaml) | A Provider, VMClass and VMImage shared with other namespaces through `spec.consumerNamespaceSelector`, and a tenant VM that uses them ([cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md)) |
 | [vm-adoption-example.yaml](vm-adoption-example.yaml) | Bringing existing hypervisor VMs under management with the adoption annotations, per provider, and detaching a VM with `virtrigaud.io/orphan-on-delete` |
-| [secrets/](secrets/vsphere-creds.yaml) | Credential Secrets per provider: [vSphere](secrets/vsphere-creds.yaml), [libvirt](secrets/libvirt-creds.yaml) (SSH key or password), [Proxmox](secrets/proxmox-creds.yaml) (API token or username/password) |
+| [secrets/](secrets/vsphere-creds.yaml) | Credential Secrets per provider: [vSphere](secrets/vsphere-creds.yaml), [libvirt](secrets/libvirt-creds.yaml) (SSH key or password), [Proxmox](secrets/proxmox-creds.yaml) (API token or username/password, and the SSH keys for user-data and migration) |
 
 ## Clustered libvirt (experimental)
 
@@ -64,6 +64,7 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 | [vsphere-static-ip.yaml](vsphere-static-ip.yaml) | A static IPv4 address through `guestinfo.network.*` (vSphere; the template must contain an agent that reads the keys) |
 | [disk-sizing-examples.yaml](disk-sizing-examples.yaml) | Disk sizes from the VMClass, per provider, with the cross-namespace grants the VMs need |
 | [graceful-shutdown-examples.yaml](graceful-shutdown-examples.yaml) | `OffGraceful` and `Off` power states ([Graceful shutdown](../guides/advanced/graceful-shutdown.md)); the `spec.lifecycle` block is accepted but not executed |
+| [libvirt-uefi-secureboot.yaml](libvirt-uefi-secureboot.yaml) | libvirt VMClasses with `firmware: UEFI` and with Secure Boot, TPM and VT-d, and a VM that uses them (the host needs an OVMF package; see [libvirt firmware](../providers/libvirt.md#firmware-secure-boot-and-platform-features)). Specific to this site: it has no counterpart in the repository's `examples/` |
 | [nested-virtualization.yaml](nested-virtualization.yaml) | VMClasses and VMs with nested virtualization (see [Nested virtualization](../guides/advanced/nested-virtualization.md)) |
 | [v021-feature-showcase.yaml](v021-feature-showcase.yaml) | The v0.2.1 feature set in one file (historical; kept valid against the current schema) |
 
