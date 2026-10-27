@@ -185,7 +185,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
               name: provider-proxmox-tls   # tls.crt, tls.key, ca.crt
     ```
 
-    The PVE API token needs, besides the VM privileges, `VM.Config.Network` and `VM.Config.Cloudinit`, and (if it is not root) `SDN.Use` on the bridges in use.
+    The PVE API token needs, besides the VM privileges, `VM.Config.Network` and `VM.Config.Cloudinit`, and (if it is not root) `SDN.Use` on the bridges in use. If your VMs carry `spec.userData`, the credentials Secret also needs `ssh_user` (`root`), `ssh_privatekey` or `ssh_password`, and `known_hosts` (since v0.4.1 the provider builds the cloud-init seed on the node over SSH); see [Proxmox cloud-init](proxmox.md#cloud-init-the-nocloud-seed).
 
 !!! note "TLS block required"
     A `spec.runtime.service.tls` block is mandatory. With `enabled: true`, the Secret named by `secretRef` must exist in the Provider's namespace and hold `tls.crt`, `tls.key` and `ca.crt` (see [mTLS Configuration](security/mtls.md)). Without the block the Provider shows `TLSConfigured=False`, reason `TLSBlockMissing`, and no pod is deployed. `tls.enabled: false` is an explicit plaintext opt-out for a throwaway lab.

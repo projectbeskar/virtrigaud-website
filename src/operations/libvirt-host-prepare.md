@@ -407,7 +407,10 @@ the pool directory must be an allowed image directory on a filesystem that
 supports hard links (otherwise the prepare fails with `InvalidSource`). Providers
 that share a pool directory must use the same SSH user. Downloads are bounded by
 `spec.prepare.timeout` and by `VIRTRIGAUD_LIBVIRT_IMAGE_MAX_DOWNLOAD_GIB`
-(default 256). The host needs free space in the pool for the largest image plus
+(default 256). Since v0.4.1 a download is also cut off within the `ImagePrepare` call,
+after about 4.5 minutes whatever `spec.prepare.timeout` says (the manager gives the call
+5 minutes; `curl` no longer keeps running on the host after the call has failed), so
+prepare large images from a source close to the host. The host needs free space in the pool for the largest image plus
 its conversion. A **clustered** Provider does not prepare images.
 
 ## UEFI, secure boot and platform features

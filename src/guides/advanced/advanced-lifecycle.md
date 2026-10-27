@@ -263,7 +263,7 @@ Adoption brings existing hypervisor VMs under management. It is a controller in 
 
 ## Provider capabilities
 
-The manager records what each provider reports under `Provider.status.reportedCapabilities`:
+The manager records what each provider reports under `Provider.status.reportedCapabilities`. Since v0.4.1 it reads the capabilities again once a provider roll completes (and every 10 minutes while the `Provider` is healthy), so the gates that read them follow the running image; see [Provider capabilities](../../providers/providers-capabilities.md#when-the-status-is-read-v041):
 
 ```bash
 kubectl get provider vsphere-prod -o jsonpath='{.status.reportedCapabilities}{"\n"}'
