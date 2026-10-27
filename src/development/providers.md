@@ -38,7 +38,7 @@ project (see the [CLI Tools
 Reference](../references/cli-tools.md#vrtg-provider)):
 
 ```bash
-vrtg-provider init myprovider --type libvirt --virtrigaud-path /path/to/virtrigaud
+vrtg-provider init myprovider --type libvirt
 cd providers/myprovider
 go mod tidy
 make build
@@ -47,54 +47,76 @@ vrtg-provider verify
 ```
 
 - `init` writes a project whose provider answers `Validate` and `GetCapabilities` and returns `Unimplemented` for the VM operations, with a test, a `Makefile`, a `Dockerfile` and a
-  CI workflow. `--type` accepts `generic`, `vsphere`, `libvirt`, `firecracker`
-  and `qemu` (not `proxmox`); it selects the scaffold's template and is separate from
-  the closed `Provider.spec.type` enum above.
-- The SDK and proto modules have no version tags of their own, so the
-  generated `go.mod` resolves them from a local VirtRigaud checkout through
-  `replace` directives: `init` finds the checkout when the project is created
-  inside it, otherwise pass `--virtrigaud-path`. The generated `Dockerfile`
-  cannot see that checkout, so build the image from a context that contains
-  both, or adjust it.
+  CI workflow. `--type` accepts `generic`, `vsphere`, `libvirt`, `proxmox`, `firecracker`
+  and `qemu` (`proxmox` is new in v0.4.1: the core profile, `raw`/`qcow2` disks and
+  `bridge`/`vlan` networks, nothing optional advertised); it selects the scaffold's
+  template and is separate from the closed `Provider.spec.type` enum above.
+- Since v0.4.1 the SDK and proto modules are published under their own tags (see
+  [Go modules](#go-modules-the-sdk-and-proto)). `init` from a **release** binary writes a
+  `go.mod` that requires the three modules at the binary's own version, with no
+  `replace` directives, and a `Dockerfile` that builds from the project directory
+  alone. Pass `--virtrigaud-path <checkout>` (or use a development build inside a
+  checkout) to resolve them from a checkout through `replace` directives instead; the
+  image of such a project must be built from a context that contains both.
 - `verify` builds the project, runs its unit tests and reports `gofmt`,
   `go vet` and `golangci-lint` findings. It does **not** run the conformance
-  suite, and `vcts run` cannot pass yet (the runner implements no steps).
+  suite, which needs the provider deployed in a cluster: deploy it, then run
+  `vcts run --provider <name> --set IMAGE=<vmimage>` (see the [CLI Tools
+  Reference](../references/cli-tools.md#vcts)).
 - `publish` writes a catalog entry and records conformance as not run
   (`core: skip`); it never claims a pass.
 
 [`cmd/provider-mock/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/provider-mock/main.go)
 together with `internal/providers/mock/` is a fuller reference implementation.
 
-## Consuming the SDK from your own module
+## Go modules: the SDK and proto
 
-The `sdk/` and `proto/` modules do not have published version tags (there are
-no `sdk/vX.Y.Z` or `proto/vX.Y.Z` tags), and `sdk/go.mod` requires
-`proto v0.1.0`, so a plain `go get` of the SDK does not resolve. Pin both
-modules to the commit of the release tag and redirect the `proto` requirement
-to the same commit:
+The repository holds three Go modules. Since v0.4.1 every release publishes all three
+under their own tags on the same commit, so a provider written outside this repository
+requires them like any other Go dependency, without a local checkout or `replace`
+directives:
+
+| Module | Release tag | Contents |
+|---|---|---|
+| `github.com/projectbeskar/virtrigaud` | `vX.Y.Z` | The operator, the providers and the CLIs |
+| `github.com/projectbeskar/virtrigaud/sdk` | `sdk/vX.Y.Z` | The provider SDK: gRPC server, middleware, capabilities, errors, client |
+| `github.com/projectbeskar/virtrigaud/proto` | `proto/vX.Y.Z` | The provider gRPC contract (`provider.proto`) and its generated Go bindings |
 
 ```bash
-REV=$(git -C /path/to/virtrigaud rev-list -n1 v0.4.1)
-
-go get github.com/projectbeskar/virtrigaud/proto@$REV
-
-# go prints the proto pseudo-version it selected, e.g. v0.0.0-<date>-<hash>
-go mod edit -replace \
-  github.com/projectbeskar/virtrigaud/proto@v0.1.0=github.com/projectbeskar/virtrigaud/proto@<that-pseudo-version>
-
-# The SDK imports internal packages of the root module, so pin the root
-# module and the SDK to the same commit AFTER the replace (go get of proto
-# drops the SDK requirement, and go mod tidy would otherwise pick main)
-go get github.com/projectbeskar/virtrigaud@$REV
-go get github.com/projectbeskar/virtrigaud/sdk@$REV
-go mod tidy
+go get github.com/projectbeskar/virtrigaud/sdk@v0.4.1 github.com/projectbeskar/virtrigaud/proto@v0.4.1
 ```
 
-Check `go.mod` afterwards: `sdk`, the root module and `proto` should all name the release commit.
+- **Use the same version for both.** The SDK requires the root module and the proto
+  module at its own version, so `go get` of the SDK alone selects all three at that
+  version unless your module requires a newer one. The modules need the Go version of
+  the release's `go.mod` (`go 1.26.10` for v0.4.1); with the default `GOTOOLCHAIN=auto`
+  the `go` command downloads it.
+- **Before v0.4.1 there are no tags.** Releases up to and including v0.4.0 have no
+  `sdk/` or `proto/` tags: `go get github.com/projectbeskar/virtrigaud/sdk@v0.4.0` fails
+  with `module github.com/projectbeskar/virtrigaud@v0.4.0 found, but does not contain
+  package github.com/projectbeskar/virtrigaud/sdk`. If you wrote a provider against
+  v0.4.0 or earlier with `replace` directives or pinned commits, drop them and require
+  the three modules at one release.
+- **Release candidates are tagged too** (`sdk/v0.4.1-rc1`). The `go` command never
+  selects a prerelease for `@latest` once a release of that module exists.
+- **Only release tags are supported versions** of the SDK and proto modules. A
+  pseudo-version of an arbitrary commit (`go get .../sdk@<commit>`) resolves the root and
+  proto modules at whatever release that commit's `sdk/go.mod` names, not at the same
+  commit.
+- **`go install` of a CLI does not work.** `go install github.com/projectbeskar/virtrigaud/cmd/<tool>@vX.Y.Z`
+  is refused because the root `go.mod` has `replace` directives; download the CLI binaries
+  from the GitHub release.
+- **Tags are never moved.** The Go checksum database records a module version the first
+  time anyone fetches it. A broken version is fixed with a new release, never by
+  re-tagging.
 
-(Alternatively, check the repository out next to your module and use two
-local `replace` directives, as the root `go.mod` does.) The generated Go
-bindings are imported from `github.com/projectbeskar/virtrigaud/proto/rpc/provider/v1`.
+Root and SDK require each other (Go allows a cycle between modules; there is none between
+packages): the SDK may import the root module's `internal/` packages because Go decides
+`internal/` visibility by import path. Inside the repository, `replace` directives resolve
+the other modules from the working tree; a consumer ignores them. The lockstep rule and the
+release procedure are in [`docs/go-modules.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/go-modules.md).
+The generated Go bindings are imported from
+`github.com/projectbeskar/virtrigaud/proto/rpc/provider/v1`.
 
 ## Contract surface (v0.4.1)
 
@@ -521,8 +543,8 @@ The generated files are committed, and CI's *Verify Generated Files* job fails
 if they are out of date. A new RPC in `provider.proto` must be implemented, or
 stubbed with `Unimplemented` and declared through the capabilities, in all four
 in-tree providers (vsphere, libvirt, proxmox, mock). To pick up a new
-contract in an external provider, update the pinned SDK/proto commit (see
-[above](#consuming-the-sdk-from-your-own-module)) and regenerate nothing —
+contract in an external provider, update the required SDK and proto versions (see
+[Go modules](#go-modules-the-sdk-and-proto)) and regenerate nothing —
 the bindings are consumed as a Go package.
 
 ## Building and publishing

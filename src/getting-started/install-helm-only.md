@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Helm-only Installation
 
-This guide covers installing VirtRigaud v0.4.0 using only Helm (CRDs included in the chart) and verifying the installation is healthy. To upgrade an existing installation, read the [Upgrade Guide](../operations/upgrade.md) and [Automatic CRD Upgrades](helm-crd-upgrades.md) first.
+This guide covers installing VirtRigaud v0.4.1 using only Helm (CRDs included in the chart) and verifying the installation is healthy. To upgrade an existing installation, read the [Upgrade Guide](../operations/upgrade.md) and [Automatic CRD Upgrades](helm-crd-upgrades.md) first.
 
 ## Prerequisites
 

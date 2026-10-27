@@ -14,8 +14,12 @@ This guide gets you up and running with VirtRigaud v0.4.1 in 15 minutes using a 
 - Helm 3.8+ (3.14+ if you carry custom values across chart upgrades with `--reset-then-reuse-values`)
 - Access to a vSphere, Libvirt/KVM or Proxmox VE host
 
-!!! warning "Upgrading from v0.3.11?"
-    This page is for a new installation. v0.4.0 contains breaking changes
+!!! warning "Upgrading from v0.3.11 or v0.4.0?"
+    This page is for a new installation. v0.4.1 changes how Proxmox VMs get their
+    cloud-init user-data (SSH credentials in the Provider's Secret are now needed) and
+    makes `firmware: UEFI` effective on libvirt; see
+    [Upgrading from v0.4.0 to v0.4.1](../operations/upgrade.md#upgrading-from-v040-to-v041).
+    v0.4.0 contains breaking changes
     (cross-namespace references need `spec.consumerNamespaceSelector`,
     `spec.providerRef` is immutable once bound, vSphere needs a new vCenter
     privilege, libvirt hosts need a seed directory, and more). Read the
@@ -208,11 +212,24 @@ spec:
 
 ### Option C: Proxmox VE Provider
 
+The first VM below carries `spec.userData`, so the Proxmox provider builds a cloud-init
+seed for it on the PVE node over SSH. Besides the API token, the Secret therefore needs
+the SSH keys of `root` on the node the endpoint names, and the node needs `genisoimage`
+and `flock` (both are on a stock PVE node). In a PVE cluster, also set
+`PROVIDER_NODE_SELECTOR` in `spec.runtime.env` to that node. See
+[Proxmox cloud-init](../providers/proxmox.md#cloud-init-the-nocloud-seed).
+
 ```bash
+# ssh-keyscan from a trusted machine; compare the fingerprint with the node's
+ssh-keyscan -H proxmox.example.com > known_hosts
+
 kubectl create secret generic proxmox-credentials \
   --namespace default \
   --from-literal=token_id='virtrigaud@pve!vrtg-token' \
-  --from-literal=token_secret='your-token-secret'
+  --from-literal=token_secret='your-token-secret' \
+  --from-literal=ssh_user='root' \
+  --from-file=ssh_privatekey=./id_ed25519_virtrigaud \
+  --from-file=known_hosts=./known_hosts
 ```
 
 ```yaml
@@ -463,7 +480,8 @@ supports.
 ### Clone a VM
 
 `VMClone` clones a VM through the same Provider (vSphere, Proxmox and libvirt; a libvirt
-full clone needs its source VM powered off, and libvirt linked clones are not supported).
+full clone needs its source VM powered off, and only vSphere makes linked clones: libvirt and
+Proxmox refuse them with `LinkedCloneUnsupported`).
 The clone stays powered off unless `options.powerOn: true`.
 
 ```yaml
