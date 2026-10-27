@@ -442,9 +442,13 @@ write conflicts (the migration is then held as `SnapshotOutcomeUnknown`,
 `ExportOutcomeUnknown` or `ImportOutcomeUnknown` until you confirm the attempt).
 An object that a v0.4.0 manager (or a v0.4.1 release candidate) already holds
 stays held, because its lost answer is not in the status: release it as above
-after you check the hypervisor. A clustered `Clone` answer and the clustered
-restore and own-domain holds are not written again; the pending host stays, so the
-next reconcile sends the call to the same host and gets the same answer.
+after you check the hypervisor. For a `VirtualMachine` only its conditions are written
+again, not the rest of its status. A clustered `VMClone`'s answer recorded on its
+target, a clustered `Create` whose host was excluded after a name conflict, and
+the clustered restore and own-domain holds (`RestorePending`,
+`OwnDomainOnAnotherHost`, an imported disk pinned to its host) are not written
+again: the pending host stays, so the next reconcile sends the call to the same
+host and gets the same answer.
 
 ### Which providers can re-send
 

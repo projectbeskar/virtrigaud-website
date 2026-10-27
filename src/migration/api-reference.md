@@ -554,6 +554,17 @@ with a constant message and one Warning event. What happens next:
   minute apart), and an `ExportDisk` / `ImportDisk` on a backend the provider lists in
   `resend_safe_export_backends` / `resend_safe_import_backends`, **35 minutes** after the
   marker (the call's deadline is 30 minutes), at most 3 times.
+- **Not held at all** when the provider can prove the failure (v0.4.1). A clustered libvirt
+  `ExportDisk` that an NFS server refused (`MNT3ERR_ACCES`), that an S3 service refused or
+  failed before the flattened disk was read to its end (`SignatureDoesNotMatch`,
+  `AccessDenied`, a 5xx), or that has an unusable S3 configuration, fails the attempt at once
+  and the retry policy applies, as for a single-host Provider. A flatten or convert whose
+  connection dropped, a host that stopped answering and an upload whose completing call may
+  have taken effect stay unknown. Likewise, a `VMMigration`'s failed attempt whose status
+  write conflicts with an edit, a write that fails for another reason, and a manager restart
+  before the write still leave the marker (unlike a `VirtualMachine`'s `Create`, a
+  single-host `VMClone`'s `Clone` and a `VMSnapshot`'s `SnapshotCreate`, whose answer is
+  written again): the migration is held until you confirm the attempt.
 - **Held for an operator** otherwise, including every single-host `SnapshotCreate` and
   any call through a provider image older than v0.4.0. Check what the call may have made
   (the snapshot named in the Warning event, the target's `-migrated` disk), remove it,

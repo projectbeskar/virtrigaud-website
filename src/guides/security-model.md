@@ -632,7 +632,7 @@ attached in place. vSphere `templateName` must name a real template. Details:
 
 A libvirt VM's cloud-init seed ISO carries its user-data, which may hold
 passwords, keys and tokens. Earlier releases built it under the world-listable
-`/tmp` at the SSH user's umask. In v0.4.1 seeds are built in a dedicated
+`/tmp` at the SSH user's umask. Since v0.4.0 seeds are built in a dedicated
 directory that only the provider's SSH user can list:
 
 - **Where:** `VIRTRIGAUD_LIBVIRT_SEED_DIR` on the provider pod (set it in the
@@ -673,10 +673,55 @@ Seeds left in `/tmp/virtrigaud-cloudinit/` by earlier releases may still hold
 user-data. Remove the ones no domain references (compare with
 `virsh domblklist --details <domain>`).
 
+## Cloud-init seeds on Proxmox
+
+Since v0.4.1 a Proxmox VM that carries `spec.userData` gets the whole user-data
+through a NoCloud seed CD-ROM that the provider builds on the PVE node over SSH.
+That changes what the Provider's credentials are worth:
+
+- **The Provider holds a root SSH credential to the PVE node.** The seed's
+  `qm importdisk` and `qm set` run as `root@pam` over SSH, outside the API token's
+  permissions, and PVE attributes the changes to root. Restrict who can read the
+  Provider's Secret (`ssh_user` must be `root`, `ssh_privatekey` or
+  `ssh_password`, `known_hosts`), and use a key that only this provider uses.
+  Host-key verification is on by default and has no trust on first use.
+- **The user-data is stored in plaintext in the seed volume** on the VM's storage
+  for the VM's whole life, as in PVE's own cloud-init drive and libvirt's seed.
+  Keep long-lived secrets out of it.
+- **The seed never reaches a command line or a log.** The three files travel as a
+  tar archive on the standard input of one SSH session, are built in a root-only
+  directory on a tmpfs on the node under a per-VM lock, and are removed after the
+  build. The provider logs the VM, node, storage, slot and the size of the
+  user-data, never its content.
+
+See [Proxmox provider: cloud-init](../providers/proxmox.md#cloud-init-the-nocloud-seed).
+
+## Customization secrets of a `VMClone`
+
+A `VMClone`'s `spec.customization` has fields that can hold a credential and that
+no provider acts on (`sysprep.productKey`, `sysprep.adminPassword.value`,
+`sysprep.joinDomain.password.value`, `sysprep.customCommands`,
+`certificates[].data`, `guestCommands[].command` and `.arguments`,
+`userData.ignition.inline`). Since v0.4.1 the manager does not send them to the
+provider; the `Clone` request carries an allow-list of what providers apply or
+report as not applied. The v1beta1 API still stores them in plaintext in the
+`VMClone`, so **do not put a real credential in them, and rotate any value you set
+on v0.4.0 or earlier**. See [VM Cloning](advanced/vm-cloning.md#customization-secrets-are-not-sent).
+
+## Logs and staging locations
+
+Since v0.4.1 a migration's staging location (an NFS server, export, path and
+`uid`/`gid`; an S3 bucket, key and endpoint) and every image URL are redacted from
+the provider and manager logs, from provider errors, and from the status, conditions
+and Warning event of a failed `VMMigration`. The cause stays readable
+(`MNT3ERR_ACCES`, `SignatureDoesNotMatch`). Logs written by earlier releases keep
+what they contain: treat them as sensitive. A libvirt create from an image URL no
+longer puts the URL on the host's command line.
+
 ## Migration storage
 
 Provider pods hold hypervisor credentials, so what is mounted into them is a
-trust decision. In v0.4.1, a `VMMigration` with `spec.storage.type: pvc` gets
+trust decision. Since v0.4.0, a `VMMigration` with `spec.storage.type: pvc` gets
 its storage mounted like this:
 
 - A PVC is mounted into the source and target `Provider` pods only while a
@@ -794,8 +839,16 @@ are the changes from this page that can break an existing setup.
 | Linked clones fail closed | `VMClone` with `options.type: LinkedClone` | libvirt linked clones are refused; a libvirt linked clone into another namespace is refused | Use a full clone |
 | The disk-size limit | Nobody, unless `manager.maxDiskSize` is set | No change when unset | Set it if you need it |
 
-Roll the providers promptly after the manager. Most of the checks above need the
-v0.4.1 provider image as well as the manager, and a manager ahead of its
+Changes of v0.4.1 that touch the security model (from v0.4.0; the full list is in the [upgrade notes](../operations/upgrade.md#upgrading-from-v040-to-v041)):
+
+| Change | Who is affected | Action |
+|---|---|---|
+| A `VMClone`'s unused customization secrets are no longer sent to the provider | Anyone who set `sysprep.productKey`, `sysprep.adminPassword.value`, `sysprep.joinDomain.password.value`, `sysprep.customCommands`, `certificates[].data`, `guestCommands` or `userData.ignition.inline` on v0.4.0 or earlier | Rotate those values; they were sent, and they are still stored in plaintext in the `VMClone` |
+| Proxmox VMs with user-data need a root SSH credential in the Provider's Secret | Proxmox Providers whose VMs carry `spec.userData` | Add `ssh_user`, `ssh_privatekey` or `ssh_password` and `known_hosts` before rolling the provider; restrict who can read the Secret |
+| Staging locations and image URLs are redacted from logs | Log queries and alerts that matched them | Update them; treat logs from earlier releases as sensitive |
+
+Roll the providers promptly after the manager. Most of the checks above need a
+v0.4.0 (or later) provider image as well as the manager, and a manager ahead of its
 providers holds some operations (for example, image prepares are held on a
 provider that does not report artifact identity, and a `Create` whose outcome
 is unknown is not sent again to a provider that does not report owner re-bind).

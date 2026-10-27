@@ -562,6 +562,14 @@ Ready=False  reason: SnapshotOutcomeUnknown | ExportOutcomeUnknown | ImportOutco
   again **35 minutes** after the marker (the call's deadline is 30 minutes), at most 3
   times. So a manager restart during an import costs about 35 minutes, as documented.
   A `SnapshotCreate` through a clustered Provider is re-sent after a minute.
+- **A clustered libvirt export the provider can prove failed is not held.** Since v0.4.1
+  an NFS export the server refused (`MNT3ERR_ACCES`), an S3 upload the service refused
+  or failed before the flattened disk was read to its end (`SignatureDoesNotMatch`,
+  `AccessDenied`, a 5xx) and an unusable S3 configuration fail the migration at once,
+  as on a single-host Provider, and its retry policy applies; in v0.4.0 they were held
+  as `ExportOutcomeUnknown` for 35 minutes. A flatten or convert whose connection
+  dropped or was killed, a host that stopped answering and an upload whose completing
+  call may have taken effect stay unknown.
 - Everything else is held for you (for example every single-host `SnapshotCreate`, a
   Proxmox `nfs` import, and any call through a provider image older than v0.4.0). Look at what the call
   may have made (the snapshot named in the Warning event, the target's `-migrated` disk),
@@ -594,7 +602,13 @@ full rules, including which failures each provider treats as definite, are in
 ### Common operator-visible failures
 
 `status.message` and events carry constant, safe text; the provider's own error is in
-the **provider log** and the manager log.
+the **provider log** and the manager log. Since v0.4.1 neither log (nor a provider's
+error, nor the SDK's request log) contains the migration's staging location: an NFS
+server, export, path and `uid`/`gid`, or an S3 bucket, key and endpoint, is replaced by a
+placeholder (`<scheme>://<redacted>`, `<staged object>`), while the cause stays readable
+(`MNT3ERR_ACCES`, `SignatureDoesNotMatch`). The provider answer that a failed migration
+quotes in its status, conditions and Warning event is redacted the same way. Logs written
+by earlier releases keep what they contain: treat them as sensitive.
 
 | Symptom | Likely cause | First steps |
 |---------|--------------|------------|

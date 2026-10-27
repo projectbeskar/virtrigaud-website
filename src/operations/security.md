@@ -20,6 +20,15 @@ This is the canonical operator-facing security reference for VirtRigaud **v0.4.1
 
     Several of these are **breaking** for existing installs (a shared `Provider` stops working for other namespaces until it carries a `consumerNamespaceSelector`; a `VirtualMachine`'s `spec.providerRef` becomes immutable once bound; vSphere creates need a new vCenter privilege; libvirt VMs without `spec.userData` no longer get a default login; and more). Read the [breaking changes in the upgrade guide](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md#breaking-changes) before upgrading, and see the [Upgrade Guide](upgrade.md) of this site.
 
+!!! info "What changed in v0.4.1"
+    v0.4.1 is a patch release with these security-relevant changes (details in the [upgrade notes](upgrade.md#upgrading-from-v040-to-v041)):
+
+    - **A `VMClone`'s unused customization secrets are no longer sent to the provider** (`sysprep.productKey`, `sysprep.adminPassword.value`, `sysprep.joinDomain.password.value`, `sysprep.customCommands`, `certificates[].data`, `guestCommands[].command`/`.arguments`, `userData.ignition.inline`). **Rotate any value you set on v0.4.0 or earlier.** The values stay in plaintext in the `VMClone`; with `webhooks.enabled=true` a warning-only webhook and a `CustomizationSecretNotSent` event name the fields.
+    - **libvirt create-from-URL no longer puts the image URL on the host's command line.** The download uses `curl -q -K -` with the URL on standard input (`http`, `https`, `ftp` only), and the URL is redacted in provider and manager logs and in errors.
+    - **Staging locations are redacted from every provider and manager log (R28).** A migration's NFS server, export, path and `uid`/`gid`, and an S3 bucket, key and endpoint, no longer reach logs, provider errors, a `VMMigration`'s status, conditions and Warning event, or the SDK's request log. Logs written by earlier releases keep what they contain: treat them as sensitive.
+    - **Proxmox: a Provider whose VMs carry user-data holds a root SSH credential** to the PVE node (see [Proxmox provider](../providers/proxmox.md#security-posture-of-the-ssh-credential)).
+    - The release workflow's `prepare` job runs with `contents: read` only, and the CRD upgrade hook's `kubectl` image is updated (1.35.9 on Alpine 3.24), which cuts the HIGH and CRITICAL image-scan findings that have a fix from 37 to 6.
+
 !!! warning "Security posture history retained"
     The two breaking transport changes of **v0.3.6 → v0.3.7** are unchanged and still apply to anyone upgrading from v0.3.6: a `Provider` without a `spec.runtime.service.tls` block does not deploy until you provision a TLS Secret or explicitly opt into plaintext, and libvirt SSH Providers no longer connect without a `known_hosts` entry. The historical gap list, annotated with what shipped, is retained at [v0.3.6 security gap inventory](#v036-security-gap-inventory).
 
@@ -86,7 +95,7 @@ Credentials are **never** placed in env vars by the controller. They are mounted
 |---------|------------------------------------------------------------------|
 | **vSphere** | `username`, `password` |
 | **Libvirt** | `username`, and `password` (password SSH) or `ssh-privatekey` (key SSH); `known_hosts` (SSH host-key trust, required unless the audit-flagged opt-out is set) |
-| **Proxmox** | `token_id`, `token_secret` (preferred), or `username`, `password` (fallback). For the SSH **data plane** (migration disk import/export, `qemu-img`): `ssh_user`, `ssh_password` or `ssh_privatekey`, and `known_hosts` |
+| **Proxmox** | `token_id`, `token_secret` (preferred), or `username`, `password` (fallback). For the SSH **data plane** (migration disk import/export, `qemu-img`): `ssh_user`, `ssh_password` or `ssh_privatekey`, and `known_hosts`. The same keys are required, since v0.4.1, for every VM that carries `spec.userData` (the provider builds the cloud-init seed over SSH as `root`); treat such a Secret as root on the PVE node |
 
 For Proxmox, **API tokens are strongly recommended for production** (the code accepts both). See the [Proxmox provider page](../providers/proxmox.md#authentication) for the rationale and the [bearer-token page](../providers/security/bearer-token.md) for the privileges the token needs. Username/password is for development and CI only.
 
@@ -96,7 +105,7 @@ A **clustered** libvirt Provider's hosts use the Secret named by `Host.spec.cred
 
 - VirtRigaud logs **length-only diagnostics** (e.g. `username_length=12 password_length=24`) to confirm credentials were mounted, never the values.
 - The vSphere provider uses `url.UserPassword` for the SOAP client, so credentials are not visible in process listings.
-- The libvirt provider connects to hosts with an in-process SSH client; every command it sends over SSH is shell-quoted (since v0.4.0), which closes a command-injection path through domain names, image paths and snapshot descriptions. The Proxmox data plane uses the `ssh` client with a mounted key or `sshpass`.
+- The libvirt provider connects to hosts with an in-process SSH client; every command it sends over SSH is shell-quoted (since v0.4.0), which closes a command-injection path through domain names, image paths and snapshot descriptions. The Proxmox data plane uses the `ssh` client with a mounted key or `sshpass`; it sends a seed's user-data on the session's standard input, never on a command line. Since v0.4.1 the provider and manager logs and errors replace a migration's staging location (NFS server, export, path; S3 bucket, key, endpoint) and every image URL (except the libvirt connection URI and `pvc://`) with a placeholder, and a VM's `Create` request log shows an image URL redacted.
 
 ### Where credentials are NOT exposed
 
