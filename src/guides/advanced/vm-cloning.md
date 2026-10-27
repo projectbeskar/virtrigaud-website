@@ -5,12 +5,12 @@ SPDX-License-Identifier: Apache-2.0
 
 # VM Cloning (VMClone)
 
-The **VMClone** controller clones an existing, provisioned `VirtualMachine` into a new one through a declarative resource. It shipped in **v0.3.8** and gained libvirt support in v0.3.9; v0.4.0 adds a new cloud-init identity for every clone, owner stamping and idempotent re-sends, the cross-namespace target grant, and, on libvirt, a powered-off source requirement and the disabling of linked clones.
+The **VMClone** controller clones an existing, provisioned `VirtualMachine` into a new one through a declarative resource. It shipped in **v0.3.8** and gained libvirt support in v0.3.9; v0.4.0 adds a new cloud-init identity for every clone, owner stamping and idempotent re-sends, the cross-namespace target grant, and, on libvirt, a powered-off source requirement and the disabling of linked clones. v0.4.1 makes Proxmox clones carry a seed of their own, stops advertising Proxmox linked clones, and stops sending a `VMClone`'s unused customization secrets to the provider.
 
 This page covers the scope and limits, the per-provider rules, what a clone boots with, what the controller produces, the cross-namespace rules, and clean-up.
 
 !!! note "Scope"
-    **`source.vmRef` only, same provider only.** `source.snapshotRef`, `source.templateRef` and `source.imageRef` are declared in the CRD but not implemented: they fail the clone with reason `UnsupportedSource`. Of the rest of the `VMClone` schema, the controller uses `spec.source.vmRef`, `spec.target.{name,namespace,classRef,labels,annotations,networks,placementRef}`, `spec.options.{type,powerOn}` and `spec.customization` (passed to the provider, which applies only part of it, see [below](#a-clones-identity)). The retry policy, performance and storage options, `includeSnapshots`, `target.providerRef` and `target.disks` are accepted but not acted on.
+    **`source.vmRef` only, same provider only.** `source.snapshotRef`, `source.templateRef` and `source.imageRef` are declared in the CRD but not implemented: they fail the clone with reason `UnsupportedSource`. Of the rest of the `VMClone` schema, the controller uses `spec.source.vmRef`, `spec.target.{name,namespace,classRef,labels,annotations,networks,placementRef}`, `spec.options.{type,powerOn}` and `spec.customization` (an allow-listed part of it is passed to the provider, which applies only part of that, see [below](#a-clones-identity) and [Customization secrets are not sent](#customization-secrets-are-not-sent)). The retry policy, performance and storage options, `includeSnapshots`, `target.providerRef` and `target.disks` are accepted but not acted on.
 
 ## What VMClone does
 
@@ -52,12 +52,12 @@ Given a reference to a provisioned source `VirtualMachine` in the same namespace
 | | vSphere | Proxmox | libvirt (single host) | libvirt (clustered, experimental) |
 |---|---|---|---|---|
 | **Full clone** | Yes. A running source can be cloned | Yes | Yes. **The source must be powered off** | Yes. Same rules as single host; lands on the **source VM's own host** |
-| **Linked clone** | Yes (needs the provider to report `supportsLinkedClones`) | Reports `supportsLinkedClones` | **Disabled**: `LinkedCloneUnsupported` | **Not offered**: `LinkedCloneUnsupported` |
-| **New cloud-init identity** | Yes (rewritten in `CloneVM_Task`) | Yes (PVE regenerates the drive) | Yes (clone gets its own NoCloud seed ISO) | Yes |
-| **`spec.customization` applied** | Hostname/domain in the cloud-init meta-data; other fields logged, not applied | Not applied | `hostname`, `domain`, `userData.cloudInit.inline`; other fields logged, not applied | Same as single host |
+| **Linked clone** | Yes (needs the provider to report `supportsLinkedClones`) | **Refused since v0.4.1**: `LinkedCloneUnsupported` (it never made linked clones) | **Disabled**: `LinkedCloneUnsupported` | **Not offered**: `LinkedCloneUnsupported` |
+| **New cloud-init identity** | Yes (rewritten in `CloneVM_Task`) | Yes: a clone of a VM that has a seed, or with inline user-data, gets a seed of its own; otherwise PVE regenerates its cloud-init drive | Yes (clone gets its own NoCloud seed ISO) | Yes |
+| **`spec.customization` applied** | Hostname/domain in the cloud-init meta-data; other fields logged, not applied | `hostname`, `domain` and `userData.cloudInit.inline`, when the clone gets a seed (since v0.4.1); nothing otherwise | `hostname`, `domain`, `userData.cloudInit.inline`; other fields logged, not applied | Same as single host |
 
-!!! note "Not verified on every provider"
-    The Proxmox linked-clone path is covered by the in-repo PVE fake; the lab validation of v0.4.1 covered clones on libvirt and vSphere. Treat a Proxmox linked clone as untested on your PVE version until you have run one.
+!!! note "Proxmox: full clones only, and a clone gets the class's memory"
+    A Proxmox `VMClone` is always a full clone. `spec.options.type: LinkedClone` fails with `LinkedCloneUnsupported` before the provider is called (v0.4.0 passed `full=0` and left the outcome to PVE). A clone also gets the VMClass's memory since v0.4.1: the controller sends the class as a `VMClassSpec` (CPU and a memory quantity), and the provider read only a `memoryMiB` field, so a clone kept its source's memory before. The lab validation of v0.4.1 covered Proxmox full clones, with and without a seed.
 
 ## libvirt full clones
 
@@ -95,14 +95,14 @@ A full clone copies the source's disk, and with it cloud-init's record of the in
 |----------|--------------------------|-----|
 | libvirt (single host and clustered) | `instance-id: virtrigaud-<target VirtualMachine uid>`; `local-hostname` = `spec.customization.hostname` (with `.domain`, the FQDN) or the target VM's name | The clone gets its **own** NoCloud seed ISO. Without `spec.customization.userData.cloudInit.inline`, the source's user-data is carried with its top-level `hostname:` / `fqdn:` keys rewritten. A source without a seed ISO gives a clone without one |
 | vSphere | The same `instance-id` and hostname | The clone's `guestinfo.metadata` (and a `#cloud-config` `guestinfo.userdata`'s `hostname:` / `fqdn:`) are rewritten in the same `CloneVM_Task` |
-| Proxmox | A new instance-id and the target's name as hostname | PVE regenerates the cloud-init drive from the clone's own config; the provider changes nothing |
+| Proxmox | A new instance-id (`virtrigaud-<target VirtualMachine uid>`), the customization's hostname (with `domain`) or the target's name as hostname, and DHCP on the clone's own MACs | **A VM with a seed** (or a `VMClone` with inline user-data): the provider builds a seed of its own for the clone. It does **not** carry the source's user-data (libvirt and vSphere clones re-run it): the user-data is the `VMClone`'s inline user-data, else a cloud-config that configures nothing. A VM without a seed: PVE regenerates the cloud-init drive from the clone's own config. See [Proxmox: cloning](../../providers/proxmox.md#cloning) |
 
 On the new instance, cloud-init regenerates the SSH host keys (`ssh_deletekeys` defaults to `true`) and **re-runs every per-instance module** of the user-data (`runcmd`, `packages`, `users`, `write_files`). It does **not** change:
 
 - **`/etc/machine-id`**: a clone of a VM whose machine-id is populated keeps it, and anything derived from it (the DHCP client identifier of systemd-networkd, for example). Seal the source (`cloud-init clean --machine-id` before it is shut down for cloning) if clones must have their own.
 - **Static network configuration** in the source's meta-data or `network-config`: a clone of a VM with a static address claims the same address.
 - **User-data that pins the identity.** `ssh_keys`, `ssh_deletekeys: false`, `preserve_hostname: true` and `manual_cache_clean: true` undo the new instance. The libvirt and vSphere providers log a `WARN` naming such keys (never their values). Remove them from the source's user-data, or give the clone its own with `spec.customization.userData.cloudInit.inline` (libvirt).
-- **Customization fields the provider does not apply.** The libvirt provider applies `hostname`, `domain` and `userData.cloudInit.inline` only (`networks`, `timeZone`, `guestCommands`, `sysprep`, `certificates`, `tags`, `userData.ignition` are logged and ignored; user-data from a `secretRef` is not resolved, the clone keeps the source's). vSphere applies the hostname/domain to the meta-data and ignores the rest. Proxmox applies none.
+- **Customization fields the provider does not apply.** The libvirt provider applies `hostname`, `domain` and `userData.cloudInit.inline` only (`networks`, `timeZone`, `guestCommands`, `sysprep`, `certificates`, `tags`, `userData.ignition` are logged and ignored; user-data from a `secretRef` is not resolved, the clone keeps the source's). vSphere applies the hostname/domain to the meta-data and ignores the rest. Proxmox applies `hostname`, `domain` and `userData.cloudInit.inline` when the clone gets a seed (user-data given by a Secret reference cannot be resolved and is not applied), and nothing otherwise.
 
 Clones of VMs that do not use cloud-init are unaffected, and clones made before v0.4.0 keep the identity they booted with.
 
@@ -128,7 +128,7 @@ spec:
     labels:
       app: cloned-app
   options:
-    type: FullClone               # or LinkedClone (vSphere, Proxmox)
+    type: FullClone               # or LinkedClone (vSphere only)
     powerOn: false                # the default
 ```
 
@@ -168,6 +168,15 @@ The VMClone's status:
 The provider stamps each clone with its **target** VirtualMachine's identity (namespace, name, UID): vSphere in ExtraConfig, libvirt in the domain metadata, Proxmox in the VM description. A clone never claims the source's owner stamp. So a `Clone` sent again for the same target (the manager restarted, or an answer was lost) **returns the clone an earlier attempt made instead of making a second one**; a VM of the clone's name that is not provably the target's is refused (`AlreadyExists`). The manager only re-sends to a provider that reports `supportsOwnerRebind`; for an older provider image an unknown outcome fails the clone rather than risk a second VM.
 
 While a clone is held, the VMClone is `Pending` with `Ready=False` and one of these reasons: `CloneRetrying` (nothing was done; retried 15 s doubling to 5 min), `CloneOutcomeUnknown` (the answer was lost; the `Clone` is sent again), `SourceMustBePoweredOff` (libvirt). On a clustered Provider a clone also waits (re-checked every 2 minutes) while the source VM's host cannot take it: `SourceHostGone`, `SourceHostNotReady`, `SourceHostCordoned` or `SourceHostExcluded`. Terminal failures are `Failed`: `ProviderConflict` (the provider refused a first attempt with `AlreadyExists`), `TargetConflict`, `LinkedCloneUnsupported`, `UnsupportedSource`, `Unsupported`, `ProviderError`. Details: [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
+
+## Customization secrets are not sent
+
+Before v0.4.1 the manager sent all of `spec.customization` in the `Clone` request, including plaintext values that no provider acts on: `sysprep.productKey`, `sysprep.adminPassword.value`, `sysprep.joinDomain.password.value`, `sysprep.customCommands`, `certificates[].data`, `guestCommands[].command` and `.arguments`, and `userData.ignition.inline`. The request now carries only an allow-list of what providers apply (`hostname`, `domain`, `userData.cloudInit.inline`) or report as not applied; nothing changes in what a clone gets.
+
+- **Rotate any such value you set on v0.4.0 or earlier.** It was sent to the provider and, without gRPC TLS, over the network between the manager and the provider. It also stays in plaintext in the object, in etcd backups, in API-server audit logs (at `Request` level or above), in the `kubectl.kubernetes.io/last-applied-configuration` annotation and in your GitOps sources.
+- **The fields are still stored in plaintext in the `VMClone`**: the v1beta1 API keeps them. Do not put a real password, key or other credential in them.
+- When one of these fields is set, the manager records a `Warning` event (`CustomizationSecretNotSent`) once the provider accepts the clone, and with `webhooks.enabled=true` a warning-only webhook (`vvmclone-customization.kb.io`, failure policy always `Ignore`) returns one admission warning on create and on an update that changes `spec.customization`. Both name the fields, never their values. The warning is advisory: to forbid the fields, add your own admission policy.
+- Provider authors: a `CloneRequest`'s `customize_json` is an allow-listed subset of `spec.customization`; do not rely on receiving the fields above.
 
 ## Cross-namespace targets
 

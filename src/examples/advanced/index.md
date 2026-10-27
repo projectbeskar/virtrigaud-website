@@ -16,7 +16,7 @@ These examples cover the operations beyond creating a VM: snapshots and revertin
 | [vm-reconfigure-and-snapshot.yaml](vm-reconfigure-and-snapshot.yaml) | A VMClass with hot-add enabled, a VM, a snapshot before a resize, a `VMPlacementPolicy`, a `VMClone` and a `VMSet` (the policy only matters to clustered libvirt Providers, and `VMSet` has no controller) |
 | [vm-reconfigure-patch.yaml](vm-reconfigure-patch.yaml) | A resize applied with `kubectl patch`, and the libvirt hot-add and disk-grow rules |
 | [vsphere-clone-example.yaml](vsphere-clone-example.yaml) | Several VMs created from one vSphere template, and a `VMClone` of an existing VM |
-| [proxmox-clone-example.yaml](proxmox-clone-example.yaml) | Full and linked `VMClone` objects on Proxmox VE |
+| [proxmox-clone-example.yaml](proxmox-clone-example.yaml) | Full `VMClone` objects on Proxmox VE, one with user-data of its own (Proxmox serves full clones only) |
 | [vsphere-task-tracking.yaml](vsphere-task-tracking.yaml) | Following long-running vSphere operations (a large create, a reconfigure) through the VM's phase, conditions, events and the provider log |
 | [console-access-example.yaml](console-access-example.yaml) | `status.consoleURL`: a vSphere Client link for a vSphere VM, and a loopback-only VNC URL (reach it through an SSH tunnel) for a libvirt VM |
 
@@ -46,7 +46,7 @@ The revert is sent at most once per request. Libvirt has additional rules (a rev
 `VMClone` clones an existing, provisioned `VirtualMachine` on the same provider.
 
 - `spec.source.vmRef` is the only implemented source type; `snapshotRef`, `templateRef` and `imageRef` fail the clone with `UnsupportedSource`.
-- `options.type` is `FullClone` (the default) or `LinkedClone`. `LinkedClone` needs a provider that reports `SupportsLinkedClones`: vSphere and Proxmox do; libvirt does not, so a libvirt `LinkedClone` fails with `LinkedCloneUnsupported`.
+- `options.type` is `FullClone` (the default) or `LinkedClone`. `LinkedClone` needs a provider that reports `SupportsLinkedClones`: vSphere does; libvirt does not, and Proxmox no longer does (since v0.4.1), so a libvirt or Proxmox `LinkedClone` fails with `LinkedCloneUnsupported`.
 - A libvirt full clone needs the source VM powered off. A running source leaves the clone `Pending` with `SourceMustBePoweredOff` until the source is off.
 - A clone is left powered off unless `options.powerOn: true`.
 - Deleting a `VMClone` does not delete the VM it produced.

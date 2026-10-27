@@ -76,7 +76,7 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 |------|---------------|
 | [vmclone-basic.yaml](vmclone-basic.yaml) | The basic VMClone: `source.vmRef`, `target.name`, `options.type`, `options.powerOn`, and the optional cross-namespace target |
 | [advanced/vsphere-clone-example.yaml](advanced/vsphere-clone-example.yaml) | Several VMs from one vSphere template, and a VMClone of an existing VM |
-| [advanced/proxmox-clone-example.yaml](advanced/proxmox-clone-example.yaml) | Full and linked VMClones on Proxmox VE |
+| [advanced/proxmox-clone-example.yaml](advanced/proxmox-clone-example.yaml) | Full VMClones on Proxmox VE, one with user-data of its own (Proxmox serves full clones only) |
 
 Minimal example (see `vmclone-basic.yaml` for all fields):
 
@@ -93,7 +93,7 @@ spec:
   target:
     name: my-cloned-vm
   options:
-    type: FullClone           # or LinkedClone (vSphere, Proxmox)
+    type: FullClone           # or LinkedClone (vSphere only)
     powerOn: false            # the default: the clone is left powered off
 ```
 
