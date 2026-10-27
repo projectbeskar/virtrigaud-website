@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Catalog
 
-*Last updated: 2026-10-25T00:00:00Z — aligned to v0.4.1*
+*Last updated: 2026-10-27T00:00:00Z — aligned to v0.4.1*
 
 The VirtRigaud Provider Catalog lists all verified providers available for the VirtRigaud virtualization management platform. Providers listed here ship as part of the main repository at `v0.4.1`. The release publishes images for the vSphere, libvirt and Proxmox providers; the mock provider is built from source (see [Mock Provider](#mock-provider)).
 
@@ -15,11 +15,11 @@ The VirtRigaud Provider Catalog lists all verified providers available for the V
 |----------|-------------|--------------|------------|----------|
 | **Mock Provider** | A mock provider for testing and demonstrations (built from source, no release image) | core, snapshot, clone, image-prepare, advanced | virtrigaud@projectbeskar.com | Apache-2.0 |
 | **vSphere Provider** | VMware vSphere provider for VirtRigaud | core, snapshot (including memory), clone (full and linked), image-prepare, advanced | virtrigaud@projectbeskar.com | Apache-2.0 |
-| **Libvirt Provider** | Libvirt/KVM provider for VirtRigaud (single host, over SSH) | core, snapshot (including memory), clone (full clones only; linked clones are disabled since v0.4.0), image-prepare | virtrigaud@projectbeskar.com | Apache-2.0 |
+| **Libvirt Provider** | Libvirt/KVM provider for VirtRigaud (single host, over SSH) | core, snapshot (including memory), image-prepare, advanced; full clones (the `clone` profile is not listed: linked clones are disabled since v0.4.0) | virtrigaud@projectbeskar.com | Apache-2.0 |
 | **Libvirt Provider (clustered, experimental)** | The same provider with `spec.topology: cluster`: one Provider fronts a `Host`/`HostPool` inventory of libvirt hosts (new in v0.4.0, opt-in) | core, snapshot (including memory), clone (full clones, on the source VM's host), disk export and import for migration | virtrigaud@projectbeskar.com | Apache-2.0 |
-| **Proxmox Provider** | Proxmox VE provider for VirtRigaud | core, snapshot, clone (full and linked), advanced; image-prepare refuses URL sources (templates only) | virtrigaud@projectbeskar.com | Apache-2.0 |
+| **Proxmox Provider** | Proxmox VE provider for VirtRigaud | core, snapshot, clone, advanced (full clones only: linked clones are no longer advertised since v0.4.1); image-prepare refuses URL sources (templates only) | virtrigaud@projectbeskar.com | Apache-2.0 |
 
-The catalog publishes no conformance results. The test suite in the repository (`vcts`, see [Contributing a Provider](#contributing-a-provider)) is run by whoever deploys a provider; the capabilities listed are what each provider reports through `GetCapabilities`.
+The catalog publishes no conformance results: every profile is recorded as `skip` (not run), with no report URL or date (v0.4.0 and earlier catalog entries claimed passes and test dates that nobody had run). The test suite in the repository (`vcts run`, see [Contributing a Provider](#contributing-a-provider)) is run by whoever deploys a provider; the capabilities listed are what each provider reports through `GetCapabilities`. The Proxmox entry still lists the `clone` profile, although Proxmox no longer advertises linked clones (the SDK's `clone` profile is the `linked_clones` flag).
 
 ## Quick Start
 
@@ -85,7 +85,7 @@ The mock provider is perfect for:
 - Demonstrating VirtRigaud capabilities
 
 !!! note "Not selectable as a `Provider` type"
-    `Provider.spec.type` accepts `vsphere`, `libvirt`, `proxmox`, `firecracker` and `qemu`; `mock` is not a value, so the manager does not deploy the mock provider from a `Provider` resource. The in-repository tests and the conformance suite use it, and the repository's `virtrigaud-provider-runtime` chart carries example values for running it standalone (`charts/virtrigaud-provider-runtime/examples/values-mock.yaml`).
+    `Provider.spec.type` accepts `vsphere`, `libvirt`, `proxmox`, `firecracker` and `qemu`; `mock` is not a value, so the manager does not deploy the mock provider from a `Provider` resource. The in-repository tests and the conformance suite use it, and the repository's deprecated `virtrigaud-provider-runtime` chart (removed in the next minor release; do not use it for new installations) carried example values for running it standalone. Build the image from `cmd/provider-mock/Dockerfile` and run it outside the manager's control.
 
 ### vSphere Provider
 
@@ -174,10 +174,10 @@ The Proxmox provider manages VMs on Proxmox VE through the Proxmox API, supporti
 - VM lifecycle management
 - Power state control
 - Snapshot operations
-- VM cloning (Full and Linked clones)
+- Full clones (linked clones are not advertised since v0.4.1); a clone gets the class's CPU and memory
 - API token authentication
 - Network settings: since v0.4.0 a VM gets the bridge, VLAN tag, NIC model and static IP its networks name
-- The VM's cloud-init drive is placed on the same storage as the VM's disk (since v0.4.0)
+- Cloud-init: the whole `spec.userData` through a NoCloud seed CD-ROM built on the PVE node over SSH, kept out of the boot order (since v0.4.1); a VM without user-data uses PVE's own cloud-init drive, placed on the same storage as the VM's disk (since v0.4.0)
 - Disk export and import (`qcow2`, `raw`, `vmdk`) for cross-hypervisor migration over S3 and NFS
 
 !!! warning "URL image import is not supported"
@@ -185,9 +185,10 @@ The Proxmox provider manages VMs on Proxmox VE through the Proxmox API, supporti
 
 **Prerequisites:**
 - Proxmox VE 7.0 or later
-- API token with `VM.Allocate` and `VM.Config.*` permissions; since v0.4.0 also `VM.Config.Network` and `VM.Config.Cloudinit`, and, for a token that is not root, `SDN.Use` on every bridge a VM is put on
+- API token with `VM.Allocate` and `VM.Config.*` permissions; since v0.4.0 also `VM.Config.Network` and `VM.Config.Cloudinit`, and, for a token that is not root, `SDN.Use` on every bridge a VM is put on; since v0.4.1 also `VM.Audit` and `VM.Config.Options` on a VM made without a template with user-data
+- For VMs that carry `spec.userData` (and for migration): `ssh_user` (`root`), `ssh_privatekey` or `ssh_password`, and `known_hosts` in the Provider's Secret, `genisoimage` and `flock` on the PVE node, and the VM on the node SSH reaches (`PROVIDER_NODE_SELECTOR`). **Breaking for Proxmox users whose VMs carry user-data**; see the [upgrade notes](../operations/upgrade.md#proxmox-user-data-needs-the-ssh-data-plane)
 
-**Installation:** create the credentials Secret (`token_id` and `token_secret`, or `username` and `password`) and a `Provider` as in [Installing a Provider](#installing-a-provider), with `type: proxmox`, `endpoint: https://pve.example.com:8006` and `image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1`. See the [Proxmox provider](../providers/proxmox.md) page for the credentials the provider reads.
+**Installation:** create the credentials Secret (`token_id` and `token_secret`, or `username` and `password`, plus the SSH keys above when VMs carry user-data) and a `Provider` as in [Installing a Provider](#installing-a-provider), with `type: proxmox`, `endpoint: https://pve.example.com:8006` and `image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1`. See the [Proxmox provider](../providers/proxmox.md) page for the credentials the provider reads.
 
 ## Reported Capabilities (v0.4.1)
 
@@ -195,11 +196,11 @@ Since v0.3.8, the manager fetches each provider's live capability set via the `G
 
 These reported capabilities drive these behaviors:
 
-1. **VMClone Linked clones**: the VMClone controller checks `status.reportedCapabilities.supportsLinkedClones` before issuing a Linked clone. If the flag is `false` or unset, the clone is rejected with a clear error. The libvirt provider reports `false` since v0.4.0.
+1. **VMClone Linked clones**: the VMClone controller checks `status.reportedCapabilities.supportsLinkedClones` before issuing a Linked clone. If the flag is `false` or unset, the clone is rejected with a clear error. The libvirt provider reports `false` since v0.4.0, and the Proxmox provider no longer reports `true` since v0.4.1. (The check asks the running provider at clone time, not this status.)
 2. **Capability enforcement** (opt-in): when the manager is started with `--enforce-provider-capabilities`, snapshot and migration operations are also gated on the provider's reported capabilities. This flag is OFF by default. Enable it only after confirming your provider's capability flags are accurate — a provider that under-reports a capability will block operations it can actually perform.
 3. **Image preparation** (since v0.4.0): an import-style `VMImage` source (an OVA URL, a libvirt URL, an HTTP source) is sent to a provider only if it reports `supportsImageArtifactIdentity`; otherwise the VM is held with `ProviderLacksArtifactIdentity`. The vSphere, libvirt, Proxmox and mock providers report it.
 
-Two fields are new in `status.reportedCapabilities` in v0.4.0: `supportsImageArtifactIdentity` and `supportsHonestReconfigure` (the provider refuses or reports a reconfigure it cannot apply instead of reporting success; libvirt reports it, vSphere does not yet). The `GetCapabilities` response (`proto/provider/v1/provider.proto`) carries further flags that are not copied into `status.reportedCapabilities`: `supports_clustering`, `supports_routed_clone`, `supports_routed_adoption`, `supports_list_owner_filter`, `supports_owner_transfer` and `supports_owner_rebind`. A clustered libvirt provider reports `supports_clustering`, `supports_routed_clone` and `supports_routed_adoption`.
+`status.reportedCapabilities` is read after the provider Deployment's rollout completes, again 45 seconds later and every 10 minutes while the `Provider` is healthy, so after a provider roll expect the new image's answer within about a minute ([details](../providers/providers-capabilities.md#when-the-status-is-read-v041)). Two fields are new in `status.reportedCapabilities` in v0.4.0: `supportsImageArtifactIdentity` and `supportsHonestReconfigure` (the provider refuses or reports a reconfigure it cannot apply instead of reporting success; libvirt reports it, vSphere does not yet). The `GetCapabilities` response (`proto/provider/v1/provider.proto`) carries further flags that are not copied into `status.reportedCapabilities`: `supports_clustering`, `supports_routed_clone`, `supports_routed_adoption`, `supports_list_owner_filter`, `supports_owner_transfer` and `supports_owner_rebind`. A clustered libvirt provider reports `supports_clustering`, `supports_routed_clone` and `supports_routed_adoption`.
 
 To inspect reported capabilities:
 
@@ -240,15 +241,16 @@ The VirtRigaud Conformance Test Suite (VCTS) is meant to be run against a deploy
 git clone --branch v0.4.1 https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud && go build -o vcts ./cmd/vcts
 
-# Validate the specification files (works today)
+# Validate the specification files
 ./vcts validate test/conformance/specs/
 
-# Run conformance tests against a Provider resource in the cluster
-./vcts run --provider my-provider --namespace virtrigaud-system
+# Run the conformance tests against a Provider resource in a throw-away namespace of a
+# non-production cluster (it creates real VMs); IMAGE is a VMImage the provider can boot
+./vcts run --provider my-provider -n vcts --set IMAGE=ubuntu-22
 ```
 
-!!! warning "`vcts run` cannot pass yet"
-    In v0.4.1 the conformance runner implements no steps: every `create`, `update`, `delete`, `wait` and `validate` step reports "not implemented", so each selected test fails at its first step and `vcts run` exits non-zero. It selects tests only for `vsphere` and `libvirt` Providers (for other types, or outside a checkout, it selects none and exits 0). `vcts validate` and `vcts list` work. Until the runner executes steps, test your provider with your own VM lifecycle checks against a real cluster.
+!!! note "`vcts run` executes the tests since v0.4.1"
+    In v0.4.0 the conformance runner implemented no steps, so every selected test failed. `vcts run` now creates the test objects in the namespace given by `-n`, checks their status, reports a test whose required capability the Provider lacks as skipped, and cleans up after each test. It never creates, changes or deletes a `Provider`. The shipped tests cover create and delete, a power cycle, an offline reconfigure, a snapshot and a full clone; a snapshot or clone test is skipped for a provider that does not report the capability. See the [CLI Tools Reference](cli-tools.md#vcts).
 
 ### 3. Publish to Catalog
 
@@ -281,7 +283,7 @@ See [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud
 
 To be included in the catalog, providers must:
 
-- ✅ Pass VCTS core profile tests (`vcts run` cannot pass yet because the runner implements no steps; see the [CLI Tools Reference](cli-tools.md#vcts)); until it can, describe in your pull request how you tested the provider
+- ✅ Pass the VCTS tests for the profiles you claim (`vcts run`, see the [CLI Tools Reference](cli-tools.md#vcts)) and say in your pull request how you ran them; `vrtg-provider publish` records every profile as `skip` (not run) and never claims a pass
 - ✅ Include comprehensive documentation
 - ✅ Provide Helm chart for deployment
 - ✅ Follow security best practices
