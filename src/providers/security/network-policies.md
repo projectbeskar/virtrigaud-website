@@ -105,7 +105,7 @@ networkPolicy:
 Render before you apply:
 
 ```bash
-helm template virtrigaud virtrigaud/virtrigaud --version 0.4.0 \
+helm template virtrigaud virtrigaud/virtrigaud --version 0.4.1 \
   --set networkPolicy.enabled=true | grep -B2 -A12 'kind: NetworkPolicy'
 ```
 

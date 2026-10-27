@@ -25,7 +25,7 @@ The catalog publishes no conformance results. The test suite in the repository (
 
 ### Installing a Provider
 
-A provider is deployed by the VirtRigaud manager from a `Provider` resource: you create the credentials Secret and a `Provider` whose `spec.runtime.image` names the provider image, and the manager creates the provider Deployment and Service. Use the provider image at the same version as the manager (`v0.4.0`). The image names are `ghcr.io/projectbeskar/virtrigaud/provider-<type>:v0.4.0` for `<type>` in `vsphere`, `libvirt` and `proxmox`; the images are published for `linux/amd64` and `linux/arm64`.
+A provider is deployed by the VirtRigaud manager from a `Provider` resource: you create the credentials Secret and a `Provider` whose `spec.runtime.image` names the provider image, and the manager creates the provider Deployment and Service. Use the provider image at the same version as the manager (`v0.4.0`). The image names are `ghcr.io/projectbeskar/virtrigaud/provider-<type>:v0.4.1` for `<type>` in `vsphere`, `libvirt` and `proxmox`; the images are published for `linux/amd64` and `linux/arm64`.
 
 The example below installs a vSphere provider. Replace the endpoint with your vCenter and create the Secret first (see [Provider Details](#provider-details) for the credentials each provider reads):
 
@@ -49,7 +49,7 @@ spec:
     name: vsphere-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9443
       tls:
@@ -76,7 +76,7 @@ kubectl get providers -A
 - **Repository:** [https://github.com/projectbeskar/virtrigaud](https://github.com/projectbeskar/virtrigaud)
 - **Maturity:** stable
 - **Tags:** testing, development, demo
-- **Source:** [`internal/providers/mock`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/internal/providers/mock) and [`cmd/provider-mock`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/cmd/provider-mock) (no separate documentation page)
+- **Source:** [`internal/providers/mock`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/internal/providers/mock) and [`cmd/provider-mock`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/cmd/provider-mock) (no separate documentation page)
 
 The mock provider is perfect for:
 - Testing VirtRigaud functionality
@@ -89,7 +89,7 @@ The mock provider is perfect for:
 
 ### vSphere Provider
 
-- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0`
+- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1`
 - **Repository:** [https://github.com/projectbeskar/virtrigaud](https://github.com/projectbeskar/virtrigaud)
 - **Maturity:** beta
 - **Tags:** vmware, vsphere, enterprise
@@ -100,7 +100,7 @@ The vSphere provider enables VirtRigaud to manage VMware vSphere environments, i
 - Power operations (on, off, restart, suspend)
 - Snapshot management, including memory snapshots of a powered-on VM
 - VM cloning (full and linked) and templates
-- Image preparation: an OVA/OVF source is imported into vCenter as a template, named and verified by the `VMImage` identity (since v0.4.0, [ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0009-prepared-image-artifact-identity.md))
+- Image preparation: an OVA/OVF source is imported into vCenter as a template, named and verified by the `VMImage` identity (since v0.4.0, [ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0009-prepared-image-artifact-identity.md))
 - Disk export and import (`vmdk`, `qcow2`, `raw`) for cross-hypervisor migration over PVC, S3 and NFS
 - Resource allocation and configuration
 
@@ -124,7 +124,7 @@ Then create the `Provider` shown in [Installing a Provider](#installing-a-provid
 
 ### Libvirt Provider
 
-- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0`
+- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1`
 - **Repository:** [https://github.com/projectbeskar/virtrigaud](https://github.com/projectbeskar/virtrigaud)
 - **Maturity:** beta (clustered topology: experimental)
 - **Tags:** libvirt, kvm, qemu, open-source
@@ -147,7 +147,7 @@ The libvirt provider manages KVM/QEMU virtual machines through libvirt over SSH 
 - The cloud-init seed directory on every libvirt host (default `/var/lib/libvirt/virtrigaud-seeds`, owned by the SSH user); see [Libvirt host preparation](../operations/libvirt-host-prepare.md)
 - Shared storage if you want several hosts to see the same disks
 
-**Installation:** create the credentials Secret and a `Provider` as in [Installing a Provider](#installing-a-provider), with `type: libvirt`, an `endpoint` such as `qemu+ssh://virtrigaud@libvirt-host.example.com/system` and `image: ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0`. See the [Libvirt provider](../providers/libvirt.md) page for the Secret keys and `known_hosts`.
+**Installation:** create the credentials Secret and a `Provider` as in [Installing a Provider](#installing-a-provider), with `type: libvirt`, an `endpoint` such as `qemu+ssh://virtrigaud@libvirt-host.example.com/system` and `image: ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1`. See the [Libvirt provider](../providers/libvirt.md) page for the Secret keys and `known_hosts`.
 
 #### Clustered topology (experimental, opt-in)
 
@@ -160,11 +160,11 @@ New in v0.4.0: a `Provider` with `spec.topology: cluster` fronts several bare li
 - A clustered provider runs a single replica with the `Recreate` strategy, so a rollout is a short outage. A delete waits while any host of the Provider is unreachable (`DeleteBlocked`); `virtrigaud.io/force-delete` and `virtrigaud.io/orphan-on-delete` still release it.
 - Not yet supported on a clustered provider: linked clones, image preparation (`ImagePrepare`), and host-to-host migration.
 
-See the example manifests `provider-libvirt-clustered.yaml`, `hostpool-clustered.yaml` and `host-libvirt-clustered-first-vm.yaml` in the [`examples/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/examples) directory of the main repository, and [Clustered provider inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md) for the full design.
+See the example manifests `provider-libvirt-clustered.yaml`, `hostpool-clustered.yaml` and `host-libvirt-clustered-first-vm.yaml` in the [`examples/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/examples) directory of the main repository, and [Clustered provider inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md) for the full design.
 
 ### Proxmox Provider
 
-- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0`
+- **Image:** `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1`
 - **Repository:** [https://github.com/projectbeskar/virtrigaud](https://github.com/projectbeskar/virtrigaud)
 - **Maturity:** beta
 - **Tags:** proxmox, pve, kvm, open-source
@@ -187,7 +187,7 @@ The Proxmox provider manages VMs on Proxmox VE through the Proxmox API, supporti
 - Proxmox VE 7.0 or later
 - API token with `VM.Allocate` and `VM.Config.*` permissions; since v0.4.0 also `VM.Config.Network` and `VM.Config.Cloudinit`, and, for a token that is not root, `SDN.Use` on every bridge a VM is put on
 
-**Installation:** create the credentials Secret (`token_id` and `token_secret`, or `username` and `password`) and a `Provider` as in [Installing a Provider](#installing-a-provider), with `type: proxmox`, `endpoint: https://pve.example.com:8006` and `image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0`. See the [Proxmox provider](../providers/proxmox.md) page for the credentials the provider reads.
+**Installation:** create the credentials Secret (`token_id` and `token_secret`, or `username` and `password`) and a `Provider` as in [Installing a Provider](#installing-a-provider), with `type: proxmox`, `endpoint: https://pve.example.com:8006` and `image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1`. See the [Proxmox provider](../providers/proxmox.md) page for the credentials the provider reads.
 
 ## Reported Capabilities (v0.4.0)
 
@@ -209,7 +209,7 @@ kubectl get provider vsphere-prod -o jsonpath='{.status.reportedCapabilities}' |
 
 ## Capability Profiles
 
-The provider SDK ([`sdk/provider/capabilities`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/sdk/provider/capabilities/capabilities.go)) groups its capability flags into five profiles. A profile is satisfied when the provider has **all** of its flags. The profiles are a convenience of the SDK (`Manager.SupportsProfile`); the manager reads the individual flags from `status.reportedCapabilities`, not a profile name.
+The provider SDK ([`sdk/provider/capabilities`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/sdk/provider/capabilities/capabilities.go)) groups its capability flags into five profiles. A profile is satisfied when the provider has **all** of its flags. The profiles are a convenience of the SDK (`Manager.SupportsProfile`); the manager reads the individual flags from `status.reportedCapabilities`, not a profile name.
 
 | Profile | Capability flags |
 |---------|------------------|
@@ -272,7 +272,7 @@ The `publish` command will:
 
 `publish` only writes the local catalog file; it does not open the pull request. See the [CLI Tools Reference](cli-tools.md#publish-publishing).
 
-See [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/publish.go) for the full flag list.
+See [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/publish.go) for the full flag list.
 
 !!! note "Dry-run first"
     Add `--dry-run` to see what the catalog entry would look like without writing any files.

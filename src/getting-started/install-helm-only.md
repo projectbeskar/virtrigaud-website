@@ -27,7 +27,7 @@ helm repo update virtrigaud
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace virtrigaud-system \
   --create-namespace \
   --wait \
@@ -111,7 +111,7 @@ writes. Run it with `manager.replicaCount: 2` when you enable webhooks.
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace virtrigaud-system \
   --create-namespace \
   --skip-crds \
@@ -132,8 +132,8 @@ checkout of the release tag), or the manager stays unready.
 | `manager.providerTmpSizeLimitMax` | empty | Ceiling on what a `Provider` annotation (`infra.virtrigaud.io/tmp-size-limit`) may ask for. |
 | `crdUpgrade.enabled` | `true` | Applies the CRDs in a pre-install and pre-upgrade hook Job. |
 
-The complete list is in the chart's [`values.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/charts/virtrigaud/values.yaml)
-and [README](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/charts/virtrigaud/README.md).
+The complete list is in the chart's [`values.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/charts/virtrigaud/values.yaml)
+and [README](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/charts/virtrigaud/README.md).
 
 ## Verify Installation
 
@@ -159,7 +159,7 @@ Expected output from `helm list`:
 ```bash
 kubectl get deployment virtrigaud-manager -n virtrigaud-system \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
-# ghcr.io/projectbeskar/virtrigaud/manager:v0.4.0
+# ghcr.io/projectbeskar/virtrigaud/manager:v0.4.1
 ```
 
 ### Confirm metrics are available
@@ -285,7 +285,7 @@ spec:
       values: |
         manager:
           image:
-            tag: v0.4.0
+            tag: v0.4.1
 ```
 
 With Argo CD (`helm template` render-then-apply), use `webhooks.certificates.source: cert-manager` if you enable webhooks; the default self-signed certificate is regenerated on every sync.
@@ -302,14 +302,14 @@ spec:
   chart:
     spec:
       chart: virtrigaud
-      version: "0.4.0"
+      version: "0.4.1"
       sourceRef:
         kind: HelmRepository
         name: virtrigaud
   values:
     manager:
       image:
-        tag: v0.4.0
+        tag: v0.4.1
 ```
 
 ## Uninstalling
@@ -356,7 +356,7 @@ kubectl get crd -o name | grep '\.infra\.virtrigaud\.io$' | xargs kubectl delete
 
    ```bash
    helm install virtrigaud virtrigaud/virtrigaud \
-     --version 0.4.0 \
+     --version 0.4.1 \
      --namespace virtrigaud-system \
      --create-namespace
    ```

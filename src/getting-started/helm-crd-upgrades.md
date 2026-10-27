@@ -10,11 +10,11 @@ SPDX-License-Identifier: Apache-2.0
 The VirtRigaud Helm chart applies its CRDs on `helm install` **and** `helm upgrade` with a hook Job, so you do not manage CRDs by hand. Helm itself never upgrades CRDs from a chart's `crds/` directory; this hook closes that gap.
 
 !!! warning "Upgrading from v0.3.11"
-    v0.4.0 has a required order (CRDs, then cross-namespace grants, then the manager, then the providers) and several breaking changes. Read the [Upgrade Guide](../operations/upgrade.md) and the [release notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md) before running `helm upgrade`.
+    v0.4.0 has a required order (CRDs, then cross-namespace grants, then the manager, then the providers) and several breaking changes. Read the [Upgrade Guide](../operations/upgrade.md) and the [release notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md) before running `helm upgrade`.
 
 ## What changes on upgrade from v0.3.11 to v0.4.0
 
-The CRD-upgrade hook applies these changes when you run `helm upgrade ... --version 0.4.0`:
+The CRD-upgrade hook applies these changes when you run `helm upgrade ... --version 0.4.1`:
 
 - **New CRDs:** `hosts.infra.virtrigaud.io` and `hostpools.infra.virtrigaud.io` (clustered libvirt providers). The chart now installs 12 CRDs.
 - **`spec.consumerNamespaceSelector`** on `Provider`, `VMClass` and `VMImage`. A reference to one of these in another namespace is refused (`ConsumerNotAllowed`) unless this field selects the referencing namespace.
@@ -37,7 +37,7 @@ No field is removed. The admission rules (`spec.providerRef` and `spec.type` imm
     ```bash
     kubectl apply --server-side --force-conflicts -f config/crd/bases   # from the v0.4.0 release checkout
     # set spec.consumerNamespaceSelector on the shared objects, then:
-    helm upgrade virtrigaud virtrigaud/virtrigaud --version 0.4.0 -n virtrigaud-system --reset-then-reuse-values
+    helm upgrade virtrigaud virtrigaud/virtrigaud --version 0.4.1 -n virtrigaud-system --reset-then-reuse-values
     ```
 
     The manager's readiness probe fails while the `VirtualMachine`, `Provider`, `VMClass` or `VMImage`
@@ -147,7 +147,7 @@ crdUpgrade:
   
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl  # VirtRigaud kubectl image
-    tag: "v0.4.0"  # Set by the release to match the VirtRigaud version
+    tag: "v0.4.1"  # Set by the release to match the VirtRigaud version
   
   backoffLimit: 3
   ttlSecondsAfterFinished: 300
@@ -236,7 +236,7 @@ spec:
   chart:
     spec:
       chart: virtrigaud
-      version: 0.4.0
+      version: 0.4.1
   values:
     crdUpgrade:
       enabled: true  # Automatic upgrades work!
@@ -276,7 +276,7 @@ kubectl describe job -n virtrigaud-system -l app.kubernetes.io/component=crd-upg
     helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
     helm repo update
     helm install virtrigaud virtrigaud/virtrigaud \
-      --version 0.4.0 \
+      --version 0.4.1 \
       --namespace virtrigaud-system \
       --create-namespace
     ```
@@ -317,7 +317,7 @@ kubectl describe clusterrole <role-name>
 crdUpgrade:
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl
-    tag: "v0.4.0"  # Use matching VirtRigaud version
+    tag: "v0.4.1"  # Use matching VirtRigaud version
     pullPolicy: IfNotPresent
 ```
 

@@ -34,7 +34,7 @@ helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
 helm repo update virtrigaud
 
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
@@ -55,7 +55,7 @@ To skip CRDs if you manage them separately:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace virtrigaud-system \
   --create-namespace \
   --skip-crds \
@@ -73,7 +73,7 @@ image, and apply server-side because the CRDs are too large for client-side appl
 ```bash
 git clone --branch v0.4.0 https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
-(cd config/manager && kustomize edit set image controller=ghcr.io/projectbeskar/virtrigaud/manager:v0.4.0)
+(cd config/manager && kustomize edit set image controller=ghcr.io/projectbeskar/virtrigaud/manager:v0.4.1)
 kubectl create namespace virtrigaud-system
 kubectl apply --server-side --force-conflicts -k config/default
 ```
@@ -138,7 +138,7 @@ spec:
     name: vsphere-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9090
       tls:
@@ -182,7 +182,7 @@ spec:
     name: libvirt-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
     service:
       port: 9090
       tls:
@@ -228,7 +228,7 @@ spec:
     name: proxmox-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1"
     service:
       port: 9090
       tls:
@@ -261,7 +261,7 @@ kubectl get providers
     "own namespace only", `{}` means "every namespace". A refused reference leaves the VM
     at `Ready=False`, reason `ConsumerNotAllowed`. The examples on this page keep
     everything in `default`, so no selector is needed. See
-    [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-references.md).
+    [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md).
 
 ## Step 4: Create a VM Class
 

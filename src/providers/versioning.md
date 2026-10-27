@@ -11,7 +11,7 @@ It is aligned to **VirtRigaud v0.4.0** (the current latest).
 
 ## TL;DR
 
-- **Current latest**: `v0.4.0`. Helm chart `--version 0.4.0`. Provider images tagged `v0.4.0`.
+- **Current latest**: `v0.4.0`. Helm chart `--version 0.4.1`. Provider images tagged `v0.4.0`.
 - **CRD API version**: `infra.virtrigaud.io/v1beta1` is the **stable** API. Breaking changes need an ADR.
 - **Release pattern**: release candidates, a soak against real hypervisors, then the final tag. v0.4.0 went through nine release candidates.
 - **Support**: best-effort on the latest minor. The project does not maintain LTS branches. Upgrade to the latest patch within the current minor to get fixes.
@@ -22,8 +22,8 @@ VirtRigaud is composed of several artefacts that each carry a version label:
 
 | Component | Where it lives | Versioning notes |
 |-----------|----------------|------------------|
-| Manager binary | `cmd/manager` → `ghcr.io/projectbeskar/virtrigaud/manager:v0.4.0` | Tracks the project release tag exactly. |
-| Provider binaries | `cmd/provider-{vsphere,libvirt,proxmox,mock}` → `ghcr.io/projectbeskar/virtrigaud/provider-*:v0.4.0` | Currently released in lockstep with the manager. |
+| Manager binary | `cmd/manager` → `ghcr.io/projectbeskar/virtrigaud/manager:v0.4.1` | Tracks the project release tag exactly. |
+| Provider binaries | `cmd/provider-{vsphere,libvirt,proxmox,mock}` → `ghcr.io/projectbeskar/virtrigaud/provider-*:v0.4.1` | Currently released in lockstep with the manager. |
 | Helm chart | `charts/virtrigaud` | Chart version matches the project release without the `v` (`0.4.0`); the release workflow sets `Chart.yaml` and the image tags in `values.yaml` when it packages the chart. |
 | CRD API | `api/infra.virtrigaud.io/v1beta1` | `v1beta1` — stable in the Kubernetes sense; see [API stability](#api-stability-v1beta1) below. |
 | gRPC contract | `proto/provider/v1/provider.proto` | Separate Go module. New RPCs land additively; breaking proto changes would require a major proto-package bump. |
@@ -74,14 +74,14 @@ The chart version is identical to the project version. Always pin in production:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
 
 ```bash
 helm upgrade virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace virtrigaud-system \
   --reset-then-reuse-values
 ```
@@ -95,7 +95,7 @@ Provider pods run separate images, each tagged to the same version as the manage
 ```yaml
 spec:
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
 ```
 
 A provider image must be compatible with the manager that drives it. Keep the provider images on the same release as the manager. When you upgrade, roll the CRDs first, then the manager, then the providers; the [Upgrade Guide](../operations/upgrade.md) lists the few cases where a provider must not be rolled ahead of the manager (libvirt, Proxmox) or must be rolled promptly after it (clustered libvirt, `ImagePrepare` identity).

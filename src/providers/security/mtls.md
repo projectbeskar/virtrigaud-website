@@ -43,7 +43,7 @@ spec:
   credentialSecretRef:
     name: vsphere-prod-credentials
   runtime:
-    image: ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0
+    image: ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1
     service:
       tls:
         enabled: true                       # default true

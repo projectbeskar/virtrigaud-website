@@ -53,7 +53,7 @@ A libvirt `Provider` with `spec.topology: cluster` fronts several libvirt hosts 
 | Host-to-host (live or offline) migration | **Not implemented** |
 | Replicas | One, with the `Recreate` strategy: a rollout is a short outage |
 
-Setup, placement and operations: [Clustered libvirt guide](../guides/clustered/index.md). Details: [Libvirt provider](libvirt.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md).
+Setup, placement and operations: [Clustered libvirt guide](../guides/clustered/index.md). Details: [Libvirt provider](libvirt.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md).
 
 ## Comprehensive Capability Matrix
 
@@ -145,7 +145,7 @@ Legend: ✅ supported through VirtRigaud CRs; ⚠️ partial (see the note in th
 | Revert (`VirtualMachine.spec.snapshot.revertToRef`, VM powered off) | `RevertToSnapshot_Task`; a memory snapshot powers the VM on, then `spec.powerState` is applied | External snapshots need libvirt 9.9+. Refused for a snapshot that stored the cloud-init CD-ROM: take the snapshot **with the VM powered off** to be able to revert it. Refused while a linked clone depends on the VM's disk | Rollback task, polled by the manager |
 | Delete | Refuses a template or prepared-image artifact (`VM_IS_IMAGE_ARTIFACT`) | Deleting a disk-only snapshot is refused while a memory snapshot of the VM is stored in its overlay: delete the memory snapshot first (`Ready=False/DeleteBlocked`) | Refused when the VM's owner stamp cannot be read |
 
-A revert discards what was written to the disks since the snapshot. Walkthrough, rules and troubleshooting: [VM snapshots and revert](../guides/vm-snapshots.md). The revert was accepted but ignored before v0.4.0. Full rules: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md) and the [VM CRD reference](../references/crds.md#snapshot-revert).
+A revert discards what was written to the disks since the snapshot. Walkthrough, rules and troubleshooting: [VM snapshots and revert](../guides/vm-snapshots.md). The revert was accepted but ignored before v0.4.0. Full rules: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md) and the [VM CRD reference](../references/crds.md#snapshot-revert).
 
 ### Image Management
 
@@ -367,9 +367,9 @@ Reflects each provider's `GetCapabilities.SupportedNetworkTypes` response.
 
 All provider images are available from the GitHub Container Registry:
 
-- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0`
-- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0`
-- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0`
+- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1`
+- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1`
+- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1`
 
 The mock provider (`provider-mock`) is a development/conformance-testing image only.
 It is **not** published under release tags and is **not** part of the multi-arch

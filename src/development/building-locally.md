@@ -162,7 +162,7 @@ docker build -f build/Dockerfile.manager \
   --build-arg BASE_IMAGE=corp.io/distroless/static:nonroot \
   --build-arg VERSION=v0.4.0 \
   --build-arg GIT_SHA=$(git rev-parse HEAD) \
-  -t corp.io/virtrigaud/manager:v0.4.0 .
+  -t corp.io/virtrigaud/manager:v0.4.1 .
 ```
 
 Or via `make`:

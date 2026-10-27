@@ -93,7 +93,7 @@ spec:
   credentialSecretRef:
     name: proxmox-prod-credentials
   runtime:
-    image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0
+    image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1
 ```
 
 #### Token rotation

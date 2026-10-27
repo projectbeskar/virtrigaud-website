@@ -104,7 +104,7 @@ got**. The manager reads these answers; you see them as conditions.
 session end 5 seconds before the call's deadline and count as a host that
 stopped answering. The full model, including which commands count as "may
 change the host", is in
-[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md#clustered-libvirt-a-host-that-stops-answering).
+[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md#clustered-libvirt-a-host-that-stops-answering).
 
 ### What each VM shows
 
@@ -442,6 +442,6 @@ endpoints or other tenants' data.
 - [Placement](placement.md) and [Clustered libvirt: overview and setup](index.md)
 - [Backup, restore and re-attach](backup-restore.md)
 - [Migrating into a clustered Provider](../../migration/clustered-target.md)
-- [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md)
-- [VM provider binding and `orphan-on-delete`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-provider-binding.md)
-- Full reference: [clustered inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md) and [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0007-clustered-orchestrator-provider.md)
+- [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md)
+- [VM provider binding and `orphan-on-delete`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-provider-binding.md)
+- Full reference: [clustered inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md) and [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0007-clustered-orchestrator-provider.md)

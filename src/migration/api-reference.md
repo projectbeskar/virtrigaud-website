@@ -333,7 +333,7 @@ a PVC named in `storage.pvc.name` is unmounted and left for its owner (event
 Staged files on the PVC are opened with no symbolic link followed; only a regular
 file with a single hard link is read (a PVC filesystem that reports another link
 count is refused). See the main repository's
-[PVC staging notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/migration/README.md#pvc-staging-backend-legacy-what-the-provider-pods-mount).
+[PVC staging notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/examples/migration/README.md#pvc-staging-backend-legacy-what-the-provider-pods-mount).
 
 ### `spec.metadata` (`MigrationMetadata`, optional)
 
@@ -377,7 +377,7 @@ one.
   manager set `virtrigaud.io/migration`, `migration-claim`, `migrated-from`,
   `imported-disk-id`, `disk-checksum` and `migration-completed(-at)` on a
   `VirtualMachine`. See
-  [Reserved keys and the admission policy](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/admission-policy.md).
+  [Reserved keys and the admission policy](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/admission-policy.md).
 
 To fix `TargetVMNotOwned`: delete or rename the other `VirtualMachine`, or pick
 another `spec.target.name`, then create the migration again.
@@ -436,7 +436,7 @@ Other rules for a target in another namespace:
   `ConsumerNotAllowed`.
 
 Details and the query that finds affected objects before an upgrade:
-[Cross-namespace clone and migration targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-targets.md).
+[Cross-namespace clone and migration targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-targets.md).
 
 ## Cleanup
 
@@ -458,7 +458,7 @@ deleted.
 ### Staged disk: `StagingCleanup` and `DeleteStagedDisk`
 
 For `nfs` and `s3` the manager asks the **target** Provider to delete the staged
-object with the `DeleteStagedDisk` RPC ([ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0011-migration-staging-cleanup.md)).
+object with the `DeleteStagedDisk` RPC ([ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0011-migration-staging-cleanup.md)).
 The manager never touches the backend itself. The provider derives the object from the
 migration's namespace, name and stage and the recorded layout, so a tenant can only
 cause the deletion of a staging object of a migration in its own namespace. Staged
@@ -504,7 +504,7 @@ The in-use checks see only the VMs of one vCenter or libvirt host: do not share 
 landing datastore or the libvirt `default` pool directory with hypervisors the
 Provider does not manage, and run one replica of each provider. Disks left by
 migrations that failed before v0.4.0 are not touched: see
-[Leftovers from earlier releases](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md#leftovers-from-earlier-releases).
+[Leftovers from earlier releases](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md#leftovers-from-earlier-releases).
 
 ### Source snapshot and source VM: `SnapshotCleanup`, `PostMigrationCleanup`
 
@@ -580,7 +580,7 @@ Remote host commands can outlive a cancelled call: single-host libvirt's flatten
 
 Alert on migrations stuck in a phase and on the three `...OutcomeUnknown` reasons. Full
 semantics, including which failures each provider treats as definite:
-[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md).
+[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
 
 ## Administrator disk-size limit
 
@@ -604,7 +604,7 @@ a migration exported before the limit was set, which you delete and run again, o
 target provider that does not report `supports_import_size_limit`). A Warning event of
 the same reason accompanies it. Nothing is set unless the flag is given. An image or
 template larger than its class is not covered by the limit. See the chart README
-([Disk-size limit](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/charts/virtrigaud/README.md#disk-size-limit)).
+([Disk-size limit](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/charts/virtrigaud/README.md#disk-size-limit)).
 
 ## Migration into a clustered libvirt Provider (experimental)
 
@@ -630,7 +630,7 @@ placement is **waited for, not replaced**. The disk-space check is a filter, not
 reservation. Summary, prerequisites and limits: the
 [clustered libvirt guide](../guides/clustered/index.md); every condition and what to
 do about it:
-[Migration into a clustered provider](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
+[Migration into a clustered provider](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
 
 ## Status
 
@@ -1022,6 +1022,6 @@ another namespace or provider: grant it only to people trusted with that data.
 - [Full CRD Reference](../references/generated-crd-docs.md#vmmigration) - generated field reference.
 - [Clustered libvirt](../guides/clustered/index.md) - migrating into a clustered Provider.
 - [Resilience](../operations/resilience.md) - how the circuit breaker interacts with the many provider RPCs a migration issues.
-- [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) - storage-backend-agnostic migration.
-- [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0011-migration-staging-cleanup.md) - staging and landed-disk cleanup.
-- [Upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md) - upgrade guide.
+- [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) - storage-backend-agnostic migration.
+- [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0011-migration-staging-cleanup.md) - staging and landed-disk cleanup.
+- [Upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md) - upgrade guide.

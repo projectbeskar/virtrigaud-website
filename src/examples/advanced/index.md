@@ -39,7 +39,7 @@ spec:
       name: web-server-01-pre-update
 ```
 
-The revert is sent at most once per request. Libvirt has additional rules (a revert needs a snapshot taken while the VM was powered off, and deleting snapshots has an order when memory snapshots are involved); they are in [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md#reverting-to-a-snapshot) and in the repository's [snapshot revert reference](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md).
+The revert is sent at most once per request. Libvirt has additional rules (a revert needs a snapshot taken while the VM was powered off, and deleting snapshots has an order when memory snapshots are involved); they are in [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md#reverting-to-a-snapshot) and in the repository's [snapshot revert reference](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md).
 
 ## Cloning
 

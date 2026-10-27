@@ -59,7 +59,7 @@ next reconcile overwrites it.
 | `Failed` | A hold that needs an operator, a create the provider refused, or a power state the provider cannot classify. |
 
 The rule, first match wins (`derivePhase` in
-[`virtualmachine_phase.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/internal/controller/virtualmachine_phase.go)):
+[`virtualmachine_phase.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/internal/controller/virtualmachine_phase.go)):
 
 1. Being deleted: `Deleting`.
 2. `Ready=False` with one of these hold reasons: `Failed`. The reasons are

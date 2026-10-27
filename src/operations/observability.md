@@ -270,7 +270,7 @@ Measures the wall-clock time from `kubectl apply` (specifically, `vm.CreationTim
 
 A single sample is emitted per VM on the no-IPs → has-IPs transition. The gate in `recordIPDiscoveryIfFirstSeen` requires: the current `vm.Status.IPs` is empty, the provider just returned at least one IP, and `vm.CreationTimestamp` is non-zero. Because `vm.Status.IPs` is persisted to etcd as soon as the gate fires, the metric is idempotent across manager restarts — a restart during the same VM's lifecycle will not emit a second sample.
 
-Since v0.4.0, `status.ips` lists only routable addresses (loopback, link-local and multicast addresses are dropped), and an address that is dropped does not count as "has an IP" here. A libvirt guest on libvirt's NAT network now gets its DHCP lease reported without the guest agent; a guest on a host bridge needs the QEMU guest agent. See [`status.ips`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-ips.md).
+Since v0.4.0, `status.ips` lists only routable addresses (loopback, link-local and multicast addresses are dropped), and an address that is dropped does not count as "has an IP" here. A libvirt guest on libvirt's NAT network now gets its DHCP lease reported without the guest agent; a guest on a host bridge needs the QEMU guest agent. See [`status.ips`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-status-ips.md).
 
 ```promql
 # 95th-percentile IP discovery time for libvirt
@@ -401,7 +401,7 @@ The libvirt provider is moving from `virsh` subprocess reads to a pure-Go `go-li
 | `virtrigaud_libvirt_shadow_compare_total` | Counter | `family`, `result` | Shadow-compare runs by result: `equal`, `divergent`, `error`, `panic`. The denominator for the divergence rate, and proof that the harness is running. `error` and `panic` are recovered; the caller always gets virsh's answer. |
 | `virtrigaud_libvirt_shadow_divergence_total` | Counter | `family`, `field` | Semantic divergences between the two drivers, by field. This is the ADR-0008 flip-gate metric: a read family may flip to native only after it reads `0` over the soak window. |
 
-Enable shadow mode per family through the Provider's `spec.runtime.env` (`VIRTRIGAUD_LIBVIRT_NATIVE=shadow:describe,shadow:list`); see [`libvirt-shadow-reads.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-shadow-reads.md). Shadowing roughly doubles the work of each shadowed read. Read the divergence counter together with the compare counter: a divergence counter at `0` proves nothing unless `virtrigaud_libvirt_shadow_compare_total{result="equal"}` is rising.
+Enable shadow mode per family through the Provider's `spec.runtime.env` (`VIRTRIGAUD_LIBVIRT_NATIVE=shadow:describe,shadow:list`); see [`libvirt-shadow-reads.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-shadow-reads.md). Shadowing roughly doubles the work of each shadowed read. Read the divergence counter together with the compare counter: a divergence counter at `0` proves nothing unless `virtrigaud_libvirt_shadow_compare_total{result="equal"}` is rising.
 
 ---
 
@@ -446,7 +446,7 @@ These have no `virtrigaud_*` metric. They are the operator-visible signal for th
 | Condition / reason | Meaning | What to do |
 |---|---|---|
 | `Ready=False`, reason `ProviderError` | The provider call failed; retried. | Check the Provider and the message. |
-| `Ready=False`, reason `ProviderConflict` | `Create` found a VM it cannot prove it owns and refused. | Adopt it, remove it, or rename; see [VM ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-ownership.md). |
+| `Ready=False`, reason `ProviderConflict` | `Create` found a VM it cannot prove it owns and refused. | Adopt it, remove it, or rename; see [VM ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-ownership.md). |
 | `Ready=False`, reason `ConsumerNotAllowed` | The VM references a `Provider`, `VMClass` or `VMImage` in another namespace that does not share itself with this namespace. No provider call is made. | Set `spec.consumerNamespaceSelector` on the shared object. |
 | `Ready=False`, reason `CreateOutcomeUnknown` | A single-host `Create` was requested but its outcome was never recorded and the provider cannot tell whether it made a VM; no second Create is sent. | Confirm the outcome with the `virtrigaud.io/create-outcome` annotation after checking the hypervisor. |
 | `Ready=False`, reason `DiskSizeExceedsLimit` / `DiskSizeLimitUnverifiable`; condition `DiskSizeWithinLimit=False` | A disk exceeds `manager.maxDiskSize`, or its size could not be verified. | Lower the size or ask the administrator. |
@@ -458,7 +458,7 @@ These have no `virtrigaud_*` metric. They are the operator-visible signal for th
 | `ForceDeleteRefused=True` | `force-delete` was not honoured (a cross-namespace consumer of a clustered Provider that does not allow it). | See [Security](security.md#cross-namespace-use-of-a-provider). The same applies to `orphan-on-delete` (`Ready=False/OrphanOnDeleteNotAllowed`). |
 | `DisksApplied=False`, reason `NotSupportedByProvider` | `spec.disks` is set but the Provider (libvirt, Proxmox) does not attach additional disks. Never `True`; it does not change `Ready`. | Remove `spec.disks` or use a Provider that attaches them. |
 | `Reconfiguring=True`, reason `RestartRequired` | A resize was persisted but takes effect at the next power cycle. | Power-cycle the VM. |
-| `SnapshotReverted` (and `status.snapshotRevert`) | State of a `spec.snapshot.revertToRef` revert: `Reverting` while a call is outstanding; `Failed` with reason `RevertFailed` (or `Unsupported`) when it ended. | See [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md). |
+| `SnapshotReverted` (and `status.snapshotRevert`) | State of a `spec.snapshot.revertToRef` revert: `Reverting` while a call is outstanding; `Failed` with reason `RevertFailed` (or `Unsupported`) when it ended. | See [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md). |
 | `LinkedClonesDependOnDisk=True` | Other VMs use this VM's disk as a backing file; powering it on can corrupt them. | Keep it powered off. |
 
 ### VMSnapshot, VMClone and VMMigration

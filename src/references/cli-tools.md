@@ -92,7 +92,7 @@ vrtg completion powershell | Out-String | Invoke-Expression
 
 ## vrtg
 
-The CLI for looking at VirtRigaud resources from a terminal. Defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg/main.go).
+The CLI for looking at VirtRigaud resources from a terminal. Defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg/main.go).
 
 ### Global Flags
 
@@ -207,7 +207,7 @@ These commands exist so the command tree is stable. They are **not implemented**
 
 ## vcts
 
-VirtRigaud Conformance Test Suite. Defined in [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vcts/main.go) with the runner in [`internal/conformance/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/internal/conformance).
+VirtRigaud Conformance Test Suite. Defined in [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vcts/main.go) with the runner in [`internal/conformance/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/internal/conformance).
 
 !!! warning "`vcts run` cannot pass yet"
     `vcts validate` and `vcts list` work. `vcts run` connects to the cluster and reads the Provider, but the conformance runner does not execute the steps of a specification: the `create`, `update`, `delete`, `wait` and `validate` steps report "not implemented", so each selected test fails at its first step and the command exits non-zero. The runner infers a provider's capabilities from `spec.type` rather than from its status, and only `vsphere` and `libvirt` Providers select any test: for any other Provider type `vcts run` selects zero tests, prints `Total Tests: 0` and exits 0. Use `vcts validate` and `vcts list` today.
@@ -295,7 +295,7 @@ When a run completes, results are written in three formats:
 
 ## vrtg-provider
 
-Provider development toolkit for creating and checking VirtRigaud providers that live outside this repository. Defined in [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/main.go). It edits local files only and does not talk to a cluster.
+Provider development toolkit for creating and checking VirtRigaud providers that live outside this repository. Defined in [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/main.go). It edits local files only and does not talk to a cluster.
 
 ### Usage
 
@@ -315,7 +315,7 @@ vrtg-provider [command] [flags]
 
 #### init - Initialize Provider
 
-Bootstrap a new provider project with scaffolded code. Defined in [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/init.go); the templates are in [`internal/scaffold`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/internal/scaffold).
+Bootstrap a new provider project with scaffolded code. Defined in [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/init.go); the templates are in [`internal/scaffold`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/internal/scaffold).
 
 ```bash
 vrtg-provider init <provider-name> [flags]
@@ -368,7 +368,7 @@ vrtg-provider verify
 
 #### generate - Code Generation
 
-Regenerate protocol buffer bindings and other generated code. Defined in [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/generate.go).
+Regenerate protocol buffer bindings and other generated code. Defined in [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/generate.go).
 
 Run it from within a provider project directory. It runs the project's `proto` make target, falling back to `buf generate` in `proto/`; unless `--proto-only` is given it then runs `go generate ./...` and the project's `generate` and `deepcopy` make targets when they exist. A scaffolded project imports the generated bindings from the proto module, so there is nothing to generate and the command says so.
 
@@ -393,7 +393,7 @@ vrtg-provider generate --proto-only
 
 #### verify - Verification
 
-Check a provider project. Defined in [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/verify.go).
+Check a provider project. Defined in [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/verify.go).
 
 Run it from within a provider project directory. It runs the project's `build` and `test` make targets (or `go build` and `go test`); a failure of either fails the command. It also reports `gofmt`, `go vet` and, when installed, `golangci-lint` findings as warnings without failing.
 
@@ -422,7 +422,7 @@ vrtg-provider verify --skip-tests
 
 #### publish - Publishing
 
-Create a catalog entry for a provider and write it to a catalog YAML file. Defined in [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/publish.go).
+Create a catalog entry for a provider and write it to a catalog YAML file. Defined in [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/publish.go).
 
 Run it from within a provider project directory. It builds and tests the project, then adds or updates the provider's entry in the catalog file (default: `providers/catalog.yaml`, found by walking up from the current directory). `--dry-run` prints the entry without writing it; it still runs the build and tests unless `--skip-verify` is also given. If no `providers/catalog.yaml` is found, pass `--catalog`.
 
@@ -501,7 +501,7 @@ providers/my-provider/
 
 ## virtrigaud-loadgen
 
-Load generator that creates, deletes and lists `VirtualMachine` resources in a cluster and records how long each operation took. Defined in [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/virtrigaud-loadgen/main.go).
+Load generator that creates, deletes and lists `VirtualMachine` resources in a cluster and records how long each operation took. Defined in [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/virtrigaud-loadgen/main.go).
 
 !!! warning "Run it in a dedicated namespace"
     A run creates real `VirtualMachine` resources and leaves the ones still present when it ends in place. Point `--namespace` at a throw-away namespace, or use `--dry-run`. `delete` removes only VMs that the same run created; it never touches other VMs in the namespace.
@@ -605,7 +605,7 @@ The Markdown summary contains the totals, the operation counts, and a table of c
 
 ## manager
 
-The `manager` binary is the VirtRigaud controller manager. It is not invoked by end users directly - it runs as a Deployment inside the cluster, installed by the Helm chart. The flags below are relevant to operators tuning its behaviour. Defined in [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/manager/main.go).
+The `manager` binary is the VirtRigaud controller manager. It is not invoked by end users directly - it runs as a Deployment inside the cluster, installed by the Helm chart. The flags below are relevant to operators tuning its behaviour. Defined in [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/manager/main.go).
 
 `manager --version` (as the first argument) prints the version and exits. The other flags use Go's `flag` syntax (`-flag` and `--flag` are equivalent), and the standard controller-runtime `--zap-*` logging flags are also accepted.
 
@@ -736,7 +736,7 @@ kubectl logs -n <namespace> -l app.kubernetes.io/instance=<provider-name>
 
 ## alpha-to-beta-dryrun
 
-A one-shot migration helper from the v1alpha1 API era. Defined in [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/alpha-to-beta-dryrun/main.go).
+A one-shot migration helper from the v1alpha1 API era. Defined in [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/alpha-to-beta-dryrun/main.go).
 
 !!! warning "Tombstoned"
     The `v1alpha1` API was removed before v0.3.0. This binary now exits with status 1 and an error message explaining that v1alpha1 resources should have been migrated before reaching this version. It is retained in the repository as a safety net, has no flags or functionality, and is not part of the release binaries.

@@ -264,7 +264,7 @@ Task-creating RPCs: `Create`, `Delete`, `Power`, `Reconfigure`, `Clone`, `ImageP
 | Exposed by | manager |
 | Added | v0.4.0 |
 
-Same semantics, labels and lifecycle as `virtrigaud_host_committed_cpu`, in MiB. These two gauges are cross-tenant administrator signals (they show how full each host is); restrict who can scrape the manager's `/metrics` (NetworkPolicy, or `--metrics-secure`). See [Clustered provider inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md) in the main repository for how the scheduler uses committed capacity.
+Same semantics, labels and lifecycle as `virtrigaud_host_committed_cpu`, in MiB. These two gauges are cross-tenant administrator signals (they show how full each host is); restrict who can scrape the manager's `/metrics` (NetworkPolicy, or `--metrics-secure`). See [Clustered provider inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md) in the main repository for how the scheduler uses committed capacity.
 
 ---
 
@@ -320,7 +320,7 @@ Incremented once per `ImagePrepare` request that carries no image identity, that
 | Exposed by | provider (libvirt) |
 | Added | v0.4.0 |
 
-`family` values: `describe`, `list`. `field` is the name of the diverging field. Only populated when shadow reads are enabled with `VIRTRIGAUD_LIBVIRT_NATIVE`; see [Libvirt shadow reads](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-shadow-reads.md) in the main repository.
+`family` values: `describe`, `list`. `field` is the name of the diverging field. Only populated when shadow reads are enabled with `VIRTRIGAUD_LIBVIRT_NATIVE`; see [Libvirt shadow reads](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-shadow-reads.md) in the main repository.
 
 ---
 

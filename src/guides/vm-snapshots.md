@@ -402,7 +402,7 @@ v0.4.0, are not removed: check the pool for `<domain>-disk*` files that are not
     cannot read those files, the operation is refused with "permission denied
     reading a disk image". Grant the `VR_DISK_READ` sudo rule over the pool
     directory; see [Libvirt host preparation](../operations/libvirt-host-prepare.md)
-    and [unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#unreadable-disk-images).
+    and [unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#unreadable-disk-images).
 
 Use an explicit connection when you inspect a host by hand: `virsh -c
 qemu:///system ...` (or the Provider's or Host's `qemu+ssh://` endpoint), never a
@@ -451,6 +451,6 @@ Also:
 - [Advanced VM lifecycle](advanced/advanced-lifecycle.md) and
   [VM Cloning](advanced/vm-cloning.md)
 - [Libvirt provider](../providers/libvirt.md)
-- [Reverting a VirtualMachine to a VMSnapshot (reference)](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md)
-- [libvirt clones, snapshot delete and the delete order (reference)](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#deleting-memory-and-disk-only-snapshots-of-the-same-vm)
-- Example: [`examples/advanced/snapshot-lifecycle.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/advanced/snapshot-lifecycle.yaml)
+- [Reverting a VirtualMachine to a VMSnapshot (reference)](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md)
+- [libvirt clones, snapshot delete and the delete order (reference)](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#deleting-memory-and-disk-only-snapshots-of-the-same-vm)
+- Example: [`examples/advanced/snapshot-lifecycle.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/examples/advanced/snapshot-lifecycle.yaml)

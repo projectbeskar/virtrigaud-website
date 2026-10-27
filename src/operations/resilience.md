@@ -287,7 +287,7 @@ What happens next depends on the call:
 
 A provider image older than v0.4.0 does not report the re-send capabilities, so a lost export or import is held. Roll the providers promptly after the manager.
 
-**Releasing a held object.** The hold's message names the action; the `Warning` event gives the attempt id. After checking the hypervisor for what the call may have made (a snapshot of that name, a disk landed for the target VM, a still-running export) and removing it, confirm the attempt by annotating the object with `virtrigaud.io/operation-outcome=not-performed@<attempt>`, where `<attempt>` is the marker condition's `lastTransitionTime`. For a VM `Create`, annotate with `virtrigaud.io/create-outcome`. Deleting the object also releases it, but anything the lost call made is yours to remove. The full runbook, the per-provider table of which failures are definite, and the limits are in [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md).
+**Releasing a held object.** The hold's message names the action; the `Warning` event gives the attempt id. After checking the hypervisor for what the call may have made (a snapshot of that name, a disk landed for the target VM, a still-running export) and removing it, confirm the attempt by annotating the object with `virtrigaud.io/operation-outcome=not-performed@<attempt>`, where `<attempt>` is the marker condition's `lastTransitionTime`. For a VM `Create`, annotate with `virtrigaud.io/create-outcome`. Deleting the object also releases it, but anything the lost call made is yours to remove. The full runbook, the per-provider table of which failures are definite, and the limits are in [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
 
 ## A clustered host that stops answering
 
@@ -301,7 +301,7 @@ A clustered libvirt Provider (`spec.topology: cluster`, see the [clustered libvi
 - **A disk check that cannot run fails closed.** Before a clustered create, clone or delete touches a disk, the provider checks that no other domain on **any** host of the Provider uses it. A host that cannot be checked fails the operation (`VM_DISK_CHECK_FAILED` or `HOST_UNAVAILABLE`): nothing is written or removed on a partial answer, so a delete may wait until every host of the Provider answers.
 - **Migration into a clustered Provider** never moves the target off its landing host automatically: a landing host that cannot be reached shows `Importing=False/TargetHostUnavailable` and is retried at 15 s doubling to 5 min.
 
-The per-RPC behaviour, the restore guard (`RestorePending`) and the re-attach runbook are in the [clustered libvirt guide](../guides/clustered/index.md) and in the main repository's [`docs/clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md) and [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md).
+The per-RPC behaviour, the restore guard (`RestorePending`) and the re-attach runbook are in the [clustered libvirt guide](../guides/clustered/index.md) and in the main repository's [`docs/clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md) and [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
 
 ## CircuitBreaker — programmatic API
 

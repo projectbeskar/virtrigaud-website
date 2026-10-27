@@ -78,7 +78,7 @@ spec:
     name: vsphere-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9443
       tls:
@@ -95,9 +95,9 @@ Use the image that matches your manager release; all are published under `ghcr.i
 
 | Image | Provider |
 |-------|----------|
-| `provider-vsphere:v0.4.0` | vSphere, using govmomi |
-| `provider-libvirt:v0.4.0` | libvirt/KVM, using `virsh` and `qemu-img` over SSH |
-| `provider-proxmox:v0.4.0` | Proxmox VE (REST API plus SSH for disk transfer) |
+| `provider-vsphere:v0.4.1` | vSphere, using govmomi |
+| `provider-libvirt:v0.4.1` | libvirt/KVM, using `virsh` and `qemu-img` over SSH |
+| `provider-proxmox:v0.4.1` | Proxmox VE (REST API plus SSH for disk transfer) |
 
 The mock provider (`provider-mock`) is a development and conformance-testing image built from the source tree; it is not one of the release images. `spec.runtime.image` accepts `image:tag`, `image@sha256:<digest>` or `image:tag@sha256:<digest>`. **A Provider pins its image: upgrading VirtRigaud does not change `spec.runtime.image`.** Roll providers by editing the field (see [Upgrading provider images](#upgrading-provider-images)); keep the manager and its providers on the same release.
 
@@ -143,7 +143,7 @@ spec:
     name: vsphere-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9443
       tls:
@@ -165,7 +165,7 @@ spec:
     burst: 50
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
     replicas: 2
     service:
       port: 9443
@@ -198,7 +198,7 @@ spec:
       kubernetes.io/metadata.name: team-a      # unset: own namespace only; {}: every namespace
 ```
 
-A reference from a namespace the selector does not match is refused with `Ready=False` / `ConsumerNotAllowed`, and no provider call is made. Each object grants for itself: sharing a Provider does not share its VMClasses or VMImages. **Sharing a Provider shares everything its credentials can reach** (a tenant can write its own `VMImage` naming any template or image file the account can read): share only with namespaces trusted with that, and scope the hypervisor account accordingly. See [`shared-provider-consumer-namespaces.yaml`](../../examples/shared-provider-consumer-namespaces.yaml) and [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-references.md).
+A reference from a namespace the selector does not match is refused with `Ready=False` / `ConsumerNotAllowed`, and no provider call is made. Each object grants for itself: sharing a Provider does not share its VMClasses or VMImages. **Sharing a Provider shares everything its credentials can reach** (a tenant can write its own `VMImage` naming any template or image file the account can read): share only with namespaces trusted with that, and scope the hypervisor account accordingly. See [`shared-provider-consumer-namespaces.yaml`](../../examples/shared-provider-consumer-namespaces.yaml) and [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md).
 
 ## Clustered topology (experimental)
 
@@ -214,7 +214,7 @@ The controller keeps the finalizer `provider.infra.virtrigaud.io/in-use` on ever
 - **Delete the VMs, and wait for them to go, before deleting their namespace.** Deleting a namespace removes the provider Deployment too; a VM deleted afterwards is held with `ProviderUnavailable` and the Provider shows `ProviderInUseRuntimeNotKept` until you force-delete or the VMs are gone.
 - Delete VMs and Providers before removing the manager, or nothing releases the finalizer.
 
-See [VM provider binding](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-provider-binding.md#deleting-a-provider) for the details and the rollback procedure.
+See [VM provider binding](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-provider-binding.md#deleting-a-provider) for the details and the rollback procedure.
 
 ## Security model
 
@@ -243,7 +243,7 @@ The provider gRPC service (`provider.v1.Provider`, `proto/provider/v1/provider.p
 | Migration | `ExportDisk`, `ImportDisk`, `GetDiskInfo`, `DeleteStagedDisk`, `DeleteLandedDisk` |
 | Inventory and ownership | `ListVMs`, `TransferOwner`, `ListHosts`, `GetHostInfo` |
 
-An RPC a provider does not implement answers `Unimplemented`, and what a provider supports is reported by `GetCapabilities` into `Provider.status.reportedCapabilities`. Error handling: the manager retries transient failures with backoff, a per-Provider circuit breaker stops calls to a provider that keeps failing (definite per-VM refusals do not count toward it), and a call whose outcome was lost is held rather than repeated ([Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md)).
+An RPC a provider does not implement answers `Unimplemented`, and what a provider supports is reported by `GetCapabilities` into `Provider.status.reportedCapabilities`. Error handling: the manager retries transient failures with backoff, a per-Provider circuit breaker stops calls to a provider that keeps failing (definite per-VM refusals do not count toward it), and a call whose outcome was lost is held rather than repeated ([Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md)).
 
 ## Observability
 
@@ -270,7 +270,7 @@ spec:
     name: libvirt-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
     service:
       tls: {enabled: true, secretRef: {name: libvirt-provider-tls}}
     resources:
@@ -288,7 +288,7 @@ spec:
     name: libvirt-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
     replicas: 2
     service:
       tls: {enabled: true, secretRef: {name: libvirt-provider-tls}}
@@ -304,7 +304,7 @@ For several hypervisors in one cluster see [`multi-provider-example.yaml`](../..
 | Symptom | Check |
 |---------|-------|
 | Provider not deploying | `kubectl get provider <name> -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'`: `TLSConfigured=False` with `TLSBlockMissing` or `SecretRefMissing` means a missing TLS decision; `ProviderRuntimeReady=False` gives the other causes |
-| Pod `ImagePullBackOff` | The image exists for that tag (`docker pull ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0`); a private registry needs node-level or service-account pull credentials (see the note above) |
+| Pod `ImagePullBackOff` | The image exists for that tag (`docker pull ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1`); a private registry needs node-level or service-account pull credentials (see the note above) |
 | Pod crash-loops with a TLS error | The TLS Secret has `tls.crt`, `tls.key` and `ca.crt`; or set `tls.enabled: false` for a plaintext lab. A pod that finds no certificate files and no opt-out refuses to start |
 | Manager cannot connect | The server certificate has the SAN `virtrigaud-provider-<ns>-<name>.<ns>.svc.cluster.local`; TLS 1.3 is required; both sides use certificates signed by the same CA |
 | VMs `Ready=False` / `ConsumerNotAllowed` | The Provider's `consumerNamespaceSelector` does not select the VM's namespace |
@@ -325,7 +325,7 @@ Providers are pinned by `spec.runtime.image`; upgrade the CRDs and the manager f
 
 ```bash
 kubectl patch provider vsphere-datacenter --type merge -p '
-{"spec":{"runtime":{"image":"ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"}}}'
+{"spec":{"runtime":{"image":"ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"}}}'
 
 kubectl rollout status deployment virtrigaud-provider-default-vsphere-datacenter
 ```

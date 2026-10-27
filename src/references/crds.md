@@ -109,7 +109,7 @@ Full schema: [generated-crd-docs.md#virtualmachine](generated-crd-docs.md#virtua
 | `DiskSizeWithinLimit` | `False/DiskSizeExceedsLimit` when a resize withheld a disk growth because of `manager.maxDiskSize` |
 | `LinkedClonesDependOnDisk` | Warning: libvirt linked clones made by an earlier release use this VM's disk as backing file |
 
-Reasons that mean a hold needing an operator (phase `Failed`): `ConsumerNotAllowed`, `VMNotOwned`, `OwnerStampUnreadable`, `ProviderUnavailable`, `VMIsImageArtifact`, `CreateOutcomeUnknown`, `DeleteBlocked`, `ProviderRefMismatch`, `PlacementTopologyMismatch`, `VMMissingOnHost`. See [`vm-status-phase.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-phase.md) for the rule.
+Reasons that mean a hold needing an operator (phase `Failed`): `ConsumerNotAllowed`, `VMNotOwned`, `OwnerStampUnreadable`, `ProviderUnavailable`, `VMIsImageArtifact`, `CreateOutcomeUnknown`, `DeleteBlocked`, `ProviderRefMismatch`, `PlacementTopologyMismatch`, `VMMissingOnHost`. See [`vm-status-phase.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-status-phase.md) for the rule.
 
 **Annotations you set on a `VirtualMachine`:**
 
@@ -167,7 +167,7 @@ kubectl patch vm web-server --type merge \
 kubectl get vm web-server -o jsonpath='{.status.snapshotRevert.phase}'
 ```
 
-While `SnapshotReverted` is `False`, `Ready` is `False` with the same reason. Per-provider behaviour is in the [capability matrix](../providers/providers-capabilities.md#snapshots-and-revert). Walkthrough and the full rules: [VM snapshots and revert](../guides/vm-snapshots.md). Details: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md).
+While `SnapshotReverted` is `False`, `Ready` is `False` with the same reason. Per-provider behaviour is in the [capability matrix](../providers/providers-capabilities.md#snapshots-and-revert). Walkthrough and the full rules: [VM snapshots and revert](../guides/vm-snapshots.md). Details: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md).
 
 ---
 
@@ -433,7 +433,7 @@ spec:
     cluster: Compute-Cluster
     storagePod: DatastoreCluster-SSD   # auto-selects datastore with most free space
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9443
       tls:
@@ -537,7 +537,7 @@ Used for adopted or migrated VMs instead of `imageRef`.
 ## Host
 
 !!! note "Clustered libvirt only"
-    `Host` and `HostPool` are used only by a libvirt Provider with `spec.topology: cluster` (experimental, opt-in). Single-host Providers do not use them. See [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0007-clustered-orchestrator-provider.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md).
+    `Host` and `HostPool` are used only by a libvirt Provider with `spec.topology: cluster` (experimental, opt-in). Single-host Providers do not use them. See [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0007-clustered-orchestrator-provider.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md).
 
 A `Host` registers one hypervisor host behind a clustered Provider (setup and operations: [Clustered libvirt guide](../guides/clustered/index.md)). The operator fills `status` from the provider's `GetHostInfo` answer. A `Host` and its `HostPool` and Provider must be in the same namespace. A `Host` cannot be deleted while a VirtualMachine is bound to it; fence the host (power it off or revoke its access to shared storage) before you delete one to release held deletes.
 

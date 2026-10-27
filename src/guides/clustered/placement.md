@@ -20,8 +20,8 @@ VM, and what to do when no host fits.
 ## What the scheduler decides
 
 The scheduler is a pure function in
-[`internal/scheduler`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/internal/scheduler).
-The [VirtualMachine controller](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/internal/controller/virtualmachine_controller.go)
+[`internal/scheduler`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/internal/scheduler).
+The [VirtualMachine controller](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/internal/controller/virtualmachine_controller.go)
 gathers its inputs on the create path:
 
 | Input | Where it comes from |

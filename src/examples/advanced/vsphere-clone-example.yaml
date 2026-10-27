@@ -33,7 +33,7 @@ spec:
     name: vsphere-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9090
       # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).

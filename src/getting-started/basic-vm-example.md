@@ -48,7 +48,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         name: vsphere-creds
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
         service:
           port: 9090
           tls:
@@ -89,7 +89,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         name: libvirt-creds
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
         service:
           port: 9090
           tls:
@@ -129,7 +129,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         name: proxmox-creds
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1"
         service:
           port: 9090
           tls:
@@ -368,7 +368,7 @@ spec:
     name: vsphere-creds
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9090
       tls:
