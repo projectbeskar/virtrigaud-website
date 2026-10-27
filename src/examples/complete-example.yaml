@@ -38,7 +38,7 @@ spec:
     folder: virtrigaud-vms
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9090
       # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
@@ -125,7 +125,7 @@ spec:
   
   # v0.2.1: Enhanced lifecycle management
   # NOTE: spec.lifecycle hooks and gracefulShutdownTimeout are accepted by the API but not
-  # executed or sent to the provider in v0.4.0 (see the "Advanced VM lifecycle" guide).
+  # executed or sent to the provider in v0.4.1 (see the "Advanced VM lifecycle" guide).
   lifecycle:
     gracefulShutdownTimeout: "90s"  # 90 seconds for graceful shutdown
     preStop:

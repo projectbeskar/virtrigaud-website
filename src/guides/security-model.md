@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Security Model and Multi-Tenancy
 
-This page describes what VirtRigaud **v0.4.0** enforces when several teams
+This page describes what VirtRigaud **v0.4.1** enforces when several teams
 (namespaces) share a cluster, a `Provider` or a hypervisor, and what you have
 to configure for it. It covers VM ownership, cross-namespace references, the
 admission policy, the `Provider` in-use finalizer, prepared-image identity,
@@ -38,8 +38,8 @@ v0.3.11.
 | A namespace uses another namespace's `Provider`, `VMClass`, `VMImage` only if it is granted | The controllers (`spec.consumerNamespaceSelector`) | [Cross-namespace references](#cross-namespace-references) |
 | A clone or migration creates a VM in another namespace only if that namespace allows it | The controllers (a `Namespace` annotation) | [Cross-namespace targets](#cross-namespace-clone-and-migration-targets) |
 | Only the manager writes the `virtrigaud.io` markers on a `VirtualMachine` | A `ValidatingAdmissionPolicy` in the API server | [Admission policy](#admission-policy-reserved-keys) |
-| A `Provider` that VMs still use is not deleted from under them | A finalizer on the `Provider` ([ADR-0010](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0010-provider-in-use-finalizer.md)) | [Provider in-use finalizer](#provider-in-use-finalizer) |
-| A prepared image belongs to the `VMImage` and source it was prepared for | The providers, with an image stamp ([ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0009-prepared-image-artifact-identity.md)) | [Identity-safe image preparation](#identity-safe-image-preparation) |
+| A `Provider` that VMs still use is not deleted from under them | A finalizer on the `Provider` ([ADR-0010](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0010-provider-in-use-finalizer.md)) | [Provider in-use finalizer](#provider-in-use-finalizer) |
+| A prepared image belongs to the `VMImage` and source it was prepared for | The providers, with an image stamp ([ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0009-prepared-image-artifact-identity.md)) | [Identity-safe image preparation](#identity-safe-image-preparation) |
 | A VM's cloud-init user-data is not readable by other local users of a libvirt host | The libvirt provider, with a private seed directory | [Private cloud-init seeds](#private-cloud-init-seeds-libvirt) |
 | Provider pods mount only the migration storage a live migration needs | The manager | [Migration storage](#migration-storage) |
 | No disk above an administrator's ceiling is created or grown | The manager (`manager.maxDiskSize`) | [Disk-size limit](#disk-size-limit) |
@@ -93,7 +93,7 @@ must read `status.id` instead.
 | libvirt, clustered | Stamped; fails closed. | Every routed call is owner-checked. See [Clustered operations](clustered/operations.md). |
 | Proxmox | Stamped; a re-sent `Create` or `Clone` re-binds the VM it made earlier instead of making a second VMID. | Owner-checked on every call, so a reused VMID is never read, powered, resized, snapshotted, exported or deleted as if it were the `VirtualMachine`'s. |
 
-The protection needs **both** the manager and the provider image of v0.4.0. A
+The protection needs **both** the manager and the provider image of v0.4.1. A
 request without an owner (an older manager) or a provider that ignores it
 behaves as before. Roll the providers right after the manager.
 
@@ -166,8 +166,8 @@ because a detached domain keeps running outside the capacity accounting.
   create a VM at a freed VMID (`VM.Allocate` on a shared pool or an inherited
   path) can exploit that. Do not grant `VM.Allocate` where VirtRigaud's VMs
   live to anyone but the provider's own tokens and your administrators.
-  [ADR-0012](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0012-proxmox-legacy-unstamped-name-rule.md)
-  describes how the rule is to be retired; none of that is in v0.4.0.
+  [ADR-0012](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0012-proxmox-legacy-unstamped-name-rule.md)
+  describes how the rule is to be retired; none of that is in v0.4.1.
 - **A stamp is tamper-evident, not tamper-proof.** Whoever can edit the VM
   configuration on the hypervisor (vSphere `AdvancedConfig`, libvirt metadata,
   Proxmox `VM.Config.Options`) can rewrite the stamp. The hypervisor's ACLs are
@@ -225,7 +225,7 @@ spec:
     name: vsphere-creds
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9090
   consumerNamespaceSelector:
@@ -285,7 +285,7 @@ spec:
 ```
 
 The complete example, applied together, is
-[`examples/shared-provider-consumer-namespaces.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/shared-provider-consumer-namespaces.yaml).
+[`examples/shared-provider-consumer-namespaces.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/examples/shared-provider-consumer-namespaces.yaml).
 
 Points that catch people out:
 
@@ -562,7 +562,7 @@ pool file. It used to be named after the `VMImage` alone and accepted as "alread
 prepared" if anything of that name existed, so two same-named `VMImage`s in
 different namespaces collided, and a tenant allowed to use a shared `Provider`
 could pre-create the artifact another tenant's VMs are cloned from
-([ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0009-prepared-image-artifact-identity.md)).
+([ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0009-prepared-image-artifact-identity.md)).
 
 Now every prepare carries the `VMImage`'s UID, namespace, name and a digest of
 its `spec.source`, and:
@@ -626,13 +626,13 @@ must sit directly in an allowed image directory
 (`VIRTRIGAUD_LIBVIRT_IMAGE_DIRS`, default `/var/lib/libvirt/images`), must not
 be in use by any domain, and is always **copied** into the VM's own disk, never
 attached in place. vSphere `templateName` must name a real template. Details:
-[Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/image-preparation.md).
+[Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/image-preparation.md).
 
 ## Private cloud-init seeds (libvirt)
 
 A libvirt VM's cloud-init seed ISO carries its user-data, which may hold
 passwords, keys and tokens. Earlier releases built it under the world-listable
-`/tmp` at the SSH user's umask. In v0.4.0 seeds are built in a dedicated
+`/tmp` at the SSH user's umask. Since v0.4.0 seeds are built in a dedicated
 directory that only the provider's SSH user can list:
 
 - **Where:** `VIRTRIGAUD_LIBVIRT_SEED_DIR` on the provider pod (set it in the
@@ -673,10 +673,55 @@ Seeds left in `/tmp/virtrigaud-cloudinit/` by earlier releases may still hold
 user-data. Remove the ones no domain references (compare with
 `virsh domblklist --details <domain>`).
 
+## Cloud-init seeds on Proxmox
+
+Since v0.4.1 a Proxmox VM that carries `spec.userData` gets the whole user-data
+through a NoCloud seed CD-ROM that the provider builds on the PVE node over SSH.
+That changes what the Provider's credentials are worth:
+
+- **The Provider holds a root SSH credential to the PVE node.** The seed's
+  `qm importdisk` and `qm set` run as `root@pam` over SSH, outside the API token's
+  permissions, and PVE attributes the changes to root. Restrict who can read the
+  Provider's Secret (`ssh_user` must be `root`, `ssh_privatekey` or
+  `ssh_password`, `known_hosts`), and use a key that only this provider uses.
+  Host-key verification is on by default and has no trust on first use.
+- **The user-data is stored in plaintext in the seed volume** on the VM's storage
+  for the VM's whole life, as in PVE's own cloud-init drive and libvirt's seed.
+  Keep long-lived secrets out of it.
+- **The seed never reaches a command line or a log.** The three files travel as a
+  tar archive on the standard input of one SSH session, are built in a root-only
+  directory on a tmpfs on the node under a per-VM lock, and are removed after the
+  build. The provider logs the VM, node, storage, slot and the size of the
+  user-data, never its content.
+
+See [Proxmox provider: cloud-init](../providers/proxmox.md#cloud-init-the-nocloud-seed).
+
+## Customization secrets of a `VMClone`
+
+A `VMClone`'s `spec.customization` has fields that can hold a credential and that
+no provider acts on (`sysprep.productKey`, `sysprep.adminPassword.value`,
+`sysprep.joinDomain.password.value`, `sysprep.customCommands`,
+`certificates[].data`, `guestCommands[].command` and `.arguments`,
+`userData.ignition.inline`). Since v0.4.1 the manager does not send them to the
+provider; the `Clone` request carries an allow-list of what providers apply or
+report as not applied. The v1beta1 API still stores them in plaintext in the
+`VMClone`, so **do not put a real credential in them, and rotate any value you set
+on v0.4.0 or earlier**. See [VM Cloning](advanced/vm-cloning.md#customization-secrets-are-not-sent).
+
+## Logs and staging locations
+
+Since v0.4.1 a migration's staging location (an NFS server, export, path and
+`uid`/`gid`; an S3 bucket, key and endpoint) and every image URL are redacted from
+the provider and manager logs, from provider errors, and from the status, conditions
+and Warning event of a failed `VMMigration`. The cause stays readable
+(`MNT3ERR_ACCES`, `SignatureDoesNotMatch`). Logs written by earlier releases keep
+what they contain: treat them as sensitive. A libvirt create from an image URL no
+longer puts the URL on the host's command line.
+
 ## Migration storage
 
 Provider pods hold hypervisor credentials, so what is mounted into them is a
-trust decision. In v0.4.0, a `VMMigration` with `spec.storage.type: pvc` gets
+trust decision. Since v0.4.0, a `VMMigration` with `spec.storage.type: pvc` gets
 its storage mounted like this:
 
 - A PVC is mounted into the source and target `Provider` pods only while a
@@ -766,7 +811,7 @@ What the limit does not cover: it bounds the sizes VirtRigaud asks for, per
 disk. A primary disk that comes from an image already larger than the limit is
 not checked, and totals per VM or namespace are not limited; use hypervisor
 storage quotas for those. The clone and migration checks need provider images
-of v0.4.0: an older image does not report disk sizes, so while a limit applies
+of v0.4.1: an older image does not report disk sizes, so while a limit applies
 clones through it are refused.
 
 ## Upgrade impact
@@ -794,8 +839,16 @@ are the changes from this page that can break an existing setup.
 | Linked clones fail closed | `VMClone` with `options.type: LinkedClone` | libvirt linked clones are refused; a libvirt linked clone into another namespace is refused | Use a full clone |
 | The disk-size limit | Nobody, unless `manager.maxDiskSize` is set | No change when unset | Set it if you need it |
 
-Roll the providers promptly after the manager. Most of the checks above need the
-v0.4.0 provider image as well as the manager, and a manager ahead of its
+Changes of v0.4.1 that touch the security model (from v0.4.0; the full list is in the [upgrade notes](../operations/upgrade.md#upgrading-from-v040-to-v041)):
+
+| Change | Who is affected | Action |
+|---|---|---|
+| A `VMClone`'s unused customization secrets are no longer sent to the provider | Anyone who set `sysprep.productKey`, `sysprep.adminPassword.value`, `sysprep.joinDomain.password.value`, `sysprep.customCommands`, `certificates[].data`, `guestCommands` or `userData.ignition.inline` on v0.4.0 or earlier | Rotate those values; they were sent, and they are still stored in plaintext in the `VMClone` |
+| Proxmox VMs with user-data need a root SSH credential in the Provider's Secret | Proxmox Providers whose VMs carry `spec.userData` | Add `ssh_user`, `ssh_privatekey` or `ssh_password` and `known_hosts` before rolling the provider; restrict who can read the Secret |
+| Staging locations and image URLs are redacted from logs | Log queries and alerts that matched them | Update them; treat logs from earlier releases as sensitive |
+
+Roll the providers promptly after the manager. Most of the checks above need a
+v0.4.0 (or later) provider image as well as the manager, and a manager ahead of its
 providers holds some operations (for example, image prepares are held on a
 provider that does not report artifact identity, and a `Create` whose outcome
 is unknown is not sent again to a provider that does not report owner re-bind).
@@ -804,12 +857,12 @@ is unknown is not sent again to a provider that does not report owner re-bind).
 
 The reference documents in the main repository carry the full detail, including
 every edge case:
-[VM ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-ownership.md),
-[libvirt domain ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-domain-ownership.md),
-[cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-references.md),
-[cross-namespace targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-targets.md),
-[admission policy](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/admission-policy.md),
-[image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/image-preparation.md) and
-[upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md).
+[VM ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-ownership.md),
+[libvirt domain ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-domain-ownership.md),
+[cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md),
+[cross-namespace targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-targets.md),
+[admission policy](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/admission-policy.md),
+[image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/image-preparation.md) and
+[upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md).
 For what each condition reason means on a `VirtualMachine`, see
 [VM status reference](vm-status.md).

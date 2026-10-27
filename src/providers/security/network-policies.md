@@ -5,12 +5,12 @@ SPDX-License-Identifier: Apache-2.0
 
 # NetworkPolicies for VirtRigaud
 
-This page describes the NetworkPolicy templates that ship in the **v0.4.0** Helm chart, how to tune them, and a hand-written equivalent for deployments that do not use the chart. Manager↔provider gRPC is protected by **mTLS by default** (see [mTLS](mtls.md)), so mTLS — not NetworkPolicy — is the **primary** transport control. NetworkPolicy remains valuable as **defence-in-depth**, limits what a compromised provider pod can reach, and is the **required compensating control** for any Provider you deliberately run with `tls.enabled=false` (audit-flagged plaintext). Regulated deployments should treat it as required, not optional.
+This page describes the NetworkPolicy templates that ship in the **v0.4.1** Helm chart, how to tune them, and a hand-written equivalent for deployments that do not use the chart. Manager↔provider gRPC is protected by **mTLS by default** (see [mTLS](mtls.md)), so mTLS — not NetworkPolicy — is the **primary** transport control. NetworkPolicy remains valuable as **defence-in-depth**, limits what a compromised provider pod can reach, and is the **required compensating control** for any Provider you deliberately run with `tls.enabled=false` (audit-flagged plaintext). Regulated deployments should treat it as required, not optional.
 
 !!! warning "NetworkPolicy requires an enforcing CNI"
     NetworkPolicy is a Kubernetes API; enforcement depends on the CNI. Calico, Cilium, Antrea and Kube-router enforce it. **Flannel does not enforce NetworkPolicy by default.** Verify with your CNI's documentation before assuming these policies are taking effect: on a CNI that does not enforce them they are inert.
 
-## Port surface in v0.4.0
+## Port surface in v0.4.1
 
 ### Manager pod
 
@@ -105,7 +105,7 @@ networkPolicy:
 Render before you apply:
 
 ```bash
-helm template virtrigaud virtrigaud/virtrigaud --version 0.4.0 \
+helm template virtrigaud virtrigaud/virtrigaud --version 0.4.1 \
   --set networkPolicy.enabled=true | grep -B2 -A12 'kind: NetworkPolicy'
 ```
 

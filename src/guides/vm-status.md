@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # VM Status Reference
 
 This page explains what a `VirtualMachine` reports about itself in
-**VirtRigaud v0.4.0**: the `kubectl get vm` columns, how `status.phase` is
+**VirtRigaud v0.4.1**: the `kubectl get vm` columns, how `status.phase` is
 derived, which conditions and reasons you can see and what to do about each,
 what `status.ips` contains, and what the manager does when a provider call
 fails without a definite answer.
@@ -59,7 +59,7 @@ next reconcile overwrites it.
 | `Failed` | A hold that needs an operator, a create the provider refused, or a power state the provider cannot classify. |
 
 The rule, first match wins (`derivePhase` in
-[`virtualmachine_phase.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/internal/controller/virtualmachine_phase.go)):
+[`virtualmachine_phase.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/internal/controller/virtualmachine_phase.go)):
 
 1. Being deleted: `Deleting`.
 2. `Ready=False` with one of these hold reasons: `Failed`. The reasons are
@@ -110,11 +110,11 @@ nothing is pending. Any `Ready=False` reason:
 | `WaitingForDependencies` | The `Provider`, `VMClass` or `VMImage` is missing or not ready (or an image is still being prepared). | `kubectl get provider,vmclass,vmimage`; fix the missing object. If the image is held, read its conditions (see [Security model](security-model.md) for the prepare reasons). |
 | `ConsumerNotAllowed` | The `Provider`, `VMClass` or `VMImage` is in another namespace and does not share itself with this one. No provider call is made, for a bound VM too. | Set `spec.consumerNamespaceSelector` on the referenced object or label the namespace. See [Security model](security-model.md). |
 | `ProviderConflict` | A hypervisor VM with the same name exists and VirtRigaud cannot prove it created it. `status.id` stays empty. Re-checked every 2 minutes. | Adopt the VM, remove or rename the other one, or recreate the `VirtualMachine` under another name. |
-| `ValidationError` | The provider rejected the spec as invalid: a rejected name, an imported disk path that is not this VM's own migration disk, a network setting the provider cannot apply (for example on Proxmox). Re-checked every 30 seconds. | Read the message and fix the spec. |
-| `CreateBackoff` | The provider answered a `Create` with a retryable failure that did not make a VM. Retried with a backoff of 15 seconds, doubling to 5 minutes. | Usually nothing; check the provider log if it persists. |
+| `ValidationError` | The provider rejected the spec as invalid: a rejected name, an imported disk path that is not this VM's own migration disk, a network setting the provider cannot apply (for example on Proxmox), a definition libvirt refuses (an XML error, no matching OVMF build), or a Proxmox user-data request the provider cannot honour (no SSH credentials, no `genisoimage`). **Re-checked on a backoff** since v0.4.1: after 30 seconds, then 1, 2, 4 and 8 minutes, then every 10 minutes, and at once when the `VirtualMachine`, its `VMClass`, `VMImage` or `Provider` changes. Nothing is sent to the provider while it waits. The message names the next re-check: `Provider rejected VM create (non-retryable; re-checking in 4m0s, at <time>, or at once when the VirtualMachine, its VMClass, VMImage or Provider changes): <detail>`. | Read the message and fix the spec, the VMClass or the host. A `Secret`, a `VMNetworkAttachment` or a fix on the host is picked up at the next re-check, at most 10 minutes later. |
+| `CreateBackoff` | The provider answered a `Create` with a retryable failure that did not make a VM. Retried with a backoff of 15 seconds, doubling to 5 minutes. The message reads either `The provider answered that it did not perform the last Create sent for this VM, so that request made nothing, and that it can be retried. It is retried with a backoff of up to 5m0s; ...` (the provider said "not performed") or `The provider could not complete this VM's Create: the operation failed on the provider's host, or a check it needs could not run there. ...` (any other failure). Both texts are new in v0.4.1; they used to name a cause the provider may not have had. The `CreateBackoff` `Warning` event ends with `Provider answer: <the provider's answer>` (sanitized). | Usually nothing; read the event and the provider log if it persists. |
 | `CreateRefused` | The provider refused the `Create` with a precondition only an operator can satisfy (for example an imported disk that no longer exists) or a permission error. One `Warning` event carries the answer. Backoff 15 seconds to 5 minutes. | Fix the precondition or the permission on the hypervisor account. |
 | `CreateOutcomeUnknown` | A `Create` was sent but its result was never recorded and the provider cannot say whether it made a VM. No second `Create` is sent. Re-checked every minute. | See [Provider call outcomes](#provider-call-outcomes) below. |
-| `ProviderError` | A call to the provider failed (describe, power, reconfigure, resolving the provider). Retried every 5 seconds, longer for some failures. The phase keeps the last power state. | Check `kubectl describe provider`, the provider pod and its log. |
+| `ProviderError` | A call to the provider failed (describe, power, reconfigure, resolving the provider). Retried every 5 seconds, longer for some failures. A `Create` answered `NotFound` or `Unimplemented` (`NotSupported`) is also `ProviderError`, but follows the create backoff above. The phase keeps the last power state. | Check `kubectl describe provider`, the provider pod and its log. |
 | `ProviderUnavailable` | The `Provider` exists but the manager has no usable client for it (runtime not `Running`, TLS or connection failure). On a delete this holds the finalizer. | Wait for the provider rollout, or fix the `Provider`. To release a delete, use `orphan-on-delete` or `force-delete`. |
 | `ProviderDeleting` | The `Provider` is being deleted; nothing is created through it. | Recreate the `Provider`, or delete the VM. |
 | `ProviderRefMismatch` | `spec.providerRef` no longer resolves to the `Provider` the VM is bound through. No provider call is made. Re-checked every 2 minutes. | Restore the reference, or detach with `virtrigaud.io/orphan-on-delete: "true"`. `spec.providerRef` is immutable once the VM is bound. |
@@ -243,6 +243,7 @@ See [Snapshots and revert](vm-snapshots.md) for the workflow.
 | `Unsupported` | The `Provider` reports no snapshot support, or does not implement revert. | Use a provider that supports snapshots. |
 | `Reverting` | The revert was sent and its outcome is not known yet. | Wait. |
 | `Reverted` (`True`) | The provider confirmed the revert. | Remove `spec.snapshot.revertToRef`. |
+| `RevertNotPerformed` | The provider answered that it did not perform the revert (a busy or wrong-state refusal with the disks unchanged, or a failure before the revert ran). The request goes back to `Pending` and is sent again as a new attempt after 1 minute, doubling to 10 minutes, with a `SnapshotRevertNotPerformed` `Warning` event. These answers do not count toward the 5-attempt limit (new in v0.4.1; in v0.4.0 they were counted as unknown outcomes and ended `Failed`). | Wait, or remove `spec.snapshot.revertToRef` to give up. |
 | `RevertFailed` | The provider refused or failed the revert. Not retried on its own. | Read the message, then remove `spec.snapshot.revertToRef` and set it again to retry. |
 
 ### Other conditions
@@ -339,13 +340,20 @@ an **outcome unknown**:
 | `CloneOutcomeUnknown` | `VMClone` | The `Clone` may have made a VM. When the provider reports owner re-bind, it is sent again with a backoff of 15 seconds doubling to 5 minutes, because a clone is stamped with its target and a re-send re-binds it; otherwise the clone fails. |
 | `CloneRetrying` | `VMClone` | Nothing was cloned; retried with the same backoff. |
 | `SnapshotOutcomeUnknown` | `VMSnapshot`, `VMMigration` | The snapshot may exist. Sent again only through a clustered `Provider`, which finds the earlier snapshot by request token. Otherwise held. |
-| `ExportOutcomeUnknown`, `ImportOutcomeUnknown` | `VMMigration` | The export or import may still be running or have completed. Sent again only if the provider lists the migration's staging backend as safe to re-send **and** 35 minutes have passed since the marker. Otherwise held. |
+| `ExportOutcomeUnknown`, `ImportOutcomeUnknown` | `VMMigration` | The export or import may still be running or have completed. Sent again only if the provider lists the migration's staging backend as safe to re-send **and** 35 minutes have passed since the marker. Otherwise held. Since v0.4.1 a clustered libvirt export that the NFS server or the S3 service refused (`MNT3ERR_ACCES`, `SignatureDoesNotMatch`, `AccessDenied`, a 5xx, an unusable S3 configuration) is a definite failure that fails the migration at once, as on a single-host Provider, instead of being held for 35 minutes; a flatten or convert whose connection dropped, a host that stopped answering and an upload whose completing call may have taken effect stay unknown. |
 
 Automatic re-sends are capped (a routed snapshot create 10 times, an export or
 import 3 times); after that the object is held for an operator. A snapshot
 revert is the exception: it is sent again on its own only while the VM stays
 powered off and the `VMSnapshot` is the same one (at most 5 calls), because a
 second revert of a powered-off VM reaches the same state.
+
+A call the provider **proves it did not perform** is not an unknown outcome and
+is retried, not held. Since v0.4.1 this includes a `VMSnapshot` create on a
+single-host Provider (sent again after 1 minute, doubling to 10 minutes) and a
+snapshot revert (`RevertNotPerformed`, same backoff); a `VirtualMachine`
+`Create` answered "not performed" is retried with the `CreateBackoff` described
+above.
 
 A held object writes its status once and is re-checked every minute. Its `Ready`
 message is constant and names the action; the matching `Warning` event gives the
@@ -407,6 +415,40 @@ releases a held deleting migration at once.
     export or import whose outcome was lost is held for an operator instead of
     being re-sent. A provider image older than v0.4.0 also answers libvirt
     failures without a definite class, so every one of them is held.
+
+### An answer is not lost to an edit made during the call
+
+A `Create`, a single-host `Clone` or a `SnapshotCreate` can take minutes. If the
+object is edited meanwhile (a label, an annotation, a spec change, another
+tool's update), the status write that records the provider's answer conflicts.
+In v0.4.0 the answer was then lost and the call's marker stayed: a
+`VirtualMachine` deleted right after a `Create` that the provider had answered it
+did not perform was held as `CreateOutcomeUnknown` until an operator confirmed
+it, with nothing on the hypervisor; a `VMSnapshot` that was made could be held as
+`SnapshotOutcomeUnknown`; a first `Clone` attempt's refusal could be held as
+`CloneOutcomeUnknown`.
+
+Since v0.4.1 the manager reads the object again after the conflict and writes the
+answer over it, **only while the object still waits for that answer** (it carries
+the call's marker: no `status.id` or `status.snapshotID`, the same
+`CreateRequested`, `CloneRequested` or `SnapshotRequested` marker, and for a
+clustered `Create` the same pending host). Anything newer is never overwritten,
+and the conditions keep the `observedGeneration` of the spec the call was built
+from, so a spec change made during the call is still seen as not yet acted on.
+
+Still lost: an answer whose write fails for another reason, an answer that a
+manager restart cuts short, and a `VMMigration`'s failed attempt whose status
+write conflicts (the migration is then held as `SnapshotOutcomeUnknown`,
+`ExportOutcomeUnknown` or `ImportOutcomeUnknown` until you confirm the attempt).
+An object that a v0.4.0 manager (or a v0.4.1 release candidate) already holds
+stays held, because its lost answer is not in the status: release it as above
+after you check the hypervisor. For a `VirtualMachine` only its conditions are written
+again, not the rest of its status. A clustered `VMClone`'s answer recorded on its
+target, a clustered `Create` whose host was excluded after a name conflict, and
+the clustered restore and own-domain holds (`RestorePending`,
+`OwnDomainOnAnotherHost`, an imported disk pinned to its host) are not written
+again: the pending host stays, so the next reconcile sends the call to the same
+host and gets the same answer.
 
 ### Which providers can re-send
 

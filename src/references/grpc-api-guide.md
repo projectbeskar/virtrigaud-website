@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider gRPC API Guide
 
-This page is the hand-written companion to the generated [Provider gRPC API reference](grpc-api.md). The reference lists every message, field and RPC as defined in `proto/provider/v1/provider.proto`; this page explains how the manager uses the contract and what changed in v0.4.0.
+This page is the hand-written companion to the generated [Provider gRPC API reference](grpc-api.md). The reference lists every message, field and RPC as defined in `proto/provider/v1/provider.proto`; this page explains how the manager uses the contract and what changed in v0.4.0 and v0.4.1.
 
 ## Overview
 
@@ -19,9 +19,21 @@ Task-creating RPCs (`Create`, `Delete`, `Power`, `Reconfigure`, `SnapshotCreate`
 
 ---
 
+## Changes in v0.4.1
+
+**The contract has no field, number, RPC or option change.** The generated Go bindings differ from v0.4.0's only in comments, so a manager and a provider of the two versions interoperate on the wire. What changed is what `provider.proto` and the generated [reference](grpc-api.md) say:
+
+- The comments no longer carry internal tracking references or roadmap wording, and say what each field does today.
+- The disk export and import contract comment is attached to `ExportDiskRequest`, and corrects the old statement that `transfer_mode` `auto` is chosen from the providers' capabilities: **the manager resolves `auto` to `relay`**, and no built-in provider implements `direct`. An empty value is treated as `relay`; the `nfs` backend ignores `transfer_mode`.
+- `CloneRequest.customize_json` is an **allow-listed subset** of `spec.customization` (`hostname`, `domain`, `userData.cloudInit.inline`, and the fields providers only report as not applied). The fields that hold or commonly hold secret values and that no provider acts on are never included, so a third-party provider no longer receives them. Do not rely on receiving them.
+- `CloneRequest.linked` is honoured only by providers that report `supports_linked_clones`: libvirt refuses it, and the Proxmox provider stopped reporting it in v0.4.1 and refuses a linked request.
+- `request_token`, `target_vm`, `source_owner` and the other v0.4.0 fields keep their meaning; the comments name the providers that act on each (for example `CreateRequest.owner` is stamped by libvirt, vSphere and Proxmox).
+
+Behaviour that changed without a contract change: the manager now reads `GetCapabilities` again after a provider roll (see [Provider capabilities](../providers/providers-capabilities.md#when-the-status-is-read-v041)); the Proxmox provider answers a VMID race "not performed" (`CREATE_NOT_PERFORMED`) when it can prove it; the libvirt provider answers a clustered export failure it can prove as a definite failure; and the SDK's `gRPC request completed` log carries the `code` and the status message the caller receives. CI checks the contract with `buf breaking` against the pull request's target branch since v0.4.1.
+
 ## Changes since v0.3.11
 
-The service has 23 RPCs in v0.4.0 (18 in v0.3.11). All changes since v0.3.11 are additive on the wire: new fields use new field numbers, and a provider or manager that does not know a field ignores it. The manager gates each new behaviour on a capability flag the provider reports in `GetCapabilitiesResponse`, so a provider image that predates a flag keeps the old behaviour (or the manager holds the operation; the flag descriptions below say which).
+The service has 23 RPCs in v0.4.0 and v0.4.1 (18 in v0.3.11). All changes since v0.3.11 are additive on the wire: new fields use new field numbers, and a provider or manager that does not know a field ignores it. The manager gates each new behaviour on a capability flag the provider reports in `GetCapabilitiesResponse`, so a provider image that predates a flag keeps the old behaviour (or the manager holds the operation; the flag descriptions below say which).
 
 ### New RPCs
 
@@ -41,7 +53,7 @@ The service has 23 RPCs in v0.4.0 (18 in v0.3.11). All changes since v0.3.11 are
 - **`TaskResponse.restart_required` and `honest_result`**: a `Reconfigure` that changed only the persistent definition says so (`Reconfiguring=True/RestartRequired`); `honest_result` is the per-response proof of `supports_honest_reconfigure`.
 - **`DescribeResponse.max_memory_mib` and `vcpus`**: the VM's memory ceiling and vCPU count, used by the clustered scheduler's committed-capacity accounting.
 - **`SnapshotCreateRequest.request_token`**: carries the UID of the `VMSnapshot` the snapshot is made for. A clustered libvirt provider records it with the snapshot, so a re-sent create finds the snapshot an earlier attempt made and a same-named snapshot of another request is `ALREADY_EXISTS`; other providers ignore it.
-- **`ImagePrepareRequest`** adds `image`, `source_digest` and `provider` (identity of the `VMImage` and the Provider), and `ImagePrepareResponse.artifact` (`PreparedArtifact`: name, image identity, source digest, `reused`). `target_name` may now be empty. See [ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0009-prepared-image-artifact-identity.md) (advertised by `supports_image_artifact_identity`).
+- **`ImagePrepareRequest`** adds `image`, `source_digest` and `provider` (identity of the `VMImage` and the Provider), and `ImagePrepareResponse.artifact` (`PreparedArtifact`: name, image identity, source digest, `reused`). `target_name` may now be empty. See [ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0009-prepared-image-artifact-identity.md) (advertised by `supports_image_artifact_identity`).
 - **`ImportDiskRequest.max_virtual_size_bytes`**: the administrator disk-size limit the provider enforces on the disk it lands (`supports_import_size_limit`).
 - **`GetDiskInfoResponse.disks`** (`DiskCapacity`: disk id, path, virtual size): the size of every disk, for the disk-size limit checks.
 
@@ -77,7 +89,7 @@ Providers attach a `google.rpc.ErrorInfo` (domain `provider.virtrigaud.io`) to a
 <a name="provider-call-outcomes"></a>
 ### Calls whose outcome is unknown
 
-The manager records a status marker before `SnapshotCreate`, `ExportDisk`, `ImportDisk` and `SnapshotRevert`. A failure that is not a definite answer (a deadline, or a connection that dropped after the request was written) leaves the marker and holds the object (`SnapshotOutcomeUnknown`, `ExportOutcomeUnknown`, `ImportOutcomeUnknown`) instead of re-sending. A call is re-sent on its own only on a staging backend the provider lists in `resend_safe_export_backends` or `resend_safe_import_backends`. Details: [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md).
+The manager records a status marker before `SnapshotCreate`, `ExportDisk`, `ImportDisk` and `SnapshotRevert`. A failure that is not a definite answer (a deadline, or a connection that dropped after the request was written) leaves the marker and holds the object (`SnapshotOutcomeUnknown`, `ExportOutcomeUnknown`, `ImportOutcomeUnknown`) instead of re-sending. A call is re-sent on its own only on a staging backend the provider lists in `resend_safe_export_backends` or `resend_safe_import_backends`. Details: [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
 
 !!! note "Field-level reference"
     Messages, fields and services are in the [generated gRPC API reference](grpc-api.md), built from `proto/provider/v1/provider.proto` at the documented release with `buf generate` (see the Makefile). Field comments in the proto file are the authoritative description of each field.

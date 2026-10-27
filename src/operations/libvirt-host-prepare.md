@@ -5,19 +5,22 @@ SPDX-License-Identifier: Apache-2.0
 
 # Libvirt Host Preparation
 
-This page is aligned to **VirtRigaud v0.4.0**. It describes what an operator
+This page is aligned to **VirtRigaud v0.4.1**. It describes what an operator
 must set up on a Libvirt/KVM host so the in-tree libvirt provider
 (`internal/providers/libvirt/`) can drive it over SSH, for a single-host
 `Provider` and for every `Host` of a clustered (`topology: cluster`,
 experimental) one.
 
 !!! warning "Upgrading from v0.3.11: three host changes are required before the provider rolls"
-    A v0.4.0 libvirt provider **fails every VM create on a host** that lacks the
+    A v0.4.1 libvirt provider **fails every VM create on a host** that lacks the
     [cloud-init seed directory](#cloud-init-seed-directory), and cannot read
     libvirt's snapshot overlays without the
     [`VR_DISK_READ` sudo rule](#sudo-rules-for-disk-reads-and-copies) (unless the SSH
     user is `root`). The [default storage pool](#storage-pool-and-image-directories)
     must be at `/var/lib/libvirt/images`. See the [Upgrade Guide](upgrade.md).
+
+!!! note "Upgrading from v0.4.0 to v0.4.1: two host checks"
+    The host needs **`curl`** (a create from an image URL downloads with it; `wget` is no longer used), and an **OVMF package** on every host that can receive a VM of a VMClass with `firmware: UEFI` or `securityProfile.secureBoot` (`firmware: UEFI` is honoured since v0.4.1: it was ignored before). See [UEFI, secure boot and platform features](#uefi-secure-boot-and-platform-features) and the [Upgrade Guide](upgrade.md#upgrading-from-v040-to-v041).
 
 ## How the libvirt provider talks to the host
 
@@ -41,7 +44,7 @@ a password or a private key, both read from the Kubernetes Secret mounted at
     mode (`VIRTRIGAUD_LIBVIRT_NATIVE`, off by default) to compare its answers
     with `virsh`'s. The answers served are still `virsh`'s, so host
     requirements do not change. See
-    [ADR-0008](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0008-libvirt-pure-go-driver-and-ssh-transport.md).
+    [ADR-0008](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0008-libvirt-pure-go-driver-and-ssh-transport.md).
 
 ## Host prerequisites at a glance
 
@@ -54,7 +57,8 @@ a password or a private key, both read from the Kubernetes Secret mounted at
 | Cloud-init seed directory, owned by the SSH user, mode `0711` | Seeds are built private; **create fails without it** | [Seed directory](#cloud-init-seed-directory) |
 | Sudo rules for `qemu-img` (sudo 1.9.10 or later) | Read and copy `0600` snapshot overlays | [Sudo rules](#sudo-rules-for-disk-reads-and-copies) |
 | QEMU with the CVE-2024-4467 fix | The provider runs `qemu-img` as root on VM disks | [QEMU version](#qemu-version-cve-2024-4467) |
-| `genisoimage`, `curl`, `wget`, `flock`, `timeout`, `sudo` | Seed ISOs, image downloads, locks and time limits | [Packages](#required-packages-on-the-libvirt-host) |
+| `genisoimage`, `curl`, `flock`, `timeout`, `sudo` | Seed ISOs, image downloads (`ImagePrepare` and create-from-URL), locks and time limits | [Packages](#required-packages-on-the-libvirt-host) |
+| An OVMF package, for VMClasses with `firmware: UEFI` or `securityProfile.secureBoot` (and `swtpm` for a TPM) | UEFI and secure boot domains ask libvirt for firmware from the host's descriptors; a host without one **refuses the create** | [UEFI and secure boot](#uefi-secure-boot-and-platform-features) |
 | A bridge or libvirt network the guests attach to; for clustered `Host`s a matching placement label | Guest networking and placement | [Networking](#network-configuration) |
 
 ## Required packages on the libvirt host
@@ -70,7 +74,6 @@ sudo apt-get install -y \
   genisoimage \
   qemu-utils \
   curl \
-  wget \
   sudo
 
 # RHEL/CentOS/Fedora
@@ -82,7 +85,6 @@ sudo dnf install -y \
   genisoimage \
   qemu-img \
   curl \
-  wget \
   sudo
 ```
 
@@ -90,8 +92,15 @@ What the provider uses each package for, as implemented:
 
 - `genisoimage` builds the cloud-init NoCloud seed ISO (`cloudinit.go`); its
   `isoinfo` reads a clone source's seed (`clone_seed.go`).
-- `curl` downloads `url` images for `ImagePrepare` (`image.go`); `wget` is used
-  by the VM-create path when it has to fetch an image itself (`storage.go`).
+- `curl` downloads `url` images, for `ImagePrepare` (`image.go`) and, since
+  v0.4.1, for a VM create that carries an image URL too (the URL goes to `curl`
+  on standard input, not on the command line). **`wget` is no longer used.** If
+  `curl` is missing the provider log says so.
+- `ovmf` (Debian, Ubuntu), `edk2-ovmf` (Fedora, RHEL) or `qemu-ovmf-x86_64`
+  (SUSE) is needed only for VMClasses with `firmware: UEFI` or
+  `securityProfile.secureBoot`; `swtpm` (and `swtpm-tools` on Debian and Ubuntu)
+  only for `securityProfile.tpmEnabled`. See
+  [UEFI, secure boot and platform features](#uefi-secure-boot-and-platform-features).
 - `flock` (util-linux) and `timeout` (coreutils) are required for the routed
   calls of a clustered Provider, including a migration into it; a host without
   them refuses the import rather than run it unguarded.
@@ -190,7 +199,7 @@ the host key on every connection against the `known_hosts` file mounted at
 `/etc/virtrigaud/credentials/known_hosts`. A missing or empty file, or an entry
 for another host, is a hard failure: there is no trust-on-first-use. The error
 names the problem in the provider pod log and in `Ready=False` / `ProviderError` on the VMs that use the Provider. `ProviderAvailable` does not show it: it only reflects whether the provider Deployment has a ready replica. See
-[ADR-0004](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0004-libvirt-ssh-host-key-verification.md).
+[ADR-0004](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0004-libvirt-ssh-host-key-verification.md).
 
 Collect the key from a trusted network path and add it as the `known_hosts` key
 of the credentials Secret. Use a placeholder in files you commit:
@@ -387,7 +396,7 @@ pool, keep the image catalog apart from the pool.
 `default` pool. If you add a directory here, add it to the
 [`VR_DISK_READ` sudo rule](#sudo-rules-for-disk-reads-and-copies) too.
 
-Full rules: [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/image-preparation.md#libvirt-image-paths-sourcelibvirtpath).
+Full rules: [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/image-preparation.md#libvirt-image-paths-sourcelibvirtpath).
 
 ### Prepared images (`ImagePrepare`)
 
@@ -398,8 +407,37 @@ the pool directory must be an allowed image directory on a filesystem that
 supports hard links (otherwise the prepare fails with `InvalidSource`). Providers
 that share a pool directory must use the same SSH user. Downloads are bounded by
 `spec.prepare.timeout` and by `VIRTRIGAUD_LIBVIRT_IMAGE_MAX_DOWNLOAD_GIB`
-(default 256). The host needs free space in the pool for the largest image plus
+(default 256). Since v0.4.1 a download is also cut off within the `ImagePrepare` call,
+after about 4.5 minutes whatever `spec.prepare.timeout` says (the manager gives the call
+5 minutes; `curl` no longer keeps running on the host after the call has failed), so
+prepare large images from a source close to the host. The host needs free space in the pool for the largest image plus
 its conversion. A **clustered** Provider does not prepare images.
+
+## UEFI, secure boot and platform features
+
+VMClasses can ask for a virtual platform other than the default (BIOS on the i440fx machine type). The provider applies them when it creates a VM; the host must supply what they need. The VMClass fields and the behaviour are described in [libvirt provider: firmware, secure boot and platform features](../providers/libvirt.md#firmware-secure-boot-and-platform-features).
+
+| VMClass setting | The host needs |
+|---|---|
+| `firmware: UEFI`, `securityProfile.secureBoot: true` | libvirt 7.2 or later (tested on 10.0 with QEMU 8.2), QEMU with the `q35` machine type, and an OVMF package that installs firmware descriptors in `/usr/share/qemu/firmware/` (`ovmf`, `edk2-ovmf`, `qemu-ovmf-x86_64`) |
+| `securityProfile.secureBoot: true` | A descriptor whose features include `secure-boot`, `enrolled-keys` and `requires-smm`. On Ubuntu 24.04 `ovmf` installs `40-edk2-x86_64-secure-enrolled.json` |
+| `securityProfile.tpmEnabled: true` | `swtpm` (and `swtpm-tools` on Debian and Ubuntu) |
+| `performanceProfile.nestedVirtualization: true` | Nesting enabled in the host's KVM module: `cat /sys/module/kvm_intel/parameters/nested` (or `kvm_amd`) prints `Y` or `1` |
+| `securityProfile.vtdEnabled: true` | Nothing beyond QEMU with `q35`: the IOMMU is emulated and does not depend on the host's own IOMMU |
+
+Check a host:
+
+```bash
+ls /usr/share/qemu/firmware/
+virsh domcapabilities --machine q35 --arch x86_64 | sed -n '/<os /,/<\/os>/p'
+# expect <enum name='firmware'> with <value>efi</value>, and for secure boot
+# <enum name='secure'> with <value>yes</value>
+```
+
+!!! warning "A host without OVMF refuses the create"
+    A VMClass with `firmware: UEFI` makes UEFI VMs since v0.4.1 (the provider ignored the field in v0.4.0). On a host that lists no `efi` firmware the create is refused before the image is copied (`Ready=False/ValidationError`) where v0.4.0 made a BIOS VM. Install the package, or set `firmware: BIOS` on the VMClass. On a **clustered** Provider every host that can receive such a VM needs the package: the scheduler does not consider firmware, so a VM placed on a host without it is refused and is re-checked on that host.
+
+The Secure Boot keys a VM trusts come from the host's OVMF package, so use the same package version on the hosts of a clustered Provider if its VMs should behave alike. Keep `/usr/share/qemu/firmware/` and `/etc/qemu/firmware/` and the OVMF files as protected as the rest of the host: libvirt trusts the descriptors in them.
 
 ## Cloud-init seed directory
 
@@ -410,7 +448,7 @@ Since v0.4.0 the provider builds every seed in a dedicated directory that only
 the SSH user can list, and makes each seed file private. The directory **must
 exist on every host that creates VMs** (every host of a clustered Provider and
 the target host of a migration into libvirt), owned by the SSH user, before the
-v0.4.0 libvirt provider runs:
+v0.4.1 libvirt provider runs:
 
 ```bash
 install -d -m 0711 -o <ssh user> -g <ssh user> /var/lib/libvirt/virtrigaud-seeds
@@ -450,7 +488,7 @@ install -d -m 0711 -o <ssh user> -g <ssh user> /var/lib/libvirt/virtrigaud-seeds
   lists the commands to make old seeds private and to move them.
 
 Full reference:
-[libvirt domain ownership: cloud-init seed directory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-domain-ownership.md#cloud-init-seed-directory).
+[libvirt domain ownership: cloud-init seed directory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-domain-ownership.md#cloud-init-seed-directory).
 
 ## Sudo rules for disk reads and copies
 
@@ -483,7 +521,7 @@ as before except cloning or exporting a VM whose active disk is such an overlay.
 For the default pool directory `/var/lib/libvirt/images`, an SSH user
 `virtrigaud`, and an NFS migration export `nfs.example.com:/exports/virtrigaud`
 (adjust all three, and the paths of `qemu-img` and `timeout`), exactly as in the
-[libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#what-the-copies-run-as-root)
+[libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#what-the-copies-run-as-root)
 reference:
 
 ```
@@ -531,7 +569,7 @@ virtrigaud ALL=(root) NOPASSWD: VR_DISK_READ, VR_CLONE_COPY, VR_EXPORT_COPY
 Without any rule, a `VR_DISK_READ`-less setup can instead repair each overlay by
 hand (`sudo chown -h libvirt-qemu:kvm -- <file>` and `sudo chmod 0640 -- <file>`
 with the VM off), which every new snapshot or revert needs again. See
-[Unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#unreadable-disk-images).
+[Unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#unreadable-disk-images).
 
 ### QEMU version (CVE-2024-4467)
 
@@ -546,11 +584,11 @@ raw, never probed); those checks are defence in depth, not a substitute.
 
 ### Linked clones (qcow2 backing files)
 
-Libvirt `VMClone` of type `LinkedClone` is **refused** in v0.4.0 (the clone would
+Libvirt `VMClone` of type `LinkedClone` is **refused** in v0.4.1 (the clone would
 read its source's live disk, and powering the source on corrupts it): use
 `FullClone`. A full clone needs a powered-off source. Existing linked clones keep
 working, but their source VM cannot be deleted, reverted or snapshotted while
-they exist. See [libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md).
+they exist. See [libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md).
 
 ## Network configuration
 
@@ -566,7 +604,7 @@ agent in the guest (otherwise it stays empty unless the host happens to have an
 ARP entry for the guest's MAC). The provider adds the agent channel to every
 domain; make sure the image or your `spec.userData` installs and starts
 `qemu-guest-agent`. See
-[VM status IPs](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-ips.md).
+[VM status IPs](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-status-ips.md).
 
 The example below uses netplan on Ubuntu; consult your distribution for
 alternatives.
@@ -703,7 +741,7 @@ sudo aa-status | grep libvirt
   takes snapshots of a powered-off VM with the CD-ROM ejected, and refuses to
   revert to a snapshot that stored it. Take snapshots of VMs you want to be able
   to revert with the VM powered off. See
-  [VM snapshot revert](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md).
+  [VM snapshot revert](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md).
 - If you see other denials in `journalctl -u apparmor` or the audit log, work
   out which path is blocked and add it to `/etc/apparmor.d/local/usr.sbin.libvirtd`
   rather than disabling the profile.
@@ -711,7 +749,7 @@ sudo aa-status | grep libvirt
 ### SELinux (RHEL/CentOS/Fedora)
 
 !!! warning "Not tested"
-    The v0.4.0 seed directory and snapshot paths were validated on Ubuntu 24.04
+    The v0.4.1 seed directory and snapshot paths were validated on Ubuntu 24.04
     with AppArmor (libvirt 10.0). VirtRigaud has not been run with SELinux
     enforcing against them. On an SELinux host libvirt relabels a domain's disk
     sources at start; if a seeded VM does not start, look for AVC denials on the
@@ -760,6 +798,10 @@ sudo -u virtrigaud virsh net-list                            # default | host-br
 
 # 8. SSH from the provider's network, with the key the Secret holds
 ssh -i ~/.ssh/virtrigaud_libvirt virtrigaud@<libvirt-host> "virsh -c qemu:///system list --all"
+
+# 9. curl (image downloads) and, for UEFI or secure boot VMClasses, OVMF firmware
+sudo -u virtrigaud sh -c 'command -v curl'
+ls /usr/share/qemu/firmware/
 ```
 
 If all succeed and your `Provider` CR's `credentialSecretRef` points at the
@@ -784,11 +826,19 @@ over the pool directory (and every other directory VM disks live in), or repair
 the overlay by hand. The status never names the image, because it can belong to
 another tenant's VM; the provider log does.
 
+### A UEFI or secure boot create is `ValidationError`
+
+`virsh domcapabilities --machine q35` lists no `efi` firmware (or no Secure Boot capable loader), or libvirt found no matching build when it defined the domain. Install the OVMF package and check with `ls /usr/share/qemu/firmware/` (see [UEFI, secure boot and platform features](#uefi-secure-boot-and-platform-features)). Existing domains are not redefined. Disks that a v0.4.0 attempt left on the pool (`<domain>-disk.qcow2`) are not removed for you: remove one after checking that no domain uses it.
+
+### A create that downloads an image fails with a `curl` message
+
+The create-from-URL path runs `curl` on the host since v0.4.1 (`wget` is no longer used). Install `curl` there. An HTTP 4xx answer, a permanent `curl` failure or a URL scheme other than `http`, `https` or `ftp` is a `ValidationError`, not a retry.
+
 ### `Permission denied` when a VM starts
 
 Symptom: the VM fails to start and the libvirt log shows `Cannot access storage
-file ... Permission denied`. VM disks created by v0.4.0 are `0640
-libvirt-qemu:kvm`; disks created by earlier releases are `0777`. Common causes:
+file ... Permission denied`. VM disks created by v0.4.0 and later are `0640
+libvirt-qemu:kvm`; disks created by v0.3.11 and earlier are `0777`. Common causes:
 
 1. The disk's owner or mode was changed by hand, or the `chown` after the write
    failed (it is best effort; the provider logs it) and libvirt's dynamic
@@ -868,7 +918,7 @@ ssh <user>@<vm-ip> "cloud-init status"     # should print: status: done
 ```
 
 Without `spec.userData` the default cloud-init provisions **no login user, SSH
-key, password or sudo grant** (v0.4.0); supply your own. For the
+key, password or sudo grant** (v0.4.1); supply your own. For the
 network-configuration defaults injected into cloud-init meta-data, see
 [Providers / Libvirt](../providers/libvirt.md).
 

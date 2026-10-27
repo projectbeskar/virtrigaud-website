@@ -4,15 +4,16 @@
 # Proxmox VMClone Example
 #
 # Demonstrates the VMClone CRD cloning an existing, provisioned VirtualMachine
-# into a new one on the SAME Proxmox provider. Proxmox implements the Clone RPC
-# (full and linked). libvirt serves full clones only (linked clones are
-# disabled there); vSphere serves both.
+# into a new one on the SAME Proxmox provider. Proxmox serves FULL clones only
+# (since v0.4.1 it no longer advertises linked clones, and a LinkedClone
+# VMClone fails with reason LinkedCloneUnsupported). libvirt serves full
+# clones only too; vSphere serves both.
 #
 # Scope:
 #   - source.vmRef only (snapshotRef/templateRef/imageRef -> Phase=Failed)
 #   - same-provider clone (the produced VM lives on the source VM's provider)
-#   - FullClone and LinkedClone (LinkedClone requires the provider to report
-#     SupportsLinkedClones=true)
+#   - FullClone only on Proxmox (LinkedClone requires the provider to report
+#     SupportsLinkedClones=true, which Proxmox does not)
 # The controller creates the target VirtualMachine CR named spec.target.name
 # BEFORE the Clone (its UID goes to the provider as the clone's owner stamp),
 # seeds its Status.ID with the provider's cloned VM ID, and labels it
@@ -34,7 +35,7 @@ spec:
     name: proxmox-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1"
     service:
       port: 9443
       # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
@@ -98,14 +99,17 @@ spec:
     type: FullClone   # default
 
 ---
-# Example 2: Linked clone
-# Copy-on-write copy sharing the parent's base disk. Faster + space-efficient;
-# requires the provider to report SupportsLinkedClones=true (Proxmox does;
-# the controller fails fast with a clear condition if it does not).
+# Example 2: Full clone with user-data of its own
+# A Proxmox clone does NOT carry its source's user-data. A clone of a VM that has
+# a cloud-init seed (or a VMClone with inline user-data, as here) gets a seed of
+# its own: a new instance-id, its own hostname, and this user-data. Without inline
+# user-data the clone's seed configures nothing. Give the clone the users, keys and
+# sudo rules it must have. The Provider's Secret needs the SSH keys for this (see
+# secrets/proxmox-creds.yaml) and the clone must stay on the node SSH reaches.
 apiVersion: infra.virtrigaud.io/v1beta1
 kind: VMClone
 metadata:
-  name: app-clone-linked
+  name: app-clone-userdata
   namespace: default
 spec:
   source:
@@ -116,7 +120,19 @@ spec:
     classRef:
       name: small
   options:
-    type: LinkedClone
+    type: FullClone
+  customization:
+    hostname: app-dev-01
+    userData:
+      cloudInit:
+        inline: |
+          #cloud-config
+          users:
+            - default
+            - name: ops
+              shell: /bin/bash
+              ssh_authorized_keys:
+                - ssh-ed25519 AAAA... ops@example.com
 
 # Usage:
 #
@@ -137,6 +153,10 @@ spec:
 #      kubectl delete vmclone app-clone-full   # app-prod-01 remains
 #
 # Notes:
+# - Proxmox: a LinkedClone VMClone is refused before the provider is called
+#   (Phase=Failed, reason LinkedCloneUnsupported); the clone also gets the
+#   VMClass's CPU and memory (v0.4.1). Do not delete a VMClone or its target
+#   while it is still cloning: the VM PVE finishes stays on PVE.
 # - libvirt: LinkedClone is disabled (Phase=Failed, reason LinkedCloneUnsupported);
 #   a FullClone needs the source VM powered off (it waits Pending with reason
 #   SourceMustBePoweredOff otherwise). See docs/libvirt-clones.md.

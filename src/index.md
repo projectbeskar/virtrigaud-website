@@ -122,7 +122,7 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6), and one gRP
 
 ## Custom Resources
 
-VirtRigaud v0.4.0 ships **12 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
+VirtRigaud v0.4.1 ships **12 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
 
 | Kind | Purpose |
 |---|---|
@@ -133,9 +133,9 @@ VirtRigaud v0.4.0 ships **12 Custom Resource Definitions** in the `infra.virtrig
 | `VMNetworkAttachment` | Logical network the VM attaches to (resolved per-provider). |
 | `VMSnapshot` | A point-in-time snapshot of a VirtualMachine. |
 | `VMMigration` | Inter-provider VM migration (export → import) through S3 or NFS staging (a legacy PVC backend also exists). |
-| `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.4.0. |
+| `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.4.1. |
 | `VMPlacementPolicy` | Placement / anti-affinity rules. Applied via `VirtualMachine.spec.placementRef`; the clustered libvirt scheduler uses it as its constraint language. There is no standalone controller. |
-| `VMClone` | One-shot clone of an existing VM (vSphere, Proxmox and Libvirt). libvirt supports full clones only; linked clones are not supported there. |
+| `VMClone` | One-shot clone of an existing VM (vSphere, Proxmox and Libvirt). Only vSphere makes linked clones; libvirt and Proxmox serve full clones and refuse a linked one (`LinkedCloneUnsupported`). |
 | `Host` | One hypervisor host behind a clustered libvirt Provider, with its live capacity and health in `status`. |
 | `HostPool` | A group of `Host`s under one clustered Provider, with scheduling strategy and overcommit policy. `status` counts total, ready and schedulable hosts. |
 
@@ -143,13 +143,23 @@ The manager also runs a `VMAdoption` reconciler (not a CRD — it reconciles `Pr
 
 ## Version Information
 
-This documentation covers **VirtRigaud v0.4.0**.
+This documentation covers **VirtRigaud v0.4.1**. The generated [CRD](references/generated-crd-docs.md) and [gRPC](references/grpc-api.md) references are generated from the `v0.4.1` tag.
+
+!!! warning "Upgrading from v0.4.0"
+    v0.4.1 has no CRD schema change and the same roll order, but a Proxmox Provider whose VMs carry user-data now needs SSH credentials in its Secret, libvirt VMClasses with `firmware: UEFI` now make UEFI VMs, and secrets set in a `VMClone`'s `spec.customization` on v0.4.0 or earlier should be rotated. Read [Upgrading from v0.4.0 to v0.4.1](operations/upgrade.md#upgrading-from-v040-to-v041) first.
 
 !!! warning "Upgrading from v0.3.11"
     v0.4.0 is a security-hardening release with breaking changes (cross-namespace references need a grant, `spec.providerRef` is immutable once bound, vSphere needs a new vCenter privilege, libvirt hosts need a seed directory, and more). Read the [Upgrade Guide](operations/upgrade.md) and [Helm CRD Upgrades](getting-started/helm-crd-upgrades.md) before upgrading.
 
 ### Recent Releases
 
+- **v0.4.1** — *Proxmox cloud-init user-data, libvirt platform features, and CLI tools that perform the operations they document.* A patch release of v0.4.0; the CRDs have no schema change.
+    - **Proxmox: the whole user-data reaches the guest.** The provider builds a NoCloud seed on the PVE node over SSH, so `users`, `write_files`, `packages`, `runcmd` and every other cloud-config key apply, as on libvirt and vSphere. **This needs SSH credentials in the Provider's Secret and is breaking for Proxmox users whose VMs carry user-data.** The seed is kept out of the boot order; a clone gets a seed of its own and the class's memory; linked clones are no longer advertised; the loser of a VMID race is answered "not performed" and retried. See [Proxmox](providers/proxmox.md#cloud-init-the-nocloud-seed).
+    - **libvirt platform.** Secure boot, VT-d, nested virtualization and VMs with several network interfaces work on libvirt 10. **`firmware: UEFI` is honoured now** (it was ignored), so check your VMClasses before you roll the libvirt provider; the host needs an OVMF package. See [libvirt firmware](providers/libvirt.md#firmware-secure-boot-and-platform-features).
+    - **Controller and Provider status.** A refused `VirtualMachine` create is retried on a backoff (30 seconds doubling to 10 minutes) and at once when its inputs change, with new condition and `CreateBackoff` messages; a provider's answer survives a status-write conflict; `Provider.status.reportedCapabilities` is read again after a provider roll, and `ProviderAvailable` and `status.healthy` follow the ready replicas.
+    - **libvirt snapshots.** A snapshot whose overlay file is already on the host is refused for good, and "not performed" snapshot and revert answers are retried.
+    - **Security.** A `VMClone`'s unused customization secrets are no longer sent to the provider (rotate any real value you set); staging locations are redacted from every provider and manager log; libvirt create-from-URL downloads with `curl` with the URL off the host's command line.
+    - **Tooling.** `vcts run` runs the conformance tests, `virtrigaud-loadgen` performs real power, reconfigure, snapshot and clone operations and enforces `vmCount`, `vrtg-provider init --type proxmox` scaffolds a Proxmox provider, and the `sdk` and `proto` Go modules are tagged with each release. The `virtrigaud-provider-runtime` chart is deprecated. See the [upgrade notes](operations/upgrade.md#upgrading-from-v040-to-v041).
 - **v0.4.0** — *Security hardening, clustered libvirt providers and snapshot revert.*
     - **Clustered libvirt providers (experimental, opt-in).** `Provider.spec.topology: cluster` fronts several libvirt hosts registered as `Host` resources in a `HostPool`. A placement scheduler (using `VMPlacementPolicy`) picks a host per VM, and every later call is routed to that VM's host and checked against its owner stamp. Create, describe, delete, power, reconfigure, snapshot, full clone and S3/NFS export work across hosts; a `VMMigration` can target a clustered Provider. Host-to-host migration is not implemented. A clustered Provider runs one replica, so a rollout is a short outage.
     - **Snapshot revert.** `VirtualMachine.spec.snapshot.revertToRef` now reverts the VM (before, the field was accepted and ignored). The VM must be powered off; progress is in `status.snapshotRevert` and the `SnapshotReverted` condition. On libvirt a revert needs a snapshot taken with the VM powered off.

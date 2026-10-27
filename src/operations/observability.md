@@ -5,10 +5,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # Observability Guide
 
-This is the operator's guide to what VirtRigaud **v0.4.0** emits, what it means, and how to build dashboards and alerts from it. For the machine-readable catalog (exact help strings, label sets, histogram buckets) see the [Metrics Reference](../api-reference/metrics.md). For circuit-breaker lifecycle details and the semantics of provider calls whose outcome is unknown see [Resilience](resilience.md). For migration recipes from v0.3.5 metrics see [Upgrade Guide](upgrade.md).
+This is the operator's guide to what VirtRigaud **v0.4.1** emits, what it means, and how to build dashboards and alerts from it. For the machine-readable catalog (exact help strings, label sets, histogram buckets) see the [Metrics Reference](../api-reference/metrics.md). For circuit-breaker lifecycle details and the semantics of provider calls whose outcome is unknown see [Resilience](resilience.md). For migration recipes from v0.3.5 metrics see [Upgrade Guide](upgrade.md).
 
 !!! note "Metrics are only part of the signal"
-    Several v0.4.0 behaviours that matter operationally have **no metric**: held provider calls (`...OutcomeUnknown`), `DeleteBlocked`, restore holds, placement decisions and `HostPool` health. They are reported as **status conditions and Events** on the objects themselves; see [Status conditions and events worth alerting on](#status-conditions-and-events-worth-alerting-on). Alert on those through `kube-state-metrics` custom-resource state metrics (or your own exporter), not through `virtrigaud_*`.
+    Several v0.4.1 behaviours that matter operationally have **no metric**: held provider calls (`...OutcomeUnknown`), `DeleteBlocked`, restore holds, placement decisions and `HostPool` health. They are reported as **status conditions and Events** on the objects themselves; see [Status conditions and events worth alerting on](#status-conditions-and-events-worth-alerting-on). Alert on those through `kube-state-metrics` custom-resource state metrics (or your own exporter), not through `virtrigaud_*`.
 
 ## What VirtRigaud emits
 
@@ -31,7 +31,7 @@ Three families of metrics live on the manager endpoint:
 
 ---
 
-## The `virtrigaud_*` catalog (v0.4.0)
+## The `virtrigaud_*` catalog (v0.4.1)
 
 Metrics 1 to 11 are unchanged in name and labels since v0.3.8 (new `kind` and `reason` values are noted). Metrics 12 to 14, the provider-process metrics and the libvirt driver-transition metrics are new in v0.4.0.
 
@@ -64,6 +64,8 @@ Incremented once per reconcile run by every reconciler. The outcome is inferred 
     The series carry one `kind` per controller: `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMAdoption`, `VMMigration`, `VMSnapshot`, `VMClone`, `VMSet` and — new in v0.4.0, with the clustered-provider inventory — `Host` and `HostPool`. (`VMPlacementPolicy` is read by the scheduler and has no reconciler of its own.)
 
 `requeue` means the reconciler explicitly requested a requeue without returning an error (e.g. waiting for a provider task to complete, or a held create being re-checked). `error` means an error was returned and controller-runtime will apply exponential backoff. `success` means the reconcile completed cleanly.
+
+Since v0.4.1 the reconciles of a healthy `Provider` are counted as `outcome="requeue"` instead of `"success"`: each schedules the next capability read (every 10 minutes). A dashboard that charts the outcome changes shape for `kind="Provider"`; an alert on `outcome="error"` does not.
 
 ```promql
 # Reconcile error rate across all kinds
@@ -270,7 +272,7 @@ Measures the wall-clock time from `kubectl apply` (specifically, `vm.CreationTim
 
 A single sample is emitted per VM on the no-IPs → has-IPs transition. The gate in `recordIPDiscoveryIfFirstSeen` requires: the current `vm.Status.IPs` is empty, the provider just returned at least one IP, and `vm.CreationTimestamp` is non-zero. Because `vm.Status.IPs` is persisted to etcd as soon as the gate fires, the metric is idempotent across manager restarts — a restart during the same VM's lifecycle will not emit a second sample.
 
-Since v0.4.0, `status.ips` lists only routable addresses (loopback, link-local and multicast addresses are dropped), and an address that is dropped does not count as "has an IP" here. A libvirt guest on libvirt's NAT network now gets its DHCP lease reported without the guest agent; a guest on a host bridge needs the QEMU guest agent. See [`status.ips`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-ips.md).
+Since v0.4.0, `status.ips` lists only routable addresses (loopback, link-local and multicast addresses are dropped), and an address that is dropped does not count as "has an IP" here. A libvirt guest on libvirt's NAT network now gets its DHCP lease reported without the guest agent; a guest on a host bridge needs the QEMU guest agent. See [`status.ips`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-status-ips.md).
 
 ```promql
 # 95th-percentile IP discovery time for libvirt
@@ -324,7 +326,7 @@ sum by (provider) (virtrigaud_provider_tasks_inflight)
 **`state` values:** `verified`, `missing`, `unknown`  
 **Added:** v0.4.0
 
-Whether the installed CRDs carry the fields the v0.4.0 security model relies on: the `VirtualMachine` provider binding (`status.boundProvider` and the `spec.providerRef` immutability rule), `spec.consumerNamespaceSelector` on `Provider`, `VMClass` and `VMImage`, and the per-Provider `VMImage` prepare state (`status.providerStatus[]`) and `Provider` `status.reportedCapabilities.supportsImageArtifactIdentity` that identity-safe image preparation needs. Exactly one of the three series is `1`:
+Whether the installed CRDs carry the fields the v0.4.1 security model relies on: the `VirtualMachine` provider binding (`status.boundProvider` and the `spec.providerRef` immutability rule), `spec.consumerNamespaceSelector` on `Provider`, `VMClass` and `VMImage`, and the per-Provider `VMImage` prepare state (`status.providerStatus[]`) and `Provider` `status.reportedCapabilities.supportsImageArtifactIdentity` that identity-safe image preparation needs. Exactly one of the three series is `1`:
 
 - `verified` — every required field is present.
 - `missing` — at least one installed CRD is older than the manager. The manager's **readiness probe fails** until the CRDs are upgraded, and each check adds one `virtrigaud_errors_total{reason="vm-crd-security-features-missing"}`.
@@ -397,18 +399,18 @@ The libvirt provider is moving from `virsh` subprocess reads to a pure-Go `go-li
 
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
-| `virtrigaud_libvirt_active_driver` | Gauge | `family`, `driver` | The effective driver per read family (`describe`, `list`): `1` for the active driver (`virsh`, `shadow` or `native`), `0` for the others. A family configured `native` runs as `shadow` in v0.4.0 and reads `shadow`: the metric reports what is happening, not what was requested. |
+| `virtrigaud_libvirt_active_driver` | Gauge | `family`, `driver` | The effective driver per read family (`describe`, `list`): `1` for the active driver (`virsh`, `shadow` or `native`), `0` for the others. A family configured `native` runs as `shadow` in v0.4.1 and reads `shadow`: the metric reports what is happening, not what was requested. |
 | `virtrigaud_libvirt_shadow_compare_total` | Counter | `family`, `result` | Shadow-compare runs by result: `equal`, `divergent`, `error`, `panic`. The denominator for the divergence rate, and proof that the harness is running. `error` and `panic` are recovered; the caller always gets virsh's answer. |
 | `virtrigaud_libvirt_shadow_divergence_total` | Counter | `family`, `field` | Semantic divergences between the two drivers, by field. This is the ADR-0008 flip-gate metric: a read family may flip to native only after it reads `0` over the soak window. |
 
-Enable shadow mode per family through the Provider's `spec.runtime.env` (`VIRTRIGAUD_LIBVIRT_NATIVE=shadow:describe,shadow:list`); see [`libvirt-shadow-reads.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-shadow-reads.md). Shadowing roughly doubles the work of each shadowed read. Read the divergence counter together with the compare counter: a divergence counter at `0` proves nothing unless `virtrigaud_libvirt_shadow_compare_total{result="equal"}` is rising.
+Enable shadow mode per family through the Provider's `spec.runtime.env` (`VIRTRIGAUD_LIBVIRT_NATIVE=shadow:describe,shadow:list`); see [`libvirt-shadow-reads.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-shadow-reads.md). Shadowing roughly doubles the work of each shadowed read. Read the divergence counter together with the compare counter: a divergence counter at `0` proves nothing unless `virtrigaud_libvirt_shadow_compare_total{result="equal"}` is rising.
 
 ---
 
 ## Deprecated: `virtrigaud_queue_depth`
 
 **Deprecated in:** v0.3.6 (G7.4 / PR #131)  
-**Removal:** not removed in v0.4.0; the helper is still compiled in and still registered  
+**Removal:** not removed in v0.4.1; the helper is still compiled in and still registered  
 **Help string:** `[DEPRECATED v0.3.6 — use controller-runtime's workqueue_depth{name} instead. See CHANGELOG.] Current depth of work queue by kind.`
 
 This gauge is redundant with controller-runtime's standard `workqueue_depth{name}` metric, which has been present on `/metrics` since v0.3.0. Production code in this repository no longer calls `SetQueueDepth`, so the series is never written. Do not build new dashboards on it.
@@ -439,14 +441,16 @@ This gauge is redundant with controller-runtime's standard `workqueue_depth{name
 
 ## Status conditions and events worth alerting on
 
-These have no `virtrigaud_*` metric. They are the operator-visible signal for the v0.4.0 safety behaviours. Read them with `kubectl get -o yaml` / `kubectl describe`, or export them with `kube-state-metrics` custom-resource state metrics.
+These have no `virtrigaud_*` metric. They are the operator-visible signal for the v0.4.1 safety behaviours. Read them with `kubectl get -o yaml` / `kubectl describe`, or export them with `kube-state-metrics` custom-resource state metrics.
 
 ### VirtualMachine
 
 | Condition / reason | Meaning | What to do |
 |---|---|---|
 | `Ready=False`, reason `ProviderError` | The provider call failed; retried. | Check the Provider and the message. |
-| `Ready=False`, reason `ProviderConflict` | `Create` found a VM it cannot prove it owns and refused. | Adopt it, remove it, or rename; see [VM ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-ownership.md). |
+| `Ready=False`, reason `ValidationError` | The provider refused the `Create` as an invalid specification (or a libvirt definition, or a Proxmox user-data request it cannot honour). Re-checked on a backoff of 30 s doubling to 10 min, and at once when the VM, its VMClass, VMImage or Provider changes; the message names the next re-check (v0.4.1). | Read the message; fix the spec, the VMClass or the host. See [Resilience](resilience.md#a-refused-create-is-retried-on-a-backoff). |
+| `Ready=False`, reason `CreateBackoff` | The provider could not complete the `Create`, or answered it did not perform it. The message reads "The provider answered that it did not perform the last Create sent for this VM ..." or "The provider could not complete this VM's Create ..."; the `Warning` event ends with `Provider answer: <the answer>`. An alert or script that matched the v0.4.0 text needs the new one. | See the [VM status reference](../guides/vm-status.md). |
+| `Ready=False`, reason `ProviderConflict` | `Create` found a VM it cannot prove it owns and refused. | Adopt it, remove it, or rename; see [VM ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-ownership.md). |
 | `Ready=False`, reason `ConsumerNotAllowed` | The VM references a `Provider`, `VMClass` or `VMImage` in another namespace that does not share itself with this namespace. No provider call is made. | Set `spec.consumerNamespaceSelector` on the shared object. |
 | `Ready=False`, reason `CreateOutcomeUnknown` | A single-host `Create` was requested but its outcome was never recorded and the provider cannot tell whether it made a VM; no second Create is sent. | Confirm the outcome with the `virtrigaud.io/create-outcome` annotation after checking the hypervisor. |
 | `Ready=False`, reason `DiskSizeExceedsLimit` / `DiskSizeLimitUnverifiable`; condition `DiskSizeWithinLimit=False` | A disk exceeds `manager.maxDiskSize`, or its size could not be verified. | Lower the size or ask the administrator. |
@@ -458,7 +462,7 @@ These have no `virtrigaud_*` metric. They are the operator-visible signal for th
 | `ForceDeleteRefused=True` | `force-delete` was not honoured (a cross-namespace consumer of a clustered Provider that does not allow it). | See [Security](security.md#cross-namespace-use-of-a-provider). The same applies to `orphan-on-delete` (`Ready=False/OrphanOnDeleteNotAllowed`). |
 | `DisksApplied=False`, reason `NotSupportedByProvider` | `spec.disks` is set but the Provider (libvirt, Proxmox) does not attach additional disks. Never `True`; it does not change `Ready`. | Remove `spec.disks` or use a Provider that attaches them. |
 | `Reconfiguring=True`, reason `RestartRequired` | A resize was persisted but takes effect at the next power cycle. | Power-cycle the VM. |
-| `SnapshotReverted` (and `status.snapshotRevert`) | State of a `spec.snapshot.revertToRef` revert: `Reverting` while a call is outstanding; `Failed` with reason `RevertFailed` (or `Unsupported`) when it ended. | See [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md). |
+| `SnapshotReverted` (and `status.snapshotRevert`) | State of a `spec.snapshot.revertToRef` revert: `Reverting` while a call is outstanding; `Failed` with reason `RevertFailed` (or `Unsupported`) when it ended; `Pending` with reason `RevertNotPerformed` while a revert the provider did not perform waits to be sent again (v0.4.1). | See [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md). |
 | `LinkedClonesDependOnDisk=True` | Other VMs use this VM's disk as a backing file; powering it on can corrupt them. | Keep it powered off. |
 
 ### VMSnapshot, VMClone and VMMigration
@@ -468,6 +472,7 @@ These have no `virtrigaud_*` metric. They are the operator-visible signal for th
 | `VMSnapshot` | `Ready=False`, reason `SnapshotOutcomeUnknown` | A `SnapshotCreate` was sent and its result was lost; held for an operator (single-host) or re-sent (clustered). Marker condition `SnapshotRequested=True`. |
 | `VMMigration` | `Ready=False`, reasons `SnapshotOutcomeUnknown`, `ExportOutcomeUnknown`, `ImportOutcomeUnknown` | The same for the snapshot, export and import calls of a migration. Marker conditions `SnapshotRequested`, `ExportRequested`, `ImportRequested`. |
 | `VMClone` | reason `CloneOutcomeUnknown`, `CloneRetrying` | A clone whose outcome is unknown or that is being retried. |
+| `VMSnapshot` | `Ready=False`, reason `ProviderError`, `Warning` event `SnapshotCreateRetrying` | A create the provider did not perform; sent again after 1 minute, doubling to 10 minutes (v0.4.1). |
 | `VMMigration` | `Importing=False`, reason `TargetHostUnavailable` | The landing host of a migration into a clustered Provider cannot be reached; the target is never moved off its host automatically. |
 
 How these are produced, how long they are retried and how to release them is in [Resilience: calls whose outcome is unknown](resilience.md#calls-whose-outcome-is-unknown). Operator confirmation is recorded as a `Warning` event `OperationOutcomeConfirmed`.
@@ -476,7 +481,7 @@ How these are produced, how long they are retried and how to release them is in 
 
 | Object | Condition / field | Meaning |
 |---|---|---|
-| `Provider` | `ProviderRuntimeReady`, `ProviderAvailable` | The runtime `Deployment` has ready replicas (`DeploymentReady` / `RemoteAvailable`). `ProviderAvailable` is **not** a live health probe of the hypervisor: it is set when the Deployment is ready. Use the circuit-breaker gauge for connectivity. `status.healthy` follows it. |
+| `Provider` | `ProviderRuntimeReady`, `ProviderAvailable` | The runtime `Deployment` has ready replicas (`DeploymentReady` / `RemoteAvailable`); with no ready pod `ProviderAvailable` is `False` (reason `DeploymentNotReady`) and `status.healthy` is `false` (v0.4.1; both stayed `True` once set before). `ProviderAvailable` is **not** a live health probe of the hypervisor: use the circuit-breaker gauge for connectivity. An alert on `ProviderAvailable=False` can fire during the rollout of a vSphere or clustered `Provider`. |
 | `Provider` | `TLSConfigured` | Audit-visible TLS posture: `Enabled`, `ExplicitlyDisabled`, `SecretRefMissing`, `TLSBlockMissing`. See [mTLS](../providers/security/mtls.md). |
 | `Provider` | `CapabilitiesReported` | Whether the Provider's self-reported capabilities were fetched (`CapabilitiesFetched` / `CapabilitiesUnavailable`). |
 | `Provider` | `DeleteBlocked=True`, reason `ProviderInUse` | A `Provider` being deleted is held by VMs, snapshots, clones or migrations that need it (ADR-0010). A `Warning` event `ProviderDeleteBlocked` names counts and namespaces, never objects. Released with `virtrigaud.io/force-delete: "true"` on the Provider (event `ProviderForceDeleted`). |
@@ -489,7 +494,7 @@ For the reasons on a VM (`Ready`, `Placed`, `DeleteBlocked`, the `...OutcomeUnkn
 
 ## Logs
 
-- **Manager.** The manager logs through controller-runtime's `zap` logger (`logr`), one structured record per event with the standard controller-runtime keys (`controller`, `controllerKind`, `namespace`, `name`, `reconcileID`). It is started with controller-runtime's `zap` flags (`--zap-devel`, `--zap-log-level`, `--zap-encoder`, …) and **Development-mode defaults** (console encoder). The chart (v0.4.0) does not have a values key for extra manager arguments, and the `VIRTRIGAUD_LOG_LEVEL` / `VIRTRIGAUD_LOG_FORMAT` / `VIRTRIGAUD_TRACING_*` entries in `manager.env` and the `observability.tracing` block of `values.yaml` are **not read by the manager** in v0.4.0. To change the manager's log flags, patch the Deployment `args` (for example with Kustomize `patches` on the rendered chart).
+- **Manager.** The manager logs through controller-runtime's `zap` logger (`logr`), one structured record per event with the standard controller-runtime keys (`controller`, `controllerKind`, `namespace`, `name`, `reconcileID`). It is started with controller-runtime's `zap` flags (`--zap-devel`, `--zap-log-level`, `--zap-encoder`, …) and **Development-mode defaults** (console encoder). The chart (v0.4.1) does not have a values key for extra manager arguments, and the `VIRTRIGAUD_LOG_LEVEL` / `VIRTRIGAUD_LOG_FORMAT` / `VIRTRIGAUD_TRACING_*` entries in `manager.env` and the `observability.tracing` block of `values.yaml` are **not read by the manager** in v0.4.1. To change the manager's log flags, patch the Deployment `args` (for example with Kustomize `patches` on the rendered chart).
 - **Providers.** Set `spec.runtime.logLevel` (`debug`, `info`, `warn`, `error`) and `spec.runtime.logFormat` (`text`, `json`) on the `Provider`; the controller passes them to the provider pod as `LOG_LEVEL` / `LOG_FORMAT`. Provider logs use Go `slog`.
 - **What is never logged.** Secret values (credentials, TLS keys, cloud-init payloads) are not written to logs, events or status. The disk and ownership guards deliberately keep hypervisor paths, other tenants' namespaces and hostnames out of `status` and events: a `Conflict` message names only the requested object, and the details are in the **provider's** log. Look there for who owns a conflicting VM or which path was refused.
 - **Warnings worth grepping for.** The manager logs `WARNING:` lines when `insecureSkipVerify` is set on a Provider, when TLS is explicitly disabled, and when a CRD security feature is missing or cannot be verified.

@@ -12,9 +12,9 @@ group them in a `HostPool`, and VirtRigaud chooses a host for every new
 on. libvirt has no cluster manager of its own; in this mode VirtRigaud is the
 one.
 
-!!! warning "Experimental in v0.4.0"
+!!! warning "Experimental in v0.4.1"
     `topology: cluster` is **experimental**. It is opt-in, it can still change,
-    and the v0.4.0 test coverage of multi-host setups is narrower than that of
+    and the v0.4.1 test coverage of multi-host setups is narrower than that of
     single-host libvirt, vSphere and Proxmox. Read
     [What "experimental" means here](#what-experimental-means-here) and
     [What is and is not supported](#what-is-and-is-not-supported) before
@@ -74,7 +74,7 @@ spec:
     name: libvirt-cluster-creds
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
     service:
       port: 9443
       tls:
@@ -115,7 +115,7 @@ exists and what it offers. The operator fills `status` with live facts.
 `status` carries `health` (`Ready`, `NotReady`, `Unknown`), allocatable CPU,
 memory and storage, CPU model and features, machine types, the emulator path,
 `lastHeartbeatTime` and a `Ready` condition. It never carries connection
-secrets. `status.boundVMs` exists in the schema but is always `0` in v0.4.0;
+secrets. `status.boundVMs` exists in the schema but is always `0` in v0.4.1;
 use the [committed-capacity metrics](operations.md#metrics-and-alerts)
 instead.
 
@@ -155,7 +155,7 @@ spec:
     memory: "1.0"
 ```
 
-| Field | Used in v0.4.0? |
+| Field | Used in v0.4.1? |
 |-------|-----------------|
 | `providerRef` | Yes. Same namespace as the pool |
 | `strategy` | Yes. `Spread` (default) or `BinPack`; see [Placement](placement.md#scoring-spread-and-binpack) |
@@ -325,7 +325,7 @@ once idle, so a reload does not interrupt a call in progress.
 
 ## What is and is not supported
 
-| Operation | Clustered libvirt in v0.4.0 |
+| Operation | Clustered libvirt in v0.4.1 |
 |-----------|-----------------------------|
 | Create (scheduled onto a host) | Supported |
 | Describe, power on/off/reboot/graceful shutdown | Supported, routed to the VM's host and owner-checked |
@@ -376,7 +376,7 @@ is not repeated here. In addition, each host of a clustered Provider needs:
 - **Sudo rules for the copies.** Clones and exports run `qemu-img` as root
   through sudo rules; a clustered Provider needs the same rules plus the
   `timeout` lines. See [What the copies run as
-  root](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#what-the-copies-run-as-root).
+  root](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#what-the-copies-run-as-root).
 - **If hosts share storage** (an NFS export, for example): mount it **at**
   `/var/lib/libvirt/images` on every host of the Provider, at the same path,
   with NFS locking enabled (NFSv4, or NFSv3 with `lockd`/`statd`), and mount
@@ -430,7 +430,7 @@ spec:
     name: libvirt-cluster-creds
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
     service:
       port: 9443
       tls:
@@ -490,9 +490,9 @@ spec:
 ```
 
 The `Host` name is also the **host id** the provider and the scheduler use.
-Repo examples: [`provider-libvirt-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/provider-libvirt-clustered.yaml),
-[`hostpool-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/hostpool-clustered.yaml) and
-[`host-libvirt-clustered-first-vm.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/host-libvirt-clustered-first-vm.yaml).
+Repo examples: [`provider-libvirt-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/examples/provider-libvirt-clustered.yaml),
+[`hostpool-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/examples/hostpool-clustered.yaml) and
+[`host-libvirt-clustered-first-vm.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/examples/host-libvirt-clustered-first-vm.yaml).
 
 Check that the manager sees the hosts before creating a VM:
 
@@ -614,7 +614,7 @@ hard filters run before scoring:
 
 !!! note "Storage-pool labels are not on the list"
     `storage.virtrigaud.io/pool-<name>` labels are accepted on `Host.spec.labels`
-    and worth setting to match your storage layout, but v0.4.0 does **not**
+    and worth setting to match your storage layout, but v0.4.1 does **not**
     enforce them: the VirtualMachine controller does not map a VM's disks to a
     storage-pool name, so a missing storage-pool label never blocks placement.
     Likewise, no machine-type requirement is derived from a VM.
@@ -659,5 +659,5 @@ ownership and cross-namespace model.
   stops answering, cordoning, and the metrics to watch.
 - [Libvirt provider](../../providers/libvirt.md) for the single-host
   provider that clustered mode builds on.
-- Reference: [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0007-clustered-orchestrator-provider.md)
-  and the full [clustered inventory reference](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md).
+- Reference: [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0007-clustered-orchestrator-provider.md)
+  and the full [clustered inventory reference](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md).

@@ -218,6 +218,19 @@ nothing is sent. Two things to know:
     - only to the same `VMSnapshot` (same UID) and while the Provider still
       reports snapshot support;
     - at most 5 calls for one request; after that the revert is `Failed`.
+- **A "not performed" answer** (since v0.4.1). When the provider proves that
+  the revert did not run (a failure before `virsh snapshot-revert`, or a busy
+  or wrong-state refusal with the disk sources unchanged), the request goes back
+  to `Pending` with `SnapshotReverted=False/RevertNotPerformed` and a
+  `SnapshotRevertNotPerformed` `Warning` event, and is sent again as a new
+  attempt after 1 minute, doubling up to 10 minutes. These answers do not count
+  toward the 5-attempt limit, and `status.snapshotRevert.attempts` counts since
+  the last such answer. Remove `spec.snapshot.revertToRef` to give up. In
+  v0.4.0 the same answer was re-sent as an unknown outcome and, after 5
+  attempts, ended `Failed` with "the VM may or may not have been reverted"
+  although nothing had changed. One exception: a "not performed" answer to the
+  manager's own re-send of an attempt whose outcome is unknown proves nothing
+  about that attempt, and stays an unknown outcome.
 - **A definite failure** (a refusal, an error the provider reported, an
   unimplemented RPC) is terminal: phase `Failed`. The message is the provider's
   answer, made safe for status (one line, URL credentials removed, bounded).
@@ -254,6 +267,7 @@ Absent while `spec.snapshot.revertToRef` is unset.
 | `False` | `SnapshotForAnotherVM` | The `VMSnapshot` was not taken of this VM (another `spec.vmRef`, VM UID or Provider), or that cannot be proven |
 | `False` | `Unsupported` | The Provider reports no snapshot support, answers that it does not implement `SnapshotRevert`, or the installed CRD cannot record the request |
 | `False` | `Reverting` | Sent; the outcome is not known yet (a task runs, or the call is sent again after an unknown outcome) |
+| `False` | `RevertNotPerformed` | The provider answered that it did not perform the revert; the request is `Pending` and is sent again after 1 minute, doubling to 10 minutes (v0.4.1). Remove `revertToRef` to give up |
 | `True` | `Reverted` | The provider confirmed the revert |
 | `False` | `RevertFailed` | The provider failed or refused it, or its outcome stayed unknown. Remove the field and set it again to retry, except after a refusal the provider gives every time, whose message says what to do instead (for libvirt: take a new snapshot with the VM powered off) |
 
@@ -374,26 +388,44 @@ Overlays of additional data disks, and overlays left by snapshots deleted before
 v0.4.0, are not removed: check the pool for `<domain>-disk*` files that are not
 `.qcow2` after a revert or a snapshot delete.
 
-!!! warning "Known limitation: a reused snapshot name can collide with a leftover overlay"
+!!! warning "A reused snapshot name can collide with a leftover overlay (refused since v0.4.1)"
     The overlay of a disk-only snapshot is `<pool>/<domain>-disk.<snapshot name>`.
     If an earlier snapshot of that name left its overlay in the pool, because it
     could not be proven safe to remove (for example a memory snapshot still
-    referenced it), a new disk-only snapshot with the **same name** fails in
-    libvirt (`external snapshot file for disk vda already exists`).
+    referenced it), or because it is the overlay of an additional data disk,
+    a new disk-only snapshot with the **same name** would fail in libvirt
+    (`external snapshot file for disk vda already exists`).
 
-    - On a **clustered** Provider the answer is a generic error, so the
-      `VMSnapshot` never gets a phase: it stays `Ready=False/ProviderError` and
-      the create is re-sent about once a minute (after ten re-sends it is held
-      as `SnapshotOutcomeUnknown`).
-    - On a single-host Provider the refusal is recognised as "not created" and
-      the `VMSnapshot` ends `Failed`. This is from the code and was not run in
-      the lab.
+    v0.4.0 listed this as a known limitation: a clustered Provider answered a
+    generic error and re-sent the create about once a minute until the
+    `VMSnapshot` was held as `SnapshotOutcomeUnknown`. Since v0.4.1 the provider
+    probes the overlay paths **before it changes anything** and refuses with
+    `AlreadyExists`, on single-host and clustered Providers alike: the
+    `VMSnapshot` ends `Failed` (`Ready=False/ProviderError`, a `SnapshotFailed`
+    event), nothing is created, the message names no host path (the provider log
+    names the disk and the file), and **the leftover file is never removed or
+    overwritten**.
 
     **Workaround:** use a new snapshot name. Or, after you have verified that no
     domain definition and no snapshot references the file (`virsh -c "$CONN"
-    dumpxml --inactive` of every domain on the host, and `virsh -c "$CONN"
-    snapshot-dumpxml` of every snapshot), remove the leftover file; a
-    `VMSnapshot` that is still being retried then completes on its next attempt.
+    dumpxml --inactive` of every domain on any host that mounts the pool, and
+    `virsh -c "$CONN" snapshot-dumpxml` of every snapshot), remove the leftover
+    file and create the snapshot again. A `VMSnapshot` that v0.4.0 already held
+    in `SnapshotOutcomeUnknown` for this reason **stays held** after the upgrade:
+    delete it and create one under another name, or confirm the attempt with the
+    `virtrigaud.io/operation-outcome` annotation its message names (the confirmed
+    create is then refused as above, or taken if you removed the file first).
+
+!!! note "A snapshot create the provider did not perform is retried (v0.4.1)"
+    A `VMSnapshot` create that a single-host Provider did not perform (a busy
+    domain, a request that never reached the provider, an unreachable host) no
+    longer ends `Failed`. It shows `Ready=False/ProviderError`, with the
+    provider's answer in a `SnapshotCreateRetrying` event, and is sent again after
+    1 minute, doubling to 10 minutes, for as long as the object exists (a clustered
+    Provider already did this). A cause that does not go away, such as an
+    unreadable disk image, is retried every 10 minutes until you fix it or delete
+    the `VMSnapshot`. A snapshot libvirt refuses before executing because the
+    VM's configuration does not support it fails for good (`InvalidArgument`).
 
 !!! note "Unreadable overlay files"
     libvirt creates snapshot and revert overlays with mode `0600`, owned by root
@@ -402,7 +434,7 @@ v0.4.0, are not removed: check the pool for `<domain>-disk*` files that are not
     cannot read those files, the operation is refused with "permission denied
     reading a disk image". Grant the `VR_DISK_READ` sudo rule over the pool
     directory; see [Libvirt host preparation](../operations/libvirt-host-prepare.md)
-    and [unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#unreadable-disk-images).
+    and [unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#unreadable-disk-images).
 
 Use an explicit connection when you inspect a host by hand: `virsh -c
 qemu:///system ...` (or the Provider's or Host's `qemu+ssh://` endpoint), never a
@@ -429,7 +461,10 @@ Also:
 - Upgrade the **CRDs before the manager**. A manager whose CRD prunes
   `status.snapshotRevert` sends no revert (`SnapshotReverted=False/Unsupported`).
 - libvirt: roll the libvirt providers too, and take new snapshots with the VM
-  powered off. See the [upgrade guide](../operations/upgrade.md).
+  powered off. See the [upgrade guide](../operations/upgrade.md). Roll them
+  promptly after a v0.4.1 manager: until the provider is rolled, a single-host
+  overlay collision or a refusal libvirt will never accept is retried every
+  10 minutes instead of failing.
 
 ## Limits
 
@@ -438,11 +473,11 @@ Also:
   not notice it.
 - A `VMSet` whose template sets `revertToRef` gives every member the same
   `VMSnapshot` name; each member accepts only a snapshot of itself.
-- A revert the provider definitely did not perform (for example "not performed:
-  could not verify that no other domain uses its disks") is retryable and is
-  therefore counted as an unknown outcome: it is sent again and, after 5
-  attempts, ends `Failed` with "the VM may or may not have been reverted"
-  although nothing changed. Check the VM, then remove the field and set it again.
+- A revert that ends `Failed` with "the VM may or may not have been reverted"
+  was sent as an unknown outcome and could not be settled. Check the VM, then
+  remove the field and set it again. (A revert the provider proves it did not
+  perform is retried as `RevertNotPerformed` since v0.4.1 and does not end this
+  way.)
 - While a revert task runs (up to 2 hours) the VM is not powered on or resized,
   even if `revertToRef` is removed.
 
@@ -451,6 +486,6 @@ Also:
 - [Advanced VM lifecycle](advanced/advanced-lifecycle.md) and
   [VM Cloning](advanced/vm-cloning.md)
 - [Libvirt provider](../providers/libvirt.md)
-- [Reverting a VirtualMachine to a VMSnapshot (reference)](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md)
-- [libvirt clones, snapshot delete and the delete order (reference)](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#deleting-memory-and-disk-only-snapshots-of-the-same-vm)
-- Example: [`examples/advanced/snapshot-lifecycle.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/advanced/snapshot-lifecycle.yaml)
+- [Reverting a VirtualMachine to a VMSnapshot (reference)](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md)
+- [libvirt clones, snapshot delete and the delete order (reference)](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#deleting-memory-and-disk-only-snapshots-of-the-same-vm)
+- Example: [`examples/advanced/snapshot-lifecycle.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/examples/advanced/snapshot-lifecycle.yaml)

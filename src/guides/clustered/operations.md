@@ -11,7 +11,7 @@ answering, how to cordon a host, the guard that protects disks on shared
 storage, how to let go of a VM, which metrics to watch, and a troubleshooting
 table.
 
-!!! warning "Experimental in v0.4.0"
+!!! warning "Experimental in v0.4.1"
     Clustered Providers are experimental; see
     [Clustered libvirt: overview and setup](index.md). VirtRigaud detects and
     reports a failed host. It does **not** restart VMs on another host.
@@ -28,7 +28,7 @@ stamp is missing, unreadable or belongs to another UID is answered
 [Security model and multi-tenancy](../security-model.md) for the ownership
 model.
 
-What a clustered libvirt Provider routes in v0.4.0:
+What a clustered libvirt Provider routes in v0.4.1:
 
 | Operation | Behaviour on a clustered Provider |
 |-----------|-----------------------------------|
@@ -104,7 +104,7 @@ got**. The manager reads these answers; you see them as conditions.
 session end 5 seconds before the call's deadline and count as a host that
 stopped answering. The full model, including which commands count as "may
 change the host", is in
-[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md#clustered-libvirt-a-host-that-stops-answering).
+[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md#clustered-libvirt-a-host-that-stops-answering).
 
 ### What each VM shows
 
@@ -350,7 +350,7 @@ full a host is. They show how full each host is **across tenants**: expose
 `networkPolicy.monitoringNamespaceSelector`) or by running the manager with
 `--metrics-secure=true`.
 
-There is no metric for `Host` health or `HostPool` counts in v0.4.0. Read the
+There is no metric for `Host` health or `HostPool` counts in v0.4.1. Read the
 `Host` and `HostPool` status, or export them with a custom-resource state
 exporter.
 
@@ -442,6 +442,6 @@ endpoints or other tenants' data.
 - [Placement](placement.md) and [Clustered libvirt: overview and setup](index.md)
 - [Backup, restore and re-attach](backup-restore.md)
 - [Migrating into a clustered Provider](../../migration/clustered-target.md)
-- [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md)
-- [VM provider binding and `orphan-on-delete`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-provider-binding.md)
-- Full reference: [clustered inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md) and [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0007-clustered-orchestrator-provider.md)
+- [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md)
+- [VM provider binding and `orphan-on-delete`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-provider-binding.md)
+- Full reference: [clustered inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md) and [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0007-clustered-orchestrator-provider.md)

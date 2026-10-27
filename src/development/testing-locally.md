@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Testing Locally
 
-This page describes the test suites VirtRigaud ships in **v0.4.0** and how
+This page describes the test suites VirtRigaud ships in **v0.4.1** and how
 to run them. Each layer has a specific scope — they are not interchangeable.
 
 | Layer | Target | What it covers | Cluster required? |
@@ -56,7 +56,7 @@ Internals of the `test` target (`Makefile`, target `test`):
   `setup-envtest` step pulls a matching `etcd` + `kube-apiserver` for
   controller-runtime's in-process test cluster.
 - The K8s version used by `envtest` is derived from `go.mod`'s `k8s.io/api`
-  pin (`ENVTEST_K8S_VERSION` in the Makefile). For v0.4.0 that is
+  pin (`ENVTEST_K8S_VERSION` in the Makefile). For v0.4.1 that is
   `k8s.io/api v0.32.x`, so envtest **1.32**.
 - Sets `KUBEBUILDER_ASSETS` to the local `bin/k8s/<version>-…` directory
   before invoking `go test`.
@@ -114,7 +114,7 @@ The integration suite (`test/integration/`) currently contains:
 - `observability_test.go` — cross-package observability assertions
   (logging, metrics, health, circuit breaker and retry wiring).
 - `vm_lifecycle_test.go.disabled` — disabled placeholder for future
-  controller-integration tests. **Not** active in v0.4.0.
+  controller-integration tests. **Not** active in v0.4.1.
 
 The target runs with `-race -coverprofile=cover-integration.out`. No
 cluster is required.
@@ -161,24 +161,31 @@ The conformance harness lives in two places:
 
 - `internal/conformance/` — the runner + validator implementation (used by
   the `vcts` CLI in `cmd/vcts/`).
-- `test/conformance/specs/` — the spec files. `basic-lifecycle.yaml` is the
-  only spec shipping in v0.4.0; it defines two tests, `vm-create-delete` and
-  `vm-power-cycle`.
+- `test/conformance/specs/` — the spec files. In v0.4.1 they define five tests:
+  `vm-create-delete` and `vm-power-cycle` (in `basic-lifecycle.yaml`), and
+  `vm-reconfigure-offline`, `vm-snapshot-create-delete` and `vm-clone-full`.
 
-What works and what CI runs is spec validation:
+CI validates the specs; running them needs a cluster with a deployed `Provider`:
 
 ```bash
 go build -o bin/vcts ./cmd/vcts
-./bin/vcts validate test/conformance/specs/   # validate the spec files
+./bin/vcts validate test/conformance/specs/   # validate the spec files (no cluster needed)
 ./bin/vcts list                               # list the tests (run from the repo root)
+
+# Run the tests against a Provider in a throw-away namespace of a NON-PRODUCTION cluster;
+# they create real VMs. IMAGE is a VMImage in that namespace that the provider can boot.
+./bin/vcts run --provider <name> -n vcts --set IMAGE=<vmimage> -v
 ```
 
 `vcts validate` exits non-zero when a spec file cannot be parsed or holds an
-invalid test. `vcts run --provider <name>` also exists, but the runner's step
-executor (create, update, delete, wait, validate) is not implemented in
-v0.4.0, so every selected test fails and the command exits non-zero; do not
-use it as a pass/fail gate yet. There is no `make` shortcut for conformance.
-See the
+invalid test (specifications are decoded strictly since v0.4.1). `vcts run`
+executes the `create`, `update`, `delete`, `wait` and `validate` steps through the
+Kubernetes API, skips a test whose required capability the Provider does not report,
+cleans up after each test (also after a failure, `--timeout` or an interrupt), never
+creates, changes or deletes a `Provider`, and exits non-zero when a test fails or was
+not started. In v0.4.0 it implemented no steps, so every selected test failed. There is
+no `make` shortcut for conformance. The `internal/conformance` tests drive the runner
+against the API server of an envtest cluster with a simulated provider. See the
 [CLI Tools Reference](../references/cli-tools.md#vcts).
 
 ## Linting
@@ -231,7 +238,7 @@ hack/test-workflows-locally.sh setup     # one-time
 hack/test-lint-locally.sh                # lint workflow only
 hack/test-ci-locally.sh                  # ci workflow (quick or full)
 hack/test-helm-locally.sh                # helm chart in Kind
-hack/test-release-locally.sh v0.4.0-test # release workflow w/ local registry
+hack/test-release-locally.sh v0.4.1-test # release workflow w/ local registry
 ```
 
 `test-ci-locally.sh`, `test-helm-locally.sh` and `test-workflows-locally.sh` accept `help` or `--help`; read the others' header comments for their options. The orchestrator

@@ -9,9 +9,9 @@ This document describes all Custom Resource Definitions provided by VirtRigaud.
 
 API group: `infra.virtrigaud.io` / Version: `v1beta1`
 
-VirtRigaud ships **12 CRDs** at v0.4.0. For the full auto-generated field reference, see [generated-crd-docs.md](generated-crd-docs.md).
+VirtRigaud ships **12 CRDs** at v0.4.1. For the full auto-generated field reference, see [generated-crd-docs.md](generated-crd-docs.md).
 
-**Controller status at v0.4.0:**
+**Controller status at v0.4.1:**
 
 | CRD | Controller status |
 |-----|-------------------|
@@ -22,7 +22,7 @@ VirtRigaud ships **12 CRDs** at v0.4.0. For the full auto-generated field refere
 | `VMNetworkAttachment` | Active |
 | `VMMigration` | Active |
 | `VMSnapshot` | Active |
-| `VMClone` | Active (`source.vmRef` only, same-provider; full clones, linked where the provider supports it) |
+| `VMClone` | Active (`source.vmRef` only, same-provider; full clones, linked where the provider supports it: vSphere only) |
 | `VMSet` | Stub — `Ready=False / ControllerNotImplemented`; no replica management |
 | `VMPlacementPolicy` | Reference-only — no standalone controller; consumed via `VirtualMachine.spec.placementRef` (and by the clustered libvirt scheduler) |
 | `Host` | Active — inventory is synced from the clustered Provider (clustered libvirt only) |
@@ -43,6 +43,10 @@ Nothing was removed. Apply the CRDs before the manager (see [Helm CRD Upgrades](
 | `VMMigration` | New `status.targetVMUID`, `targetVMClaim`, `sourceVMUID`, `storagePVCUID`, `storageInfo.importTarget`, `stagingDigest`, `stagingLayout` |
 | `VMClone` | New `status.targetUID` |
 | `VMSnapshot` | New `status.boundProvider`, `status.vmUID` |
+
+## Schema changes in v0.4.1
+
+**None.** The CRDs have no schema change from v0.4.0: only their `description` texts differ (`kubectl explain` and the CRD `description` fields show the corrected text), and one new condition reason, `RevertNotPerformed` (`SnapshotReverted=False`), is a constant in the Go API with no schema effect. The descriptions no longer carry internal tracking references or roadmap wording and say what each field does today. Fields the schema accepts but no code acts on say "Accepted but not acted on in this release." (for example `VirtualMachine.spec.lifecycle`, `spec.resources.gpu`, `spec.userData.ignition`, `Provider.spec.healthCheck`, most of `VMClone` `customization` and `options`, and every `VMSet` field: its controller is a stub); status fields no controller writes say "Not populated in this release." `ProviderSpec.insecureSkipVerify` (read by the vSphere and Proxmox provider pods, for the hypervisor endpoint) and `spec.runtime.service.tls.insecureSkipVerify` (read by the manager, for the provider's gRPC certificate) are described as the two separate switches they are. A `grpc://` `Host` endpoint passes validation, but the libvirt provider connects with `qemu+ssh://` only.
 
 ---
 
@@ -102,14 +106,14 @@ Full schema: [generated-crd-docs.md#virtualmachine](generated-crd-docs.md#virtua
 |-----------|---------|
 | `Provisioning` | The create, or why it waits (`WaitingForDependencies`, `Unschedulable`, ...) |
 | `Reconfiguring` | A resize in flight. `True/RestartRequired` means the change is saved in the persistent definition and applies at the next power cycle (power off, then on; a reboot inside the guest does not apply it). `False/ResizePendingPowerOff`, `ShrinkPendingPowerOff` and `InsufficientHostCapacity` say why a resize waits |
-| `SnapshotReverted` | A `revertToRef` request: `False/WaitingForPowerOff`, `SnapshotNotFound`, `SnapshotNotReady`, `SnapshotForAnotherVM`, `Unsupported`, `Reverting`, `RevertFailed`; `True/Reverted` |
+| `SnapshotReverted` | A `revertToRef` request: `False/WaitingForPowerOff`, `SnapshotNotFound`, `SnapshotNotReady`, `SnapshotForAnotherVM`, `Unsupported`, `Reverting`, `RevertNotPerformed` (retried, v0.4.1), `RevertFailed`; `True/Reverted` |
 | `Placed` | Clustered Providers: `True` when the VM has a host; `False` with `Unschedulable`, `RestorePending`, `OwnDomainOnAnotherHost`, `UniquenessCheckFailed`, `ProviderLacksListOwnerFilter`, ... |
 | `DeleteBlocked` | Clustered VMs: a delete is held for `HostUnreachable`, `DiskCheckFailed`, `DiskInUse` (a linked clone depends on the disk), `OwnDomainOnAnotherHost` or `ProviderUnavailable`; `Ready` is `False/DeleteBlocked` meanwhile and the delete is retried with a 15 s to 5 min backoff. `virtrigaud.io/force-delete` and `orphan-on-delete` release it. A refused `VMSnapshot` delete shows the same reason on the `VMSnapshot` |
 | `DisksApplied` | `False/NotSupportedByProvider` when `spec.disks` is set on a libvirt or Proxmox Provider. Never `True`; does not change `Ready` |
 | `DiskSizeWithinLimit` | `False/DiskSizeExceedsLimit` when a resize withheld a disk growth because of `manager.maxDiskSize` |
 | `LinkedClonesDependOnDisk` | Warning: libvirt linked clones made by an earlier release use this VM's disk as backing file |
 
-Reasons that mean a hold needing an operator (phase `Failed`): `ConsumerNotAllowed`, `VMNotOwned`, `OwnerStampUnreadable`, `ProviderUnavailable`, `VMIsImageArtifact`, `CreateOutcomeUnknown`, `DeleteBlocked`, `ProviderRefMismatch`, `PlacementTopologyMismatch`, `VMMissingOnHost`. See [`vm-status-phase.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-phase.md) for the rule.
+Reasons that mean a hold needing an operator (phase `Failed`): `ConsumerNotAllowed`, `VMNotOwned`, `OwnerStampUnreadable`, `ProviderUnavailable`, `VMIsImageArtifact`, `CreateOutcomeUnknown`, `DeleteBlocked`, `ProviderRefMismatch`, `PlacementTopologyMismatch`, `VMMissingOnHost`. See [`vm-status-phase.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-status-phase.md) for the rule.
 
 **Annotations you set on a `VirtualMachine`:**
 
@@ -167,7 +171,7 @@ kubectl patch vm web-server --type merge \
 kubectl get vm web-server -o jsonpath='{.status.snapshotRevert.phase}'
 ```
 
-While `SnapshotReverted` is `False`, `Ready` is `False` with the same reason. Per-provider behaviour is in the [capability matrix](../providers/providers-capabilities.md#snapshots-and-revert). Walkthrough and the full rules: [VM snapshots and revert](../guides/vm-snapshots.md). Details: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md).
+While `SnapshotReverted` is `False`, `Ready` is `False` with the same reason. Per-provider behaviour is in the [capability matrix](../providers/providers-capabilities.md#snapshots-and-revert). Walkthrough and the full rules: [VM snapshots and revert](../guides/vm-snapshots.md). Details: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md).
 
 ---
 
@@ -183,12 +187,12 @@ Full schema: [generated-crd-docs.md#vmclass](generated-crd-docs.md#vmclass)
 |-------|------|----------|---------|-------------|
 | `cpu` | `int32` | Yes | — | Number of virtual CPUs (1–128) |
 | `memory` | `resource.Quantity` | Yes | — | Memory allocation (e.g. `4Gi`, `8192Mi`) |
-| `firmware` | `FirmwareType` | No | `BIOS` | `BIOS`, `UEFI`, or `EFI` |
+| `firmware` | `FirmwareType` | No | `BIOS` | `BIOS`, `UEFI`, or `EFI`. vSphere and libvirt honour `UEFI` (libvirt since v0.4.1: the host needs an OVMF package, and the image must boot with UEFI); `BIOS`, `EFI` and an unset value select BIOS on libvirt. The Proxmox provider keeps the template's firmware. Applied at create only |
 | `diskDefaults` | `DiskDefaults` | No | — | Default disk settings for VMs using this class |
 | `guestToolsPolicy` | `string` | No | `install` | `install`, `skip`, `upgrade`, `uninstall` |
 | `resourceLimits` | `VMResourceLimits` | No | — | CPU/memory limits and reservations |
 | `performanceProfile` | `PerformanceProfile` | No | — | CPU hot-add, NUMA, latency sensitivity |
-| `securityProfile` | `SecurityProfile` | No | — | Secure boot, TPM, encryption |
+| `securityProfile` | `SecurityProfile` | No | — | Secure boot, TPM, VT-d, encryption. On libvirt `secureBoot` implies UEFI and `vtdEnabled` the `q35` machine type (both work since v0.4.1); see [libvirt firmware](../providers/libvirt.md#firmware-secure-boot-and-platform-features) |
 | `extraConfig` | `map[string]string` | No | — | Provider-specific configuration (max 50 keys) |
 | `consumerNamespaceSelector` | `LabelSelector` | No | unset | Namespaces, other than this one, whose VirtualMachines may use this class. Unset: own namespace only; `{}`: every namespace |
 
@@ -341,7 +345,7 @@ Full schema: [generated-crd-docs.md#provider](generated-crd-docs.md#provider)
 | `defaults` | `ProviderDefaults` | No | Default placement settings |
 | `rateLimit` | `RateLimit` | No | API rate limiting (qps, burst) |
 | `runtime` | `ProviderRuntimeSpec` | Yes | How the provider is executed |
-| `healthCheck` | `ProviderHealthCheck` | No | Health check configuration |
+| `healthCheck` | `ProviderHealthCheck` | No | Accepted but not acted on in this release |
 | `connectionPooling` | `ConnectionPooling` | No | Connection pool settings |
 | `topology` | `string` | No | `single` (default): one provider process bound to one host. `cluster`: the provider fronts several hosts registered as `Host` resources in a `HostPool`; accepted only on `type: libvirt` (enforced by the Provider validating webhook, so only when `webhooks.enabled=true`), experimental. **Immutable** |
 | `consumerNamespaceSelector` | `LabelSelector` | No | Namespaces, other than this one, whose VMs, `VMClone`s, `VMMigration`s and `VMSnapshot`s may use this Provider. Unset: own namespace only; `{}`: every namespace. Sharing a Provider shares everything its credentials can reach |
@@ -361,10 +365,10 @@ Full schema: [generated-crd-docs.md#provider](generated-crd-docs.md#provider)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `conditions` | `[]Condition` | Status conditions, including `CapabilitiesReported` (added v0.3.8) |
+| `conditions` | `[]Condition` | Status conditions, including `CapabilitiesReported` (added v0.3.8), `ProviderRuntimeReady` and `ProviderAvailable`. A `Provider` without a ready pod is `ProviderAvailable=False` (reason `DeploymentNotReady`) since v0.4.1 |
 | `reportedCapabilities` | `ReportedCapabilities` | Provider's self-reported capability set, fetched from `GetCapabilities` RPC (added v0.3.8) |
 | `capabilities` | `[]ProviderCapability` | Legacy capability list |
-| `healthy` | `bool` | Health-check result |
+| `healthy` | `bool` | Whether the provider's runtime Deployment has a ready pod. Follows the ready replicas since v0.4.1 (it stayed `true` once set before). Omitted from the object when `false`, so the `HEALTHY` column of `kubectl get provider` is empty, not `false` |
 | `runtime` | `ProviderRuntimeStatus` | Provider pod state: `phase` (`Pending`, `Starting`, `Running`, `Stopping`, `Failed`), `endpoint`, `readyReplicas`, `availableReplicas`, `serviceRef`, `message` |
 | `adoption` | `ProviderAdoptionStatus` | Counts for `virtrigaud.io/adopt-vms`: `discoveredVMs`, `adoptedVMs`, `failedAdoptions`, `lastDiscoveryTime`, `message` |
 | `version` | `string` | Provider binary version |
@@ -373,7 +377,7 @@ Full schema: [generated-crd-docs.md#provider](generated-crd-docs.md#provider)
 
 #### ReportedCapabilities
 
-The manager calls the provider's `GetCapabilities` RPC after each successful connect and writes the result into `status.reportedCapabilities`. A `CapabilitiesReported` condition is also set (`True` on success, `False` with reason `CapabilitiesUnavailable` if the RPC fails or the provider is unreachable).
+The manager calls the provider's `GetCapabilities` RPC and writes the result into `status.reportedCapabilities`. Since v0.4.1 it reads it once the provider Deployment's rollout is complete, again 45 seconds later, every 10 minutes while the `Provider` is healthy and one minute after a failed read (see [Provider capabilities](../providers/providers-capabilities.md#when-the-status-is-read-v041)). A `CapabilitiesReported` condition is also set (`True` on success, `False` with reason `CapabilitiesUnavailable` if the RPC fails or the provider is unreachable).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -433,7 +437,7 @@ spec:
     cluster: Compute-Cluster
     storagePod: DatastoreCluster-SSD   # auto-selects datastore with most free space
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9443
       tls:
@@ -537,7 +541,7 @@ Used for adopted or migrated VMs instead of `imageRef`.
 ## Host
 
 !!! note "Clustered libvirt only"
-    `Host` and `HostPool` are used only by a libvirt Provider with `spec.topology: cluster` (experimental, opt-in). Single-host Providers do not use them. See [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0007-clustered-orchestrator-provider.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md).
+    `Host` and `HostPool` are used only by a libvirt Provider with `spec.topology: cluster` (experimental, opt-in). Single-host Providers do not use them. See [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0007-clustered-orchestrator-provider.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md).
 
 A `Host` registers one hypervisor host behind a clustered Provider (setup and operations: [Clustered libvirt guide](../guides/clustered/index.md)). The operator fills `status` from the provider's `GetHostInfo` answer. A `Host` and its `HostPool` and Provider must be in the same namespace. A `Host` cannot be deleted while a VirtualMachine is bound to it; fence the host (power it off or revoke its access to shared storage) before you delete one to release held deletes.
 
@@ -602,7 +606,7 @@ Full schema: [generated-crd-docs.md#hostpool](generated-crd-docs.md#hostpool). S
 | `overcommit` | `OvercommitSpec` | No | `cpu` and `memory` ratios as decimal strings (for example `"4.0"`) |
 | `storagePools` | `[]` | No | Named storage pools available in the pool (`name`) |
 | `networks` | `[]` | No | Named networks available in the pool (`name`) |
-| `migration` | `MigrationPolicy` | No | Default migration policy: `defaultLive`, `defaultStorageMode`, `requireTLS`, `bandwidthMbps`, `maxDowntimeMs`. Host-to-host migration is not implemented in v0.4.0 |
+| `migration` | `MigrationPolicy` | No | Default migration policy: `defaultLive`, `defaultStorageMode`, `requireTLS`, `bandwidthMbps`, `maxDowntimeMs`. Host-to-host migration is not implemented in v0.4.1 |
 
 ### Status
 
@@ -638,7 +642,7 @@ A clustered Provider is an ordinary `Provider` with `spec.topology: cluster`, `t
 
 ## VMMigration
 
-The `VMMigration` CRD migrates a virtual machine's disk from one provider to another (snapshot, export to staging storage, import, create the target VM). Disks are staged through **S3** or **NFS** (`pvc` is kept for compatibility). S3 was validated for every pair among vSphere, libvirt and Proxmox VE, and NFS for five pairs (not vSphere ⇄ Proxmox VE); a clustered libvirt Provider is also a valid target (experimental). Other combinations are unverified, see [what was validated](../migration/user-guide.md#what-virtrigaud-v040-supports). See the [Migration API reference](../migration/api-reference.md) for every field.
+The `VMMigration` CRD migrates a virtual machine's disk from one provider to another (snapshot, export to staging storage, import, create the target VM). Disks are staged through **S3** or **NFS** (`pvc` is kept for compatibility). S3 was validated for every pair among vSphere, libvirt and Proxmox VE, and NFS for five pairs (not vSphere ⇄ Proxmox VE); a clustered libvirt Provider is also a valid target (experimental). Other combinations are unverified, see [what was validated](../migration/user-guide.md#what-virtrigaud-v041-supports). See the [Migration API reference](../migration/api-reference.md) for every field.
 
 Full schema: [generated-crd-docs.md#vmmigration](generated-crd-docs.md#vmmigration)
 
@@ -735,7 +739,7 @@ spec:
 
 ## VMSet
 
-!!! warning "Not functional in v0.4.0"
+!!! warning "Not functional in v0.4.1"
     The `VMSet` CRD is defined and accepted by the API server, but the controller is a stub. Every VMSet resource receives a `Ready=False` condition with reason `ControllerNotImplemented` and message `"VMSet has no active controller in this release (#179)"`. No replica management, scaling, or VM creation occurs. Do not use VMSet in production.
 
 The `VMSet` CRD is intended to manage a fleet of identically-configured VirtualMachines (analogous to a ReplicaSet for VMs). The controller has not yet been implemented.
@@ -816,7 +820,7 @@ spec:
 
 ## VMClone
 
-The `VMClone` CRD manages a clone operation: it creates a new VirtualMachine from a source VM and is active on vSphere, Proxmox and libvirt. See limitations below.
+The `VMClone` CRD manages a clone operation: it creates a new VirtualMachine from a source VM and is active on vSphere, Proxmox and libvirt. See limitations below. Most of `customization` and `options` is accepted by the API but not acted on in this release.
 
 Full schema: [generated-crd-docs.md#vmclone](generated-crd-docs.md#vmclone)
 
@@ -824,9 +828,9 @@ Full schema: [generated-crd-docs.md#vmclone](generated-crd-docs.md#vmclone)
 
 - **Source**: only `source.vmRef` (clone from a VM in the same namespace) is supported. `source.snapshotRef`, `source.templateRef` and `source.imageRef` set the VMClone to `Failed` with message `"clone source type not yet supported; use source.vmRef"`.
 - **Same-provider only**: the target is created on the source VM's Provider.
-- **Linked clones**: issued only when the provider reports `supportsLinkedClones`. vSphere and Proxmox do. On libvirt linked clones are disabled (`Ready=False/LinkedCloneUnsupported`); use `FullClone`. A libvirt full clone needs its source VM powered off (the clone waits with `SourceMustBePoweredOff`).
+- **Linked clones**: issued only when the provider reports `supportsLinkedClones`. Only vSphere does. On libvirt linked clones are disabled, and since v0.4.1 Proxmox no longer advertises them (it never made them): the clone fails with `LinkedCloneUnsupported`; use `FullClone`. A libvirt full clone needs its source VM powered off (the clone waits with `SourceMustBePoweredOff`).
 - **Power**: the target stays powered off unless `options.powerOn: true`.
-- **Identity**: a libvirt clone gets its own cloud-init instance id and SSH host keys. `create` on `VMClone` is read access to the source's data.
+- **Identity**: a clone gets its own cloud-init instance id and SSH host keys (on Proxmox, a clone of a VM with a seed, or with inline user-data, gets a seed of its own and does not carry its source's user-data). `create` on `VMClone` is read access to the source's data.
 - **Cross-namespace targets**: `target.namespace` other than the VMClone's needs the grant annotation `infra.virtrigaud.io/allowed-source-namespaces` on the target namespace.
 - **Clustered Providers**: a clone is admitted against its source host's free capacity and never moves to another host.
 - **Produced VM**: the controller creates a target `VirtualMachine` labeled `virtrigaud.io/adopted=true` with `status.id` seeded to the cloned VM's provider ID. Deleting a VMClone does **not** delete the produced VirtualMachine.
@@ -838,7 +842,7 @@ Full schema: [generated-crd-docs.md#vmclone](generated-crd-docs.md#vmclone)
 | `source` | `CloneSource` | Yes | `vmRef` only (see limitations above) |
 | `target` | `VMCloneTarget` | Yes | Destination `name` (required), `namespace`, `classRef`, `networks`, `disks`, `placementRef`, labels and annotations |
 | `options` | `CloneOptions` | No | `type`: `FullClone` (default), `LinkedClone` or `InstantClone`; `powerOn` (default `false`); `timeout` (default `30m`) |
-| `customization` | `VMCustomization` | No | Cloud-init or Ignition customization for the target VM |
+| `customization` | `VMCustomization` | No | Cloud-init customization for the target VM. The providers apply only `hostname`, `domain` and `userData.cloudInit.inline`. The fields that may hold a secret and that nothing acts on (`sysprep.productKey`, `sysprep.adminPassword.value`, `sysprep.joinDomain.password.value`, `sysprep.customCommands`, `certificates[].data`, `guestCommands[].command`/`.arguments`, `userData.ignition.inline`) are **not sent to the provider** since v0.4.1 but are stored in plaintext in the object: do not put a credential in them |
 | `metadata` | `CloneMetadata` | No | Labels/annotations for clone audit |
 
 ### Status
@@ -874,7 +878,7 @@ spec:
 
 ---
 
-## CRD count at v0.4.0
+## CRD count at v0.4.1
 
 The 12 CRDs in `infra.virtrigaud.io/v1beta1`: `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMMigration`, `VMSnapshot`, `VMSet`, `VMPlacementPolicy`, `VMClone`, `Host`, `HostPool`.
 

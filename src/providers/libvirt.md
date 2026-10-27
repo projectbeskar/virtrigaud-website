@@ -5,14 +5,14 @@ SPDX-License-Identifier: Apache-2.0
 
 # Libvirt / KVM Provider
 
-The libvirt provider manages VMs on KVM/QEMU hosts. It runs `virsh` and a few host tools (`qemu-img`, `genisoimage`, `isoinfo`) **on the libvirt host** over SSH. It is the provider that gained the most in v0.4.0: private cloud-init seeds, VM ownership stamps, snapshot revert, clone identity, honest reconfigure results, and an experimental clustered topology.
+The libvirt provider manages VMs on KVM/QEMU hosts. It runs `virsh` and a few host tools (`qemu-img`, `genisoimage`, `isoinfo`) **on the libvirt host** over SSH. It is the provider that gained the most in v0.4.0: private cloud-init seeds, VM ownership stamps, snapshot revert, clone identity, honest reconfigure results, and an experimental clustered topology. v0.4.1 makes secure boot, UEFI, VT-d, nested virtualization and multi-NIC VMs work, and closes the snapshot problems v0.4.0 listed as known limitations.
 
-This page is aligned to **VirtRigaud v0.4.0**. Capability claims trace back to `GetCapabilities` and `clusteredCapabilities` in `internal/providers/libvirt/server.go`.
+This page is aligned to **VirtRigaud v0.4.1**. Capability claims trace back to `GetCapabilities` and `clusteredCapabilities` in `internal/providers/libvirt/server.go`.
 
-!!! note "How the provider drives libvirt (v0.4.0)"
+!!! note "How the provider drives libvirt (v0.4.1)"
     Every operation that changes state, and every read the manager acts on, still goes through **`virsh` run on the hypervisor host**. The provider reaches the host with an **in-process SSH client** (`internal/providers/libvirt/sshclient.go`), one persistent connection per host, so the provider image carries no `ssh`/`sshpass` binary and no key is written to disk. There is no cgo and no `libvirt-dev` in the image.
 
-    A pure-Go [`go-libvirt`](https://github.com/digitalocean/go-libvirt) client exists in the provider (ADR-0008) but is **dormant by default**. It can be switched on only as an opt-in **shadow** read: `VIRTRIGAUD_LIBVIRT_NATIVE=shadow:describe,shadow:list` makes the provider run `Describe` and `ListVMs` through both paths, return the `virsh` answer, and count any divergence in a metric. A `native:` mode is accepted but is downgraded to shadow at v0.4.0: **no read is served from go-libvirt**. See [Libvirt shadow-compare reads](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-shadow-reads.md).
+    A pure-Go [`go-libvirt`](https://github.com/digitalocean/go-libvirt) client exists in the provider (ADR-0008) but is **dormant by default**. It can be switched on only as an opt-in **shadow** read: `VIRTRIGAUD_LIBVIRT_NATIVE=shadow:describe,shadow:list` makes the provider run `Describe` and `ListVMs` through both paths, return the `virsh` answer, and count any divergence in a metric. A `native:` mode is accepted but is downgraded to shadow at v0.4.0: **no read is served from go-libvirt**. See [Libvirt shadow-compare reads](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-shadow-reads.md).
 
 ## Topologies: single host or cluster
 
@@ -41,7 +41,7 @@ spec:
     name: libvirt-cluster-creds
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
     service:
       port: 9443
       tls:
@@ -87,7 +87,7 @@ The provider advertises the following via `GetCapabilities` (`internal/providers
 | `SupportsDiskExpansionOnline` | true | true | Live disk grow via `virsh blockresize` plus a best-effort in-guest filesystem grow; grow-only. |
 | `SupportsSnapshots` | true | true | `virsh snapshot-create-as`. |
 | `SupportsMemorySnapshots` | true | true | RAM-inclusive snapshots of a **running** VM. |
-| `SupportsLinkedClones` | **false** | **false** | Linked clones are **disabled** in v0.4.0 (see [Cloning](#cloning)). Full clones work. |
+| `SupportsLinkedClones` | **false** | **false** | Linked clones are **disabled** in v0.4.1 (see [Cloning](#cloning)). Full clones work. |
 | `SupportsImageImport` | true | not reported | `ImagePrepare` for `source.libvirt.url`. A clustered Provider does not prepare images. |
 | `SupportsImageArtifactIdentity` | true | not reported | Prepared images are named, stamped and published by `VMImage` identity (ADR-0009). |
 | `SupportsDiskExport` | true | true | `ExportDisk` / `GetDiskInfo` (export formats: `qcow2`, `raw`; clustered: `qcow2`). |
@@ -98,6 +98,8 @@ The provider advertises the following via `GetCapabilities` (`internal/providers
 | `SupportedDiskTypes` | `qcow2`, `raw`, `vmdk` | same | QEMU formats. VM disks VirtRigaud creates are qcow2. |
 | `SupportedNetworkTypes` | `virtio`, `e1000`, `rtl8139` | same | NIC models advertised by `GetCapabilities`. |
 
+The VMClass settings for UEFI, secure boot, VT-d, TPM and nested virtualization are not capability flags: they are applied at create (see [Firmware, secure boot and platform features](#firmware-secure-boot-and-platform-features)).
+
 For the cross-provider matrix and the resilience / observability narrative:
 
 - [Provider capabilities matrix](providers-capabilities.md)
@@ -106,7 +108,7 @@ For the cross-provider matrix and the resilience / observability narrative:
 
 ## Behaviour at a glance: snapshot, revert, clone, reconfigure, disks
 
-| Area | libvirt behaviour at v0.4.0 | Code |
+| Area | libvirt behaviour at v0.4.1 | Code |
 |------|-----------------------------|------|
 | Snapshot create | A VM that is **off**, or a request without memory, gets an **external disk-only** snapshot; a **running** VM with `snapshotConfig.includeMemory: true` gets an **internal** full-system snapshot (RAM included). `includeMemory` on an off VM is downgraded to disk-only with a warning. A shut-off VM's CD-ROMs (the cloud-init seed) are ejected for the duration of the snapshot and put back. Synchronous (no task). | `server.go` (`snapshotCreateWith`), `snapshot_media.go` |
 | Snapshot revert | `spec.snapshot.revertToRef` on the `VirtualMachine`; the VM must be **powered off**; libvirt 9.9 or later for external snapshots. A disk-only snapshot taken **while the VM ran** (or by v0.3.11 or earlier) of a VM with a cloud-init CD-ROM is **refused** on revert. | `snapshot_readonly_disks.go`, `internal/controller/virtualmachine_snapshot_revert.go` |
@@ -137,20 +139,21 @@ The sections below give the detail.
 - A libvirt host running `libvirtd` with KVM acceleration (or nested virtualization for development). **libvirt 9.9 or later** if you want to revert snapshots.
 - SSH access from the provider pod to the host as a user that can use `qemu:///system`, with a POSIX-compatible login shell.
 - libvirt's `default` storage pool at **`/var/lib/libvirt/images`**. If the host has no `default` pool the provider creates one there; a `default` pool at any other path is never modified and creates fail with `InvalidSpec`.
-- On the host: `qemu-img` (from a QEMU with the CVE-2024-4467 fix: 9.0.2, 8.2.6, 7.2.13 or later, or a backport), `genisoimage` and `isoinfo`, and for clustered or migration paths `flock` and `timeout`.
+- On the host: `qemu-img` (from a QEMU with the CVE-2024-4467 fix: 9.0.2, 8.2.6, 7.2.13 or later, or a backport), `genisoimage` and `isoinfo`, `curl` (for a create that downloads an image from a URL; `wget` is no longer used), and for clustered or migration paths `flock` and `timeout`.
+- For VMs of a VMClass with `firmware: UEFI` or `securityProfile.secureBoot`: an **OVMF package** (`ovmf`, `edk2-ovmf`, `qemu-ovmf-x86_64`) that installs firmware descriptors in `/usr/share/qemu/firmware/` (see [Firmware, secure boot and platform features](#firmware-secure-boot-and-platform-features)).
 - The **cloud-init seed directory** (new in v0.4.0, below).
 - Optional, for clone/export of VMs that have an external snapshot and for the disk in-use checks to read libvirt's `0600` overlays: sudo rules for the exact `qemu-img` commands (`VR_DISK_READ`, `VR_CLONE_COPY`, `VR_EXPORT_COPY`).
 
-Host preparation (packages, SSH user, sudo grants, known_hosts, rate limits, pools) is in [Libvirt Host Preparation](../operations/libvirt-host-prepare.md). The authoritative description of the sudo rules and pool-directory permissions is [libvirt clones and the linked-clone dependency](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#what-the-copies-run-as-root).
+Host preparation (packages, SSH user, sudo grants, known_hosts, rate limits, pools) is in [Libvirt Host Preparation](../operations/libvirt-host-prepare.md). The authoritative description of the sudo rules and pool-directory permissions is [libvirt clones and the linked-clone dependency](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#what-the-copies-run-as-root).
 
-!!! warning "Seed directory on every host, before you roll the v0.4.0 provider"
+!!! warning "Seed directory on every host, before you roll the provider (required since v0.4.0)"
     New cloud-init seeds are built in `VIRTRIGAUD_LIBVIRT_SEED_DIR` (default `/var/lib/libvirt/virtrigaud-seeds`). If the directory is missing and the SSH user cannot create it, is not owned by the SSH user, or is readable or writable by group or others, **every create on that host fails** (and so does every clone of a VM that has a seed) with a retryable `refusing to stage cloud-init data`. Create it once on each host, including migration target hosts and every host of a clustered Provider:
 
     ```bash
     install -d -m 0711 -o virtrigaud -g virtrigaud /var/lib/libvirt/virtrigaud-seeds
     ```
 
-    Details, including hosts shared by Providers with different SSH users: [libvirt domain ownership: cloud-init seed directory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-domain-ownership.md#cloud-init-seed-directory).
+    Details, including hosts shared by Providers with different SSH users: [libvirt domain ownership: cloud-init seed directory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-domain-ownership.md#cloud-init-seed-directory).
 
 ## Authentication
 
@@ -193,7 +196,7 @@ spec:
     name: libvirt-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
     service:
       port: 9443
       tls:
@@ -203,7 +206,7 @@ spec:
         insecureSkipVerify: false
 ```
 
-A Provider in another namespace than its consumers must also set `spec.consumerNamespaceSelector`; see [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-references.md).
+A Provider in another namespace than its consumers must also set `spec.consumerNamespaceSelector`; see [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md).
 
 ## TLS / mTLS (v0.3.7+)
 
@@ -352,14 +355,71 @@ spec:
 
 On a clustered Provider, every attachment contributes a **required `Host` label** `net.virtrigaud.io/<name>: "true"`: only a host that carries it is a candidate. The label name is the attachment's `networkName`, or its bridge name when no `networkName` is set. Set only one of the two: if both are set, the NIC is attached to the bridge but the VM is scheduled by the `networkName` label.
 
+## Firmware, secure boot and platform features
+
+A VMClass chooses the virtual platform of a new VM. These settings take effect **when a VM is created**: existing domains are not redefined, and a reconfigure does not change a VM's firmware or machine type.
+
+| VMClass setting | Machine type | Firmware | Other |
+|---|---|---|---|
+| none of the settings below (the default) | `pc` (i440fx) | BIOS (SeaBIOS) | the domain XML is the same as in earlier releases |
+| `firmware: UEFI` | `q35` | UEFI (OVMF) **without** Secure Boot | |
+| `securityProfile.secureBoot: true` | `q35` | UEFI (OVMF) **with Secure Boot**, from a variable-store template with keys enrolled | SMM on. Applies whatever `firmware` says |
+| `securityProfile.vtdEnabled: true` | `q35` | as selected above (BIOS by default) | emulated Intel IOMMU with interrupt remapping |
+| `securityProfile.tpmEnabled: true` | unchanged | unchanged | emulated TPM 2.0 (`tpm-tis`, `swtpm` on the host) |
+| `performanceProfile.nestedVirtualization: true` | unchanged | unchanged | CPU mode `host-passthrough` |
+
+```yaml
+apiVersion: infra.virtrigaud.io/v1beta1
+kind: VMClass
+metadata:
+  name: secure-medium
+spec:
+  cpu: 4
+  memory: "8Gi"
+  firmware: UEFI
+  securityProfile:
+    secureBoot: true
+```
+
+- `firmware` is matched case-insensitively. `BIOS`, `EFI` and an unset value select BIOS; only `UEFI` selects UEFI firmware, as on vSphere.
+- **Behaviour change in v0.4.1: `firmware: UEFI` is honoured.** The provider ignored it in v0.4.0. A VMClass that sets it now creates **UEFI** VMs, so the image must boot with UEFI (an EFI system partition and a UEFI bootloader) and the host needs an OVMF package. On a host that reports no UEFI firmware the create is refused (`Ready=False/ValidationError`) where v0.4.0 made a BIOS VM. To keep BIOS VMs, set `firmware: BIOS` or leave it unset. List the VMClasses this affects **before** you roll the provider:
+
+  ```bash
+  kubectl get vmclass -A -o jsonpath='{range .items[?(@.spec.firmware=="UEFI")]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}'
+  ```
+
+- **Secure boot works.** In v0.4.0 a secure boot VMClass produced a q35 domain with the i440fx device layout, which libvirt 10 refuses, and the create was retried every 30 seconds with a fresh image copy each time. The domain now asks libvirt for `<os firmware='efi'>`, and libvirt selects an OVMF build from the host's firmware descriptors, one with Secure Boot keys enrolled, so Secure Boot is enforced from the first boot. The provider names no firmware file. In the guest, `mokutil --sb-state` prints `SecureBoot enabled`.
+- **VT-d and nested virtualization work.** libvirt refused the old VT-d XML (`unexpected feature 'iommu'`), and nested virtualization required both `vmx` and `svm`, so it never started. The VM now gets an emulated IOMMU, or the host CPU (`host-passthrough`). Nested virtualization needs nesting enabled in the host's KVM module (`cat /sys/module/kvm_intel/parameters/nested` prints `Y` or `1`). See [Nested virtualization](../guides/advanced/nested-virtualization.md).
+- **VMs with more than one network interface can be created.** On i440fx the second interface took the sound card's PCI slot and libvirt refused the domain.
+- **q35 device layout.** libvirt assigns the PCI addresses, the cloud-init CD-ROM is on SATA (`sda`, not IDE), USB is `qemu-xhci` and video is standard VGA. cloud-init finds the seed by its volume label, so the bus makes no difference to the guest.
+
+**Host prerequisites.** UEFI and secure boot need a libvirt that supports the `<firmware><feature>` filters (7.2 or later; tested on libvirt 10.0 with QEMU 8.2), QEMU with the q35 machine type, and an OVMF package that installs firmware descriptors (`ovmf` on Debian and Ubuntu, `edk2-ovmf` on Fedora and RHEL, `qemu-ovmf-x86_64` on SUSE). Secure boot also needs a descriptor with the `secure-boot`, `enrolled-keys` and `requires-smm` features; on Ubuntu 24.04 `ovmf` installs one. TPM needs `swtpm`. To check a host:
+
+```bash
+ls /usr/share/qemu/firmware/
+virsh domcapabilities --machine q35 --arch x86_64 | sed -n '/<os /,/<\/os>/p'
+# expect <enum name='firmware'> with <value>efi</value>, and for secure boot
+# <enum name='secure'> with <value>yes</value>
+```
+
+On a **clustered** Provider every host that can receive a UEFI or secure boot VM needs the package: the scheduler does not consider firmware. A VM placed on a host without it is refused (`ValidationError`) and is re-checked on that host (it keeps its pending host); install the package there, or delete the VM.
+
+**Refusals.** When libvirt refuses the definition itself (an XML error, an unsupported configuration, no matching OVMF build), the create is a definite refusal: `Ready=False/ValidationError`, re-checked with a [backoff](../operations/upgrade.md#a-refused-vm-create-is-retried-with-a-backoff) (30 seconds doubling to 10 minutes, or at once when the VM, its VMClass, VMImage or Provider changes), the disk the attempt wrote is removed again, and deleting the VM is not held as `CreateOutcomeUnknown`. A UEFI create is refused before the image is copied when `virsh domcapabilities` lists no `efi` firmware (or, for secure boot, no Secure Boot capable loader).
+
+**Delete** removes a UEFI VM's own variable store (`virsh undefine --nvram`); a store at another path is kept and logged.
+
+**Trust model.** Secure Boot proves only that the boot chain is signed by a key in the variable store's `db`, and which keys those are depends on the host's OVMF package (on Ubuntu 24.04 that includes Microsoft's third-party UEFI CA, so any boot chain it signed boots). A VMClass cannot choose another template. Details and the security notes (the unauthenticated VNC console can reach the firmware setup): [libvirt: firmware, secure boot and platform features](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-firmware.md).
+
+**Limitations.** libvirt 10.0 refuses an internal snapshot of a VM with pflash firmware, so a `VMSnapshot` with `includeMemory: true` of a running UEFI VM is not taken (disk-only snapshots work, and do not restore UEFI variables such as the boot order). On a clustered Provider whose hosts have different OVMF packages, VMs of one VMClass can get different firmware builds. A change to a VMClass's `firmware` or `securityProfile` does not change existing VMs.
+
 ## Cloud-init (NoCloud seed)
 
 Unlike vSphere's `guestinfo`, libvirt uses the **NoCloud datasource**: the provider builds an ISO9660 image with `user-data` and `meta-data`, attaches it as a read-only CD-ROM and the guest's cloud-init applies it at boot. The code is in `internal/providers/libvirt/cloudinit.go`.
 
-**Seeds are private (v0.4.0).** The user-data may carry passwords, keys and tokens, so each seed is built in its own directory inside the [seed directory](#prerequisites): the ISO is `0600` (libvirt hands it to the qemu user when the domain starts), `user-data` and `meta-data` are deleted once the ISO is built, and the SSH user keeps a private copy `cloud-init.private.iso` that clones read. Earlier releases built seeds under `/tmp` with the SSH user's umask, readable by any local user of the host. Seeds of existing VMs stay where they are; leftovers from earlier releases need the one-time fix in [Upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md#leftovers-from-earlier-releases). The seed holds the user-data in plaintext for as long as the VM exists: exclude the seed directory from host backups or encrypt them. The model is described in [Private cloud-init seeds](../guides/security-model.md#private-cloud-init-seeds-libvirt); the host side is in [Libvirt Host Preparation](../operations/libvirt-host-prepare.md#cloud-init-seed-directory).
+**Seeds are private (v0.4.0).** The user-data may carry passwords, keys and tokens, so each seed is built in its own directory inside the [seed directory](#prerequisites): the ISO is `0600` (libvirt hands it to the qemu user when the domain starts), `user-data` and `meta-data` are deleted once the ISO is built, and the SSH user keeps a private copy `cloud-init.private.iso` that clones read. Earlier releases built seeds under `/tmp` with the SSH user's umask, readable by any local user of the host. Seeds of existing VMs stay where they are; leftovers from earlier releases need the one-time fix in [Upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md#leftovers-from-earlier-releases). The seed holds the user-data in plaintext for as long as the VM exists: exclude the seed directory from host backups or encrypt them. The model is described in [Private cloud-init seeds](../guides/security-model.md#private-cloud-init-seeds-libvirt); the host side is in [Libvirt Host Preparation](../operations/libvirt-host-prepare.md#cloud-init-seed-directory).
 
 !!! warning "Breaking change: the default cloud-init no longer creates a user"
-    A libvirt VM created **without** `spec.userData` used to get a built-in `ubuntu` user with a fixed SSH key and passwordless sudo. That is gone. The default seed now sets only the hostname and installs and starts `qemu-guest-agent`. Supply your own `spec.userData` with a user and an `ssh_authorized_keys` entry. VMs already created keep whatever the old default put in the guest: remove it by hand if you do not want it (see [Upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md)).
+    A libvirt VM created **without** `spec.userData` used to get a built-in `ubuntu` user with a fixed SSH key and passwordless sudo. That is gone. The default seed now sets only the hostname and installs and starts `qemu-guest-agent`. Supply your own `spec.userData` with a user and an `ssh_authorized_keys` entry. VMs already created keep whatever the old default put in the guest: remove it by hand if you do not want it (see [Upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md)).
 
 User-data is passed through unchanged, with these details:
 
@@ -427,7 +487,7 @@ Quote `powerState` values (`"On"`): an unquoted `On` is a boolean in YAML 1.1 an
 
 A new domain is named **`<namespace>.<name>`**, so two namespaces' `web` VMs are two domains with two disks and two seeds. A name longer than 200 bytes is shortened with a hash. External tooling must read `status.id` instead of assuming "domain name equals `VirtualMachine` name"; existing VMs keep their old (bare) names.
 
-Every domain is **stamped with its owner** (`<virtrigaud:owner uid=… namespace=… name=…/>` in the domain metadata; read it with `virsh metadata <domain> --uri https://virtrigaud.io/xmlns/libvirt/owner/v1`). The provider never binds a `VirtualMachine` to a domain unless the stamp carries that VM's UID: a create that finds a same-named domain with no stamp, another UID, or an unreadable stamp is **refused** (`AlreadyExists`/`Conflict`); a domain with the requester's UID is returned as an idempotent success. A clone never inherits its source's stamp. Names that `virsh` would resolve as a numeric ID or a UUID are refused. Full rules: [libvirt domain ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-domain-ownership.md).
+Every domain is **stamped with its owner** (`<virtrigaud:owner uid=… namespace=… name=…/>` in the domain metadata; read it with `virsh metadata <domain> --uri https://virtrigaud.io/xmlns/libvirt/owner/v1`). The provider never binds a `VirtualMachine` to a domain unless the stamp carries that VM's UID: a create that finds a same-named domain with no stamp, another UID, or an unreadable stamp is **refused** (`AlreadyExists`/`Conflict`); a domain with the requester's UID is returned as an idempotent success. A clone never inherits its source's stamp. Names that `virsh` would resolve as a numeric ID or a UUID are refused. Full rules: [libvirt domain ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-domain-ownership.md).
 
 ## Images
 
@@ -444,10 +504,11 @@ A `VMImage` with `source.libvirt.path` names a **base image already on the host*
     ```
 
     Keep `/var/lib/libvirt/images` in the list if you use URL images. On a shared pool, keep the image catalog in a separate directory that only administrators write to.
-- **URL images are prepared by identity (ADR-0009).** The prepared file is `<pool dir>/<namespace>.<name>_<16 hex>.qcow2`, read-only (`0444`), owned by the SSH user, with a stamp file; it is reused only when the stamp matches the `VMImage` UID and source digest, never by bare name. A source that fails for good (HTTP 4xx, checksum mismatch, unreadable image) shows `InvalidSource` instead of being retried. Downloads are one transfer, bounded in time (`spec.prepare.timeout`) and size (`VIRTRIGAUD_LIBVIRT_IMAGE_MAX_DOWNLOAD_GIB`, default 256). The pool directory must be an allowed image directory on a filesystem with hard links.
+- **URL images are prepared by identity (ADR-0009).** The prepared file is `<pool dir>/<namespace>.<name>_<16 hex>.qcow2`, read-only (`0444`), owned by the SSH user, with a stamp file; it is reused only when the stamp matches the `VMImage` UID and source digest, never by bare name. A source that fails for good (HTTP 4xx, checksum mismatch, unreadable image) shows `InvalidSource` instead of being retried. Downloads are one transfer, bounded in time (`spec.prepare.timeout`, but at most about 4.5 minutes since v0.4.1: the manager gives the call 5 minutes) and size (`VIRTRIGAUD_LIBVIRT_IMAGE_MAX_DOWNLOAD_GIB`, default 256). The pool directory must be an allowed image directory on a filesystem with hard links.
+- **A create that carries an image URL** (instead of a prepared image, or one that names a predefined template) downloads on the host with **`curl`**, the way `ImagePrepare` does (`curl -q -K -` with the URL on standard input, `http`, `https` or `ftp` only, the size limit, and a time limit bounded by the call's deadline). Since v0.4.1 the URL is no longer on the host's command line (it was `wget <URL>`, visible in the process list and audit log), and it is redacted in the provider and manager logs and in errors. Failures are classified: an HTTP 4xx answer (except 408, 425 and 429), a permanent `curl` failure and a scheme other than `http`, `https` or `ftp` are reported as `InvalidArgument`, so the `VirtualMachine` shows `Ready=False/ValidationError` and is re-checked with a backoff. **The libvirt host needs `curl`**; if it is missing, the provider log says so. The download is cut off after at most about 4.5 minutes, because the manager gives a `Create` 5 minutes (less a reserve for the conversion). The same cap applies to `ImagePrepare` downloads, **whatever `spec.prepare.timeout` says** (the 30-minute default included): prepare large images from a source close to the libvirt host.
 - **The prepare gate** applies to import-style sources only: with the default `onMissing: Import` the image is prepared when the first VM needs it; with `Fail` or `Wait` nothing is prepared and new VMs wait in `WaitingForDependencies` until the image has been prepared out of band. A reference-style source (`path`) is not gated.
 
-Full rules, including the stamp and what is refused: [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/image-preparation.md#libvirt-image-paths-sourcelibvirtpath).
+Full rules, including the stamp and what is refused: [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/image-preparation.md#libvirt-image-paths-sourcelibvirtpath).
 
 ## Snapshots
 
@@ -473,6 +534,10 @@ spec:
 | Running | **Internal** full-system checkpoint: disks and RAM. Needs qcow2 storage. | **External disk-only** snapshot. The CD-ROM is excluded, but the stored definition still holds the seed, so this snapshot **cannot be reverted** (below). |
 | Off | Downgraded to disk-only with a warning (no RAM to capture). | **External disk-only** snapshot, taken with the CD-ROMs ejected. **This is the revertible kind.** |
 
+A `VMSnapshot` create the provider did **not perform** (a busy domain, a request that never reached the provider, an unreachable host) is **retried** since v0.4.1: the `VMSnapshot` shows `Ready=False/ProviderError`, with the provider's answer in a `SnapshotCreateRetrying` event, and the create is sent again after 1 minute, doubling to 10 minutes, for as long as the object exists. In v0.4.0 it ended `Failed` and you deleted it and created a new one. A cause that does not go away (for example an unreadable disk image: grant `VR_DISK_READ`) is retried every 10 minutes until you fix it or delete the `VMSnapshot`. A snapshot libvirt refuses before executing because the VM's configuration does not support it (single-host) fails for good (`InvalidArgument`): sending it again cannot help.
+
+**A snapshot whose overlay file already exists is refused for good (V12).** The overlay of a disk-only snapshot is `<disk file without its extension>.<snapshot name>` (for the VM's own disk `<domain>-disk.<snapshot name>`). A leftover file of that name comes from the overlays of additional disks (which `SnapshotDelete` never removes), from overlays that could not be proven safe to remove, and from snapshots deleted by a release before v0.4.0 or by hand. The provider probes the overlay paths before it changes anything and refuses with `AlreadyExists`: the `VMSnapshot` ends `Failed` (single-host and clustered), nothing is created, the message names no host path (the provider log names the disk and the file) and **the leftover file is never removed or overwritten**. Use another snapshot name, or remove the file after you have checked that no domain, snapshot or internal snapshot on any host that mounts the pool references it ([details](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#a-snapshot-name-whose-overlay-file-is-still-on-the-host)). A `VMSnapshot` that v0.4.0 held in `SnapshotOutcomeUnknown` for this reason stays held until you delete it or confirm its attempt.
+
 The downgrade of `includeMemory` on an off VM is only a provider log line: no condition or event says it happened. A snapshot of a **paused** VM is disk-only without the CD-ROM ejection, so it cannot be reverted. Snapshot names are sanitised (letters, digits, `_`, `.`, `-`; at most 64 characters). A memory snapshot is larger and slower than a disk-only one.
 
 ### Revert
@@ -492,16 +557,17 @@ libvirt-specific rules:
 - **Memory snapshots** of a running VM are internal and are reverted in place; they are not refused.
 - libvirt older than 9.9 cannot revert an external snapshot; the provider's error is reported as `RevertFailed`.
 - A revert refused for good (`FailedPrecondition`) is not retried and its message carries the provider's guidance instead of a "set it again" hint.
+- **A revert the provider did not perform is retried** (v0.4.1). The request goes back to `Pending` with `SnapshotReverted=False/RevertNotPerformed` and is sent again after 1 minute, doubling to 10 minutes; these answers do not count toward the 5-attempt limit. In v0.4.0 it was re-sent as an unknown outcome and ended `Failed` with "the VM may or may not have been reverted" although nothing had changed. Remove `spec.snapshot.revertToRef` to give up. A failed revert is answered by what the provider can prove: not performed (a failure before `virsh snapshot-revert` ran, or a busy or wrong-state refusal with the disk sources unchanged), `FailedPrecondition` (a revert libvirt does not support for the VM), `NotFound` (a missing snapshot or domain), a terminal failure (libvirt failed during the revert), or "outcome unknown: retry" (the revert may have run). A lost connection mid-revert is no longer reported as a terminal failure.
 - The revert re-inserts the CD-ROM (the seed) afterwards and checks that no read-only disk was moved; if it cannot, it reports `RevertFailed` ("reverted, but ...") and keeps a record so the next snapshot, revert, start or reboot of the VM repairs it. An interrupted ejection leaves the seed CD-ROM empty until then: do not start such a VM by hand with `virsh start`.
 - libvirt creates the overlay of a disk-only snapshot and of a revert with mode `0600`, and the provider's disk in-use check reads every domain's disk chain. The SSH user therefore needs the `VR_DISK_READ` sudo rule over the pool directory, or the check fails closed with "permission denied reading a disk image".
 
-Full flow, status fields, GitOps notes and the repair procedure for a VM broken by a revert on a v0.4.0 release candidate: [Reverting a VirtualMachine to a VMSnapshot](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md#libvirt).
+Full flow, status fields, GitOps notes and the repair procedure for a VM broken by a revert on a v0.4.0 release candidate: [Reverting a VirtualMachine to a VMSnapshot](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md#libvirt).
 
 ### Delete order with memory snapshots
 
 A memory snapshot taken after a disk-only one is stored **inside the disk-only snapshot's overlay**. Deleting the disk-only snapshot makes libvirt merge that overlay away, and the memory snapshot's data would be lost. Since v0.4.0 the provider **refuses** that delete before anything changes, answering with the names to delete first. The `VMSnapshot` keeps its finalizer with `Ready=False/DeleteBlocked`, shows the provider's answer, and is re-checked with a backoff of up to 5 minutes. **Delete the memory snapshots first, then the disk-only snapshot.** (`virtrigaud.io/force-delete: "true"` still removes the `VMSnapshot`, leaving the snapshot on the host.) Deleting a memory snapshot is never refused by this check.
 
-A memory snapshot that v0.3.11 or a v0.4.0 release candidate already lost keeps only metadata; the provider deletes that metadata when it can prove the data is gone, and otherwise asks you to power the VM off and delete again. The check is not atomic with the delete: do not create a snapshot of a VM while you delete another of its snapshots. See [Deleting memory and disk-only snapshots of the same VM](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#deleting-memory-and-disk-only-snapshots-of-the-same-vm).
+A memory snapshot that v0.3.11 or a v0.4.0 release candidate already lost keeps only metadata; the provider deletes that metadata when it can prove the data is gone, and otherwise asks you to power the VM off and delete again. The check is not atomic with the delete: do not create a snapshot of a VM while you delete another of its snapshots. See [Deleting memory and disk-only snapshots of the same VM](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#deleting-memory-and-disk-only-snapshots-of-the-same-vm).
 
 `SnapshotDelete` also removes the primary disk's overlay files libvirt leaves behind (`<domain>-disk.<snapshot>` and the `<domain>-disk.<epoch>` a revert creates). Overlays of additional data disks and of snapshots deleted before v0.4.0 are not swept.
 
@@ -545,7 +611,7 @@ A full clone copies the source's disk, including cloud-init's record of the inst
 | user-data | `spec.customization.userData.cloudInit.inline` when set; otherwise the source's, with its top-level `hostname:` and `fqdn:` rewritten |
 | other files | the source's `network-config` and `vendor-data` unchanged |
 
-cloud-init sees a new instance on first boot, regenerates the SSH host keys and re-runs every per-instance module (`runcmd`, `packages`, `users`, ...). It does **not** regenerate `/etc/machine-id` (seal the source with `cloud-init clean --machine-id` if clones need their own), and a static address in the source's network configuration is carried over. User-data keys that undo the new identity (`ssh_keys`, `ssh_deletekeys: false`, `preserve_hostname: true`, `manual_cache_clean: true`) are logged by name. A source without a seed ISO gives a clone without one. Details: [A clone's cloud-init identity](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#a-clones-cloud-init-identity).
+cloud-init sees a new instance on first boot, regenerates the SSH host keys and re-runs every per-instance module (`runcmd`, `packages`, `users`, ...). It does **not** regenerate `/etc/machine-id` (seal the source with `cloud-init clean --machine-id` if clones need their own), and a static address in the source's network configuration is carried over. User-data keys that undo the new identity (`ssh_keys`, `ssh_deletekeys: false`, `preserve_hostname: true`, `manual_cache_clean: true`) are logged by name. A source without a seed ISO gives a clone without one. Details: [A clone's cloud-init identity](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#a-clones-cloud-init-identity).
 
 ## Reconfigure
 
@@ -595,7 +661,7 @@ A VM created without the flags (including every VM created before v0.3.9) report
 
 A disk-size change alone does not trigger a `Reconfigure`: the manager sends one when the effective CPU or memory changes, and the disk sizes travel with it.
 
-Power states reported by libvirt: `running`/`idle` is `On`; `shut off`, `in shutdown` and `crashed` are `Off`; `paused` and `pmsuspended` are `Suspended`; anything else is `Unknown`. The manager neither powers on nor reconfigures a `Suspended` or `Unknown` VM (`Ready=False/PowerStateUnmanaged`). Full contract: [Reconfigure results](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/reconfigure-results.md).
+Power states reported by libvirt: `running`/`idle` is `On`; `shut off`, `in shutdown` and `crashed` are `Off`; `paused` and `pmsuspended` are `Suspended`; anything else is `Unknown`. The manager neither powers on nor reconfigures a `Suspended` or `Unknown` VM (`Ready=False/PowerStateUnmanaged`). Full contract: [Reconfigure results](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/reconfigure-results.md).
 
 ## `spec.disks` are not attached
 
@@ -603,7 +669,9 @@ The libvirt provider creates one root disk (sized by the VMClass) and attaches *
 
 ## Delete
 
-Delete reads the domain definition once; if it cannot, the delete fails retryably with the domain intact. It removes only: the domain's own top-level disk files that are regular files directly inside the `default` pool or an allowed image directory (never a symlink or its target); the overlay files of its own external-snapshot chain; and its cloud-init seed directory. A base image, another VM's disk, CD-ROM media and anything outside those directories is left in place and logged. While another domain on the host uses the VM's disk (a legacy linked clone, a shared disk), the delete is refused with `Ready=False/DeleteBlocked` and re-checked every minute. `virtrigaud.io/orphan-on-delete: "true"` detaches the `VirtualMachine` without touching the domain. See [What Delete removes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#what-delete-removes).
+A VM delete also refreshes the `default` pool (`virsh pool-refresh`, best effort: a failure is logged and never fails the delete), so `virsh vol-list default` stops listing the deleted disk files. A VM whose disks are in another pool leaves that pool stale until its next refresh, and on a clustered Provider whose hosts share the pool directory another host keeps listing the files until its pool is refreshed (run `virsh pool-refresh default` there). A UEFI VM's own variable store is removed too (see [Firmware](#firmware-secure-boot-and-platform-features)).
+
+Delete reads the domain definition once; if it cannot, the delete fails retryably with the domain intact. It removes only: the domain's own top-level disk files that are regular files directly inside the `default` pool or an allowed image directory (never a symlink or its target); the overlay files of its own external-snapshot chain; and its cloud-init seed directory. A base image, another VM's disk, CD-ROM media and anything outside those directories is left in place and logged. While another domain on the host uses the VM's disk (a legacy linked clone, a shared disk), the delete is refused with `Ready=False/DeleteBlocked` and re-checked every minute. `virtrigaud.io/orphan-on-delete: "true"` detaches the `VirtualMachine` without touching the domain. See [What Delete removes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#what-delete-removes).
 
 ## `status.ips`
 
@@ -615,7 +683,7 @@ Delete reads the domain definition once; if it cannot, the delete fails retryabl
 | Host bridge (`libvirt.bridge`) | **Nothing**: libvirt holds no lease. Only an ARP entry the host happens to have (`--source arp`) can fill it | Shown |
 | No attachment (user-mode NIC) | Nothing | Shown |
 
-The sources are tried in the order agent, lease, ARP, and the first with an address wins; while the domain runs, a reachable address from `guest-network-get-interfaces` replaces the list (at most 16 interfaces and 16 addresses per interface). Anything that took `status.ips[0]` before v0.4.0 and expected a loopback or link-local entry must read the first reachable address instead. See [`status.ips`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-ips.md).
+The sources are tried in the order agent, lease, ARP, and the first with an address wins; while the domain runs, a reachable address from `guest-network-get-interfaces` replaces the list (at most 16 interfaces and 16 addresses per interface). Anything that took `status.ips[0]` before v0.4.0 and expected a loopback or link-local entry must read the first reachable address instead. See [`status.ips`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-status-ips.md).
 
 ## Console access
 
@@ -683,7 +751,15 @@ ssh virtrigaud@libvirt-host virsh -c qemu:///system list
 
 ### "permission denied reading a disk image"
 
-A snapshot, revert, delete or (clustered) create/clone is refused, retryably, because the provider could not read a libvirt overlay (`0600`, owned by root while the VM is off). Grant the SSH user the `VR_DISK_READ` sudo rule over the pool directory; see [Unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-clones.md#unreadable-disk-images).
+A snapshot, revert, delete or (clustered) create/clone is refused, retryably, because the provider could not read a libvirt overlay (`0600`, owned by root while the VM is off). Grant the SSH user the `VR_DISK_READ` sudo rule over the pool directory; see [Unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#unreadable-disk-images).
+
+### `Ready=False/ValidationError` after a create ("libvirt refused the domain definition")
+
+libvirt refused the domain XML itself, or no OVMF build matched. The message ends with libvirt's reason. Fix the VMClass (for example `firmware: UEFI` on a host without an OVMF package), install what the host is missing (see [Firmware, secure boot and platform features](#firmware-secure-boot-and-platform-features)), or delete the VM. The create is re-sent after 30 seconds, then 1, 2, 4 and 8 minutes, then every 10 minutes, and at once when the VM, its VMClass, VMImage or Provider changes. A refusal that comes from the define, other than a missing UEFI firmware, still copies the image on each re-check and removes the copy again.
+
+### A `VMSnapshot` is `Failed` with "overlay file ... already exists"
+
+A leftover overlay file has the name the new snapshot would use. The file is never removed for you. Use another snapshot name, or remove the file after checking that nothing references it (see [Snapshots](#snapshots)).
 
 ### Snapshot fails on a running domain
 
@@ -698,6 +774,17 @@ spec:
 ```
 
 `logLevel` sets the provider's `LOG_LEVEL`.
+
+## Known limitations at v0.4.1
+
+- **A leftover overlay file is never removed for you.** A snapshot whose name matches one is refused (see [Snapshots](#snapshots)).
+- **Snapshot and revert overlays are `0600`, and the disk check needs to read them.** libvirt creates `<domain>-disk.<snapshot>` and `<domain>-disk.<epoch>` mode `0600`, owned by root while the VM is off. A snapshot create, revert or delete, and a VM delete (on a clustered Provider also a create and a clone), reads the disk chain of every domain on the host first, and the provider's SSH user must be able to read those overlays: grant `VR_DISK_READ` over the pool directory (an NFS export must not squash root, and must then be dedicated to the Provider's hosts), or repair each new overlay by hand. Without either those operations are refused with "permission denied reading a disk image". Since v0.4.1 a `VMSnapshot` create and a revert are retried every 10 minutes at most until you fix it, and a VM delete and a snapshot delete are retried too ([details](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#unreadable-disk-images)).
+- **A create from a `source.libvirt.path` image goes through the disk check too.** A single-host create from such an image can be refused, and retried, with "could not verify the image on the libvirt host (transient host error; details are in the provider log)". Fix it as for the snapshots.
+- **UEFI: no memory snapshot, and no revert of UEFI variables** (see [Firmware](#firmware-secure-boot-and-platform-features)).
+- **Files left by an earlier release's refused create stay.** A disk (`<domain>-disk.qcow2`) that a create of v0.4.0 or of a v0.4.1 release candidate left on the pool is removed only if a later create of the same VM removes it; remove one yourself after checking that no domain uses it. The `CreateOutcomeUnknown` hold of such a VM is released after 10 minutes, or at once by the annotation its message names.
+- **The pool refresh of a VM delete covers the host that ran it** (see [Delete](#delete)).
+- **Minor:** libvirt hosts keep the empty per-VM lock files `/tmp/virtrigaud-locks/{export,import,clone}-<domain>.lock` after the VM is gone, and every create logs `ERROR Command failed: sudo restorecon ...` on a host without SELinux, followed by a warning.
+- **Clustered Providers are experimental**; host-to-host migration is not implemented (see the [clustered guide](../guides/clustered/index.md)).
 
 ## Performance tips
 

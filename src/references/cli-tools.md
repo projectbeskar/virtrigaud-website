@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # CLI Tools Reference
 
-VirtRigaud provides a set of command-line tools for inspecting VirtRigaud resources, developing providers, validating conformance specs, and load testing. This guide covers the tools shipped in v0.4.0, with the flags and subcommands each one defines.
+VirtRigaud provides a set of command-line tools for inspecting VirtRigaud resources, developing providers, validating conformance specs, and load testing. This guide covers the tools shipped in v0.4.1, with the flags and subcommands each one defines. v0.4.1 makes `vcts run` and `virtrigaud-loadgen` do what their documentation says, and adds `vrtg-provider init --type proxmox`.
 
 The tools are separate from the operator. They talk to the cluster with your kubeconfig (`vrtg-provider` only edits local files), and nothing in the manager or in a provider image depends on them.
 
@@ -14,18 +14,17 @@ The tools are separate from the operator. They talk to the cluster with your kub
 | Tool | Purpose | Target Users |
 |------|---------|--------------|
 | [`vrtg`](#vrtg) | Read VirtRigaud resources: list and describe `VirtualMachine`s, list `Provider`s | End users, DevOps teams, System administrators |
-| [`vcts`](#vcts) | Conformance test spec validator and runner (the runner cannot pass yet) | Provider developers, QA teams, CI/CD pipelines |
+| [`vcts`](#vcts) | Validate conformance test specifications; run the conformance tests against a `Provider` | Provider developers, QA teams, CI/CD pipelines |
 | [`vrtg-provider`](#vrtg-provider) | Scaffold, check and catalog a new out-of-tree provider | Provider developers, Contributors |
-| [`virtrigaud-loadgen`](#virtrigaud-loadgen) | Create and delete `VirtualMachine`s at a steady rate and record how long the API calls take | Performance engineers, SREs |
+| [`virtrigaud-loadgen`](#virtrigaud-loadgen) | Create, power, resize, snapshot, clone and delete `VirtualMachine`s at a steady rate and record how long the API calls (and, optionally, the provider) take | Performance engineers, SREs |
 | [`alpha-to-beta-dryrun`](#alpha-to-beta-dryrun) | v1alpha1 migration helper (tombstone) | Operators upgrading from pre-v0.3.0 |
 
-`vrtg`, `vcts run` and `virtrigaud-loadgen` need the VirtRigaud CRDs installed in the cluster and permission to read (`vrtg`, `vcts run`) or to create and delete (`virtrigaud-loadgen`) the resources they touch. `vcts validate` and `vcts list` read local files only and need no cluster.
+`vrtg`, `vcts run` and `virtrigaud-loadgen` need the VirtRigaud CRDs installed in the cluster and permission to read (`vrtg`) or to get, list, create, patch and delete (`vcts run`, `virtrigaud-loadgen`) the resources they touch. `vcts validate` and `vcts list` read local files only and need no cluster.
 
-!!! note "Limits in v0.4.0"
-    - `vcts run` cannot pass yet: the conformance runner does not execute the steps of a specification, so the selected tests are reported as failed. `vcts validate` and `vcts list` work.
-    - `virtrigaud-loadgen` simulates its `power`, `reconfigure`, `snapshot` and `clone` operations; only `create`, `delete` and `describe` call the API.
+!!! note "Limits in v0.4.1"
+    - `vcts run` and `virtrigaud-loadgen` create **real VMs** on the hypervisor. Run them in a throw-away namespace on a non-production cluster, and size the datastore for `virtrigaud-loadgen` (`vmCount` times the disk size, plus snapshots).
     - Some `vrtg` subcommands exist in the command tree but are not implemented; they exit non-zero and name the alternative.
-    - A project made by `vrtg-provider init` builds only against a local VirtRigaud checkout, because the SDK and proto modules are not published under their own version tags.
+    - `go install ...@v0.4.1` does not work for any of the tools (the root `go.mod` has `replace` directives); download the binaries from the release or build from a checkout.
 
     Each section below gives the detail.
 
@@ -36,7 +35,7 @@ The tools are separate from the operator. They talk to the cluster with your kub
 Each release publishes one binary per tool and platform, named `<tool>-<os>-<arch>` (plus `.exe` on Windows), together with a `checksums.txt`. Platforms are `linux`, `darwin` (each `amd64` and `arm64`) and `windows` (`amd64` only). The tools are `vrtg`, `vcts`, `vrtg-provider` and `virtrigaud-loadgen`.
 
 ```bash
-export VIRTRIGAUD_VERSION="v0.4.0"
+export VIRTRIGAUD_VERSION="v0.4.1"
 export PLATFORM="linux-amd64"  # or linux-arm64, darwin-amd64, darwin-arm64
 
 for tool in vrtg vcts vrtg-provider virtrigaud-loadgen; do
@@ -51,12 +50,12 @@ sudo mv vrtg vcts vrtg-provider virtrigaud-loadgen /usr/local/bin/
 
 ### From Source
 
-There is no `make` target for the CLI tools (the Makefile builds the manager and the providers). Build them with `go build`; the Go version is the one in `go.mod` (1.26.10 in v0.4.0).
+There is no `make` target for the CLI tools (the Makefile builds the manager and the providers). Build them with `go build`; the Go version is the one in `go.mod` (1.26.10 in v0.4.1).
 
 ```bash
 git clone https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
-git checkout v0.4.0
+git checkout v0.4.1
 
 mkdir -p bin
 for tool in vrtg vcts vrtg-provider virtrigaud-loadgen; do
@@ -66,8 +65,8 @@ done
 sudo install -m 0755 bin/vrtg bin/vcts bin/vrtg-provider bin/virtrigaud-loadgen /usr/local/bin/
 ```
 
-!!! note "`go install ...@v0.4.0` does not work"
-    The root `go.mod` carries `replace` directives for the local `proto/` and `sdk/` modules, so `go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.4.0` is refused by the Go toolchain. Build from a checkout as shown above.
+!!! note "`go install ...@v0.4.1` does not work"
+    The root `go.mod` carries `replace` directives for the local `proto/` and `sdk/` modules, so `go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.4.1` is refused by the Go toolchain. Build from a checkout as shown above.
 
 ### Completion
 
@@ -92,7 +91,7 @@ vrtg completion powershell | Out-String | Invoke-Expression
 
 ## vrtg
 
-The CLI for looking at VirtRigaud resources from a terminal. Defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg/main.go).
+The CLI for looking at VirtRigaud resources from a terminal. Defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg/main.go).
 
 ### Global Flags
 
@@ -192,7 +191,7 @@ vrtg provider status vsphere-provider -n virtrigaud-system -o json
 
 #### Subcommands that are not implemented
 
-These commands exist so the command tree is stable. They are **not implemented** in v0.4.0: each exits with a non-zero status and an error that names what to use instead. None defines flags.
+These commands exist so the command tree is stable. They are **not implemented** in v0.4.1: each exits with a non-zero status and an error that names what to use instead. None defines flags.
 
 | Command | Aliases | Arguments | Use instead |
 |---------|---------|-----------|-------------|
@@ -207,10 +206,10 @@ These commands exist so the command tree is stable. They are **not implemented**
 
 ## vcts
 
-VirtRigaud Conformance Test Suite. Defined in [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vcts/main.go) with the runner in [`internal/conformance/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/internal/conformance).
+VirtRigaud Conformance Test Suite. Defined in [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vcts/main.go) with the runner in [`internal/conformance/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/internal/conformance). `vcts validate` and `vcts list` read local files; `vcts run` runs the tests against a `Provider` that is deployed and healthy in the cluster.
 
-!!! warning "`vcts run` cannot pass yet"
-    `vcts validate` and `vcts list` work. `vcts run` connects to the cluster and reads the Provider, but the conformance runner does not execute the steps of a specification: the `create`, `update`, `delete`, `wait` and `validate` steps report "not implemented", so each selected test fails at its first step and the command exits non-zero. The runner infers a provider's capabilities from `spec.type` rather than from its status, and only `vsphere` and `libvirt` Providers select any test: for any other Provider type `vcts run` selects zero tests, prints `Total Tests: 0` and exits 0. Use `vcts validate` and `vcts list` today.
+!!! warning "`vcts run` creates real objects"
+    `vcts run` (new in v0.4.1; in v0.4.0 every step reported "not implemented") creates `VirtualMachine`, `VMSnapshot`, `VMClone` and `VMClass` objects in the namespace you pass with `-n` (`default` if omitted), which make real VMs on the hypervisor. Run it against a non-production cluster, in a throw-away namespace. It touches only what its run created, and never creates, changes or deletes a `Provider`.
 
 ### Usage
 
@@ -221,9 +220,9 @@ vcts [command] [flags]
 ### Global Flags
 
 ```bash
---kubeconfig string   Path to kubeconfig file (default: KUBECONFIG, in-cluster, then ~/.kube/config)
--n, --namespace       Kubernetes namespace of the Provider under test (default: "default")
--v, --verbose         Verbose output
+--kubeconfig string   Path to kubeconfig file (default: KUBECONFIG, in-cluster, then ~/.kube/config; a path that cannot be loaded is an error)
+-n, --namespace       Kubernetes namespace of the Provider under test, and where the tests create their objects (default: "default")
+-v, --verbose         Verbose output: each step as it finishes
 -h, --help            Help for vcts
 ```
 
@@ -240,32 +239,59 @@ vcts run --provider <name> [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-p, --provider` | none (required) | Name of the Provider resource to test, looked up in `--namespace` |
+| `--set NAME=value` | none | Set a specification variable (repeatable). The shipped tests need `--set IMAGE=<name>`: an existing `VMImage` in the namespace that the provider can boot |
 | `-o, --output-dir` | `./conformance-results` | Directory for the results |
 | `--skip` | none | Test names to skip (comma-separated or repeated) |
-| `--timeout` | `30m` | Overall timeout |
-| `--parallel` | `1` | Accepted, but tests currently run one after another |
+| `--timeout` | `3h` | Timeout of the whole run |
+| `--keep` | `false` | Leave the objects the tests created in place (no cleanup) |
+| `--cleanup-timeout` | `10m` | Time allowed to clean up after each test, also after `--timeout` or an interrupt |
+| `--parallel` | `1` | Run up to N tests at once |
+| `--spec-dir` | `test/conformance/specs` | Directory of the test specifications (`*.yaml`), relative to the current directory |
 
 ```bash
-# Run against a Provider in the virtrigaud-system namespace
-vcts run --provider vsphere-provider --namespace virtrigaud-system
+# Run the shipped tests against a libvirt Provider in the vcts namespace
+vcts run --provider libvirt-lab -n vcts --set IMAGE=ubuntu-22 -v
 
-# Skip tests and set the timeout and result directory
-vcts run --provider libvirt-provider \
-  --skip vm-power-cycle \
-  --timeout 1h \
-  --output-dir /tmp/test-results
+# Skip a test and set the timeout and result directory
+vcts run --provider vsphere-prod -n vcts --set IMAGE=ubuntu-22 \
+  --skip vm-power-cycle --timeout 1h --output-dir /tmp/test-results
 ```
 
-A run writes `results.json`, `junit.xml` and `report.md` into the output directory, prints a summary (total, passed, failed, skipped) and exits non-zero when a test fails. Until the runner executes steps (see the warning above), every selected test fails. A Provider of a type that selects no test (anything but `vsphere` and `libvirt`) gives `Total Tests: 0` and exit status 0, and so does a run outside a checkout, where the specs directory is not found.
+Each test creates its objects in the namespace, waits for the operator and the provider to act on them, checks their status, then deletes everything it created. The shipped tests are:
+
+| Test | Requires | What it checks |
+|------|----------|----------------|
+| `vm-create-delete` | `vm-create`, `vm-delete` | A VM becomes `Ready` and powered on, with `status.id`, phase `Running`, `status.boundProvider` and `status.currentResources`; deleting it removes it |
+| `vm-power-cycle` | `vm-create`, `vm-power`, `vm-delete` | `spec.powerState` Off then On is reflected in `status.powerState` and `status.phase` |
+| `vm-reconfigure-offline` | `vm-create`, `vm-reconfigure`, `vm-delete` | A powered-off VM's `spec.resources` change is recorded in `status.currentResources` |
+| `vm-snapshot-create-delete` | `vm-create`, `vm-snapshot`, `vm-delete` | A `VMSnapshot` of a powered-off VM becomes `Ready` with a `status.snapshotID`; deleting it removes it |
+| `vm-clone-full` | `vm-create`, `vm-clone`, `vm-delete` | A full `VMClone` of a powered-off VM becomes `Ready` and its target VM is bound to a provider VM |
+
+(`basic-lifecycle.yaml` holds the first two; `vm-reconfigure-offline`, `vm-snapshot-create-delete` and `vm-clone-full` are new in v0.4.1.)
+
+How it behaves:
+
+- **Variables.** Specifications refer to `${RUN}` (the run id: six lower-case letters and digits), `${TEST}`, `${PROVIDER}` and `${NAMESPACE}`, which `vcts` sets, and to the variables you pass with `--set`. A test that refers to a variable you did not set stops the run before anything is created.
+- **Names and labels.** Every object a test creates has `${RUN}` in its name, so runs never collide, and carries the labels `vcts.virtrigaud.io/run=<run id>`, `vcts.virtrigaud.io/test=<test>` and `app.kubernetes.io/managed-by=vcts`. An `update` or `delete` step acts only on an object that carries the run's label.
+- **Capabilities.** A test lists `requiredCapabilities`. `vm-create`, `vm-delete`, `vm-power`, `vm-reconfigure` (a powered-off VM) and `vm-clone` (a full clone) are part of the provider contract and always offered. The others come from the Provider's `status.reportedCapabilities`: `vm-snapshot` (`supportsSnapshots`), `vm-snapshot-memory` (`supportsMemorySnapshots`), `vm-reconfigure-online` (`supportsReconfigureOnline`), `vm-clone-linked` (`supportsLinkedClones`), `image-import` (`supportsImageImport`), `disk-export` (`supportsDiskExport`) and `disk-import` (`supportsDiskImport`). A test that needs a capability the Provider does not offer is reported as **skipped**, with the reason, not failed. So is a test named with `--skip`.
+- **Timeouts.** `--timeout` bounds the whole run: a test still running when it ends fails, and a test not started yet counts as **failed** ("not run"), so an interrupted or timed-out run never exits 0. A test's `timeout` (default 15m) bounds its steps; a wait step's timeout (default 5m) bounds the wait; other steps default to 1m. Waiting polls every 2 seconds. A wait fails when the object's `status.phase` has stayed `Failed` for 30 seconds (the operator retries some failed phases, such as a create in backoff).
+- **Cleanup.** After its steps, whether they passed or not, each test runs its `cleanup` steps, then deletes the objects labelled with its run and test that it did not create itself (such as a clone's target VM), then the objects it created, newest first, and waits until each is gone. A `VMClone` whose provider clone may still be in flight is waited for first; one that does not settle is left in place with its source and target VMs (deleting them could leave the cloned VM on the hypervisor with nothing recording it) and the test fails. Cleanup also runs after `--timeout` or an interrupt (Ctrl-C; a second Ctrl-C exits at once), bounded by `--cleanup-timeout` per test. A cleanup that fails fails the test. `--keep` skips the cleanup and lists what was left; remove it with `kubectl delete virtualmachines,vmsnapshots,vmclones,vmclasses -n <namespace> -l vcts.virtrigaud.io/run=<run id>`.
+- **Results.** `results.json`, `junit.xml` (one test case per test, the step results in `system-out`) and `report.md` (a summary, and each test's steps and cleanup) in `--output-dir`, with passed, failed or skipped per test and per step. `vcts run` exits **non-zero** when a test fails.
+- **Permissions.** `vcts run` needs get, list, create, patch and delete on the kinds a specification creates in the namespace (`VirtualMachine`s, `VMSnapshot`s, `VMClone`s and `VMClass`es for the shipped tests) and get on the `Provider`.
+
+The specification format is described in [`test/conformance/README.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/test/conformance/README.md).
 
 #### list - List Available Tests
 
 ```bash
 # Print the tests defined under test/conformance/specs/ (relative to the current directory)
 vcts list
+
+# Another directory
+vcts list --spec-dir path/to/specs
 ```
 
-For each test it prints the name, description and required capabilities. `vcts list` and `vcts run` read the specifications from `test/conformance/specs` **relative to the current directory**, so run them from the root of a VirtRigaud checkout.
+For each test it prints the name, description, required capabilities and the variables it needs from `--set`. The default `--spec-dir` is relative to the current directory, so run `vcts` from the root of a VirtRigaud checkout or pass the path.
 
 #### validate - Validate Test Specifications
 
@@ -277,11 +303,10 @@ vcts validate
 vcts validate path/to/specs/
 ```
 
-It takes an optional directory argument (default `test/conformance/specs`) and checks every `*.yaml` file in it. It exits **non-zero** when no spec file is found or when a file cannot be parsed or holds an invalid test (a bad test name, a missing description or step, an unknown step type, ...); the offending file is printed as `ERROR: ...`. It exits 0 only when every file is valid. The project's CI uses it on `test/conformance/specs`.
+It takes an optional directory argument (default `test/conformance/specs`) and checks every `*.yaml` file in it. It exits **non-zero** when no spec file is found or when a file cannot be parsed or holds an invalid test; the offending file is printed as `ERROR: ...`. It exits 0 only when every file is valid. The project's CI uses it on `test/conformance/specs`.
 
-### Shipped specs
-
-`test/conformance/specs/basic-lifecycle.yaml` defines two tests: `vm-create-delete` (requires `vm-create`, `vm-delete`) and `vm-power-cycle` (requires `vm-create`, `vm-power`, `vm-delete`).
+!!! warning "Stricter than in v0.4.0"
+    `vcts validate` and `vcts run` decode specifications strictly. A custom specification that `vcts validate` accepted in v0.4.0 can be rejected now: an unknown key is an error; a step's resource must be an `infra.virtrigaud.io/v1beta1` kind named without a namespace; a created object's name must contain `${RUN}`; `wait` steps need a resource and a condition or `validate` entries; unknown capabilities, malformed paths, variables or regular expressions, duplicate test names and names over 63 characters are errors, and so is a step that creates, updates or deletes a `Provider`. Run `vcts validate <dir>` on your specifications before you rely on them in CI.
 
 ### Output Formats
 
@@ -295,7 +320,7 @@ When a run completes, results are written in three formats:
 
 ## vrtg-provider
 
-Provider development toolkit for creating and checking VirtRigaud providers that live outside this repository. Defined in [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/main.go). It edits local files only and does not talk to a cluster.
+Provider development toolkit for creating and checking VirtRigaud providers that live outside this repository. Defined in [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/main.go). It edits local files only and does not talk to a cluster.
 
 ### Usage
 
@@ -315,7 +340,7 @@ vrtg-provider [command] [flags]
 
 #### init - Initialize Provider
 
-Bootstrap a new provider project with scaffolded code. Defined in [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/init.go); the templates are in [`internal/scaffold`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/internal/scaffold).
+Bootstrap a new provider project with scaffolded code. Defined in [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/init.go); the templates are in [`internal/scaffold`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/internal/scaffold).
 
 ```bash
 vrtg-provider init <provider-name> [flags]
@@ -324,9 +349,9 @@ vrtg-provider init <provider-name> [flags]
 **Flags:**
 
 - `--output, -o`: Output directory for the provider project (default: `.`)
-- `--type, -t`: Provider type: `generic`, `vsphere`, `libvirt`, `firecracker`, `qemu` (default: `generic`). There is no `proxmox` value.
+- `--type, -t`: Provider type: `generic`, `vsphere`, `libvirt`, `proxmox`, `firecracker`, `qemu` (default: `generic`). `proxmox` is new in v0.4.1.
 - `--remote`: Generate remote runtime configuration (the Kubernetes manifests under `config/`)
-- `--virtrigaud-path`: VirtRigaud checkout to resolve the SDK and proto modules from (default: the checkout the project is created in, if any)
+- `--virtrigaud-path`: VirtRigaud checkout to resolve the SDK and proto modules from, with `replace` directives (for local development; see below)
 - `--force`: Overwrite existing files
 
 **Examples:**
@@ -334,6 +359,9 @@ vrtg-provider init <provider-name> [flags]
 ```bash
 # Create a new provider scaffolded for a vSphere-like hypervisor
 vrtg-provider init myprovider --type vsphere
+
+# Scaffold a Proxmox provider: core profile, raw/qcow2 disks, bridge/vlan networks
+vrtg-provider init mypve --type proxmox
 
 # Create with remote runtime configuration under ./work/providers/myprovider
 vrtg-provider init myprovider --remote --output ./work
@@ -347,10 +375,13 @@ vrtg-provider init myprovider --force
 
 The scaffold is created under `<output>/providers/<provider-name>/`. The provider name must be lowercase letters, digits and hyphens, start and end with a letter or digit, and be at most 63 characters. `init` stops when the target directory already contains any file, unless `--force` is given. The generated Go files are `gofmt`-clean.
 
-**How the project finds the SDK and proto modules.** The SDK (`github.com/projectbeskar/virtrigaud/sdk`) and the protobuf bindings (`github.com/projectbeskar/virtrigaud/proto`) are separate Go modules that are **not published under their own version tags**. A generated project therefore resolves them, and the repository module they import from, from a local VirtRigaud checkout through `replace` directives in its `go.mod`:
+`--type` picks the platform the scaffold is written for: its README, the credentials its remote Deployment reads and the capabilities it declares. The `proxmox` type declares only the core profile and the `raw`/`qcow2` disk and `bridge`/`vlan` network types, every operation still returns `Unimplemented`, and its test asserts that no optional capability (snapshots, linked clones, online reconfigure) is advertised; add each one as you implement the operation behind it. The `vsphere`, `libvirt` and `qemu` types still declare optional capabilities (snapshots, and for `vsphere` and `libvirt` also linked clones) although every operation of a fresh scaffold returns `Unimplemented`; the capabilities a scaffold advertises are the ones `New()` builds in `internal/provider/provider.go`, so review them before you deploy one.
 
-- If the project is created inside a checkout, `init` finds it and writes the `replace` directives with a relative path (for example `=> ../../sdk` for `<checkout>/providers/<name>`).
-- Otherwise pass `--virtrigaud-path <checkout>` (an absolute path is written), or edit the commented `replace` block that `init` leaves in `go.mod`.
+**How the project finds the SDK and proto modules.** The SDK (`github.com/projectbeskar/virtrigaud/sdk`) and the protobuf bindings (`github.com/projectbeskar/virtrigaud/proto`) are separate Go modules. Since v0.4.1 every release publishes them under their own tags (`sdk/vX.Y.Z` and `proto/vX.Y.Z`, see [Go modules](../development/providers.md#go-modules-the-sdk-and-proto)); releases up to v0.4.0 have no such tags. Where the generated `go.mod` gets them from depends on the `vrtg-provider` binary and its flags:
+
+- **A release binary** (downloaded from a GitHub release; `vrtg-provider version` prints a version such as `v0.4.1`) requires the VirtRigaud, SDK and proto modules at its own version, with no `replace` directives, also when the project is created inside a checkout. The `go` directive is the Go version the binary was built with.
+- **`--virtrigaud-path <checkout>`** overrides that, for local development: `go.mod` gets `replace` directives that resolve the three modules from the checkout (an absolute path, or a relative one when the project is inside the checkout), and the checkout's `go` directive.
+- **A development build** (built from a checkout without a release version, for example with `go build ./cmd/vrtg-provider`) finds the checkout the project is created in and writes the `replace` directives with a relative path (for example `=> ../../sdk` for `<checkout>/providers/<name>`). Outside a checkout, `go.mod` requires placeholder versions (`v0.0.0`) and leaves a commented `replace` block: set the three versions to a release, fill in the `replace` block, or pass `--virtrigaud-path`.
 
 Then, in the project directory:
 
@@ -361,14 +392,14 @@ make test
 vrtg-provider verify
 ```
 
-!!! warning "The generated Dockerfile needs a wider build context"
-    The Dockerfile builds from the project directory alone, so it cannot see the checkout that the `replace` directives point at. Build the image from a context that contains both, or adjust the Dockerfile, until the modules are published under their own version tags.
+!!! note "Building the image"
+    The generated `Dockerfile` builds from the project directory alone (`go.mod` and `go.sum` first, then the source; run `go mod tidy` once so that `go.sum` exists). A project that requires a release of the modules builds that way. A project whose `go.mod` has `replace` directives to a checkout cannot: the checkout is not in the build context, and the generated `Dockerfile` says so in a comment. Build such an image from a context that contains both, or switch `go.mod` to a release before building.
 
 `generate`, `verify` and `publish` must be run in a provider project: a directory with a `Makefile` and a `go.mod` that requires a `github.com/projectbeskar/virtrigaud` module (the repository, `sdk` or `proto`), which is what `init` creates.
 
 #### generate - Code Generation
 
-Regenerate protocol buffer bindings and other generated code. Defined in [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/generate.go).
+Regenerate protocol buffer bindings and other generated code. Defined in [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/generate.go).
 
 Run it from within a provider project directory. It runs the project's `proto` make target, falling back to `buf generate` in `proto/`; unless `--proto-only` is given it then runs `go generate ./...` and the project's `generate` and `deepcopy` make targets when they exist. A scaffolded project imports the generated bindings from the proto module, so there is nothing to generate and the command says so.
 
@@ -393,11 +424,11 @@ vrtg-provider generate --proto-only
 
 #### verify - Verification
 
-Check a provider project. Defined in [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/verify.go).
+Check a provider project. Defined in [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/verify.go).
 
 Run it from within a provider project directory. It runs the project's `build` and `test` make targets (or `go build` and `go test`); a failure of either fails the command. It also reports `gofmt`, `go vet` and, when installed, `golangci-lint` findings as warnings without failing.
 
-`verify` does **not** run the conformance suite, which needs the provider deployed in a cluster. Deploy it, then run `vcts run --provider <name>` (see [`vcts`](#vcts); the runner cannot pass yet).
+`verify` does **not** run the conformance suite, which needs the provider deployed in a cluster. Deploy it, then run `vcts run --provider <name> --set IMAGE=<vmimage>` (see [`vcts`](#vcts)).
 
 ```bash
 vrtg-provider verify [flags]
@@ -422,7 +453,7 @@ vrtg-provider verify --skip-tests
 
 #### publish - Publishing
 
-Create a catalog entry for a provider and write it to a catalog YAML file. Defined in [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/vrtg-provider/publish.go).
+Create a catalog entry for a provider and write it to a catalog YAML file. Defined in [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/publish.go).
 
 Run it from within a provider project directory. It builds and tests the project, then adds or updates the provider's entry in the catalog file (default: `providers/catalog.yaml`, found by walking up from the current directory). `--dry-run` prints the entry without writing it; it still runs the build and tests unless `--skip-verify` is also given. If no `providers/catalog.yaml` is found, pass `--catalog`.
 
@@ -501,10 +532,10 @@ providers/my-provider/
 
 ## virtrigaud-loadgen
 
-Load generator that creates, deletes and lists `VirtualMachine` resources in a cluster and records how long each operation took. Defined in [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/virtrigaud-loadgen/main.go).
+Load generator that creates, powers, resizes, snapshots, clones and deletes `VirtualMachine` resources in a cluster and records how long each operation took. Defined in [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/virtrigaud-loadgen/main.go), with the operations in [`operations.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/virtrigaud-loadgen/operations.go) and the cleanup in [`cleanup.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/virtrigaud-loadgen/cleanup.go).
 
-!!! warning "Run it in a dedicated namespace"
-    A run creates real `VirtualMachine` resources and leaves the ones still present when it ends in place. Point `--namespace` at a throw-away namespace, or use `--dry-run`. `delete` removes only VMs that the same run created; it never touches other VMs in the namespace.
+!!! warning "Run it in a dedicated namespace, and size the datastore first"
+    Since v0.4.1 `power`, `reconfigure`, `snapshot` and `clone` act on the hypervisor (in v0.4.0 they were recorded as successful without any call), and `create` and `clone` make real VMs. On providers that copy disks (a Proxmox full clone, a libvirt volume copy) each VM can occupy the whole size of its disk, and an earlier release, which accepted `vmCount` but ignored it, filled a small Proxmox thin pool to 100%. A run now keeps at most **`vmCount`** VMs alive at once (default 10), and the worst case is **`vmCount` times the disk size** of the image or source VM, plus snapshots, which `vmCount` does not limit. Pick `vmCount` so that fits with room to spare, point `--namespace` at a throw-away namespace, and run with `--cleanup` so nothing outlives the run. `--dry-run` makes no API call at all.
 
 ### Usage
 
@@ -516,9 +547,9 @@ virtrigaud-loadgen [command] [flags]
 
 ```bash
 --kubeconfig string   Path to kubeconfig file (default: KUBECONFIG, in-cluster, then ~/.kube/config)
--n, --namespace       Kubernetes namespace to create and delete VMs in (default: "default")
+-n, --namespace       Kubernetes namespace to create the objects in (default: "default")
 -o, --output-dir      Output directory for results (default: "./loadgen-results")
---dry-run             Dry-run mode (don't create or delete Kubernetes resources)
+--dry-run             Dry-run mode: no API calls at all, no kubeconfig needed
 -v, --verbose         Verbose output
 -h, --help            Help for virtrigaud-loadgen
 ```
@@ -533,79 +564,98 @@ virtrigaud-loadgen run [--config loadtest.yaml] [flags]
 
 **Flags:**
 
-- `-c, --config`: Load generation config file (YAML). Without it the built-in defaults apply.
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-c, --config` | none | Load generation config file (YAML). Without it the built-in defaults apply |
+| `--observe` | `false` | After each accepted request, poll the object until its status reflects it and record the time |
+| `--observe-timeout` | `5m` | How long `--observe` waits per operation |
+| `--cleanup` | `false` | Delete everything the run created at the end (also after an interrupt) |
+| `--cleanup-timeout` | `10m` | Time allowed for `--cleanup` |
 
-Each worker performs one randomly chosen operation per second for the configured duration. The built-in defaults are:
-
-| Parameter | Value |
-|-----------|-------|
-| Duration | 5 minutes |
-| Concurrency (workers) | 2 |
-| Providers | `test-provider` |
-| VM template | `classRef: test-class`, `imageRef: test-image`, label `generated-by: loadgen`, `powerState: On` |
-| Operation mix (weights) | create 20, delete 10, power 15, reconfigure 10, snapshot 5, clone 5, describe 35 |
-
-Create the `Provider`, `VMClass` and `VMImage` named in the configuration in the namespace first. The tool does not check that they exist: a create is recorded as successful once the apiserver accepts the `VirtualMachine`, and a VM whose references are missing then fails to reconcile.
+Each worker performs one randomly chosen operation per second for the configured duration. Without `--config` the built-in defaults apply: 5 minutes, 2 workers, at most 10 VMs alive at once, VMs created against a provider named `test-provider` with class `test-class` and image `test-image`, and the operation mix create 20, delete 10, power 15, reconfigure 10, snapshot 5, clone 5, describe 35. Create the `Provider`, `VMClass` and `VMImage` named in the configuration first. The tool does not check that they exist.
 
 `--config` reads a YAML file that overrides the defaults; keys you leave out keep their default. Durations are Go duration strings (`30s`, `5m`).
 
 ```yaml
 duration: 2m
 concurrency: 4
-providers: [libvirt-prod]         # a Provider in -n; one is chosen at random per operation
+providers: [libvirt-lab]          # a Provider in -n; one is chosen at random per create
+vmCount: 6                        # the most VMs the run has alive at once (default 10, at least 1)
 vmTemplate:
   classRef: small                 # an existing VMClass
   imageRef: ubuntu-22             # an existing VMImage
   labels:
     team: perf
-operations:                       # relative weights, not percentages; at least one must be above 0; set 0 for what you do not want
-  create: 40
-  delete: 20
-  describe: 40
-  power: 0
-  reconfigure: 0
-  snapshot: 0
-  clone: 0
+  resources:                      # optional; used by reconfigure only
+    cpuRange: [1, 4]              # vCPUs (1..128); default: alternate between 1 and 2
+    memoryRange: [1024, 4096]     # MiB (128..1048576); default: memory is not changed
+operations:                       # relative weights, not percentages; at least one must be above 0
+  create: 30
+  delete: 10
+  describe: 20
+  power: 15
+  reconfigure: 10
+  snapshot: 10
+  clone: 5
 ```
 
-An unknown key, an unparsable duration or an unusable value (no providers, all weights zero, a missing `classRef` or `imageRef`, ...) is an error and nothing is created. The keys `vmCount` (only echoed in the start-up banner), `rampUpTime`, `steadyState`, `rampDownTime`, the `*Interval` keys, `vmTemplate.annotations` and `vmTemplate.resources` are accepted but not used in v0.4.0.
+An unknown key, an unparsable duration or an unusable value (no providers, all weights zero, `vmCount` below 1, a range that is not `[min, max]` within the `VirtualMachine` `spec.resources` bounds, a missing `classRef` or `imageRef`, ...) is an error and nothing is created. In v0.4.0 the `vmTemplate.resources` ranges were accepted without being used, so a configuration with out-of-bounds ranges that ran then is rejected now. The keys `rampUpTime`, `steadyState`, `rampDownTime`, the `*Interval` keys and `vmTemplate.annotations` are accepted but not used (the run starts all workers at once, runs for `duration` and uses `operations` for the mix); the command prints a warning when a file sets one of them. `test/performance/proxmox-loadtest.yaml` in the repository is a ready configuration in this format for a Provider named `proxmox-perf`; edit the provider, class and image names for your cluster.
 
-**What each operation does:**
+**`vmCount`: the cap on VMs.** It is the most VMs the run has alive at once: the VMs it created and has not deleted, the target VMs of the clones it requested, and the VMs whose delete it sent that are not yet gone (they still hold their storage). A `create` or `clone` that would go beyond it is **skipped**: no call is made, and the operation is recorded as skipped (not as a failure, and not in the totals, success rates or latencies). VMs that are not the run's, and snapshots, do not count. A configuration that omits `vmCount` is now capped at 10 VMs. Deleting frees room again, so a run with `create` weighted above `delete` reaches `vmCount` quickly and then mostly skips creates; raise the `delete` weight for churn at a steady VM count.
 
-- **create** makes a `VirtualMachine` named `loadgen-vm-<run>-<worker>-<n>` with the label `generated-by: loadgen` plus your template labels.
-- **delete** removes a random VM **that this run created** (`No VMs created by this run to delete` is recorded as a failure when there is none).
-- **describe** lists the VMs in the namespace.
-- **power**, **reconfigure**, **snapshot** and **clone** are **simulated**: they are recorded as instant successes without calling the API, so the summary does not measure those paths of the operator.
+**What each operation does.** Every operation but `create` and `describe` acts on a VM **this run created**, chosen at random among those no other operation is using; it never touches another VM in the namespace. Patches and deletes carry the VM's UID. With no such VM available the operation is recorded as failed (`no VM created by this run is available`) and nothing is called.
 
-**Exit status.** `run` exits 0 whenever the run completes, even if operations failed; read `summary.md` and `results.csv` for the outcome.
+| Operation | API call |
+|-----------|----------|
+| `create` | Creates a `VirtualMachine` `loadgen-vm-<run>-<worker>-<n>` (`spec.powerState: On`) from the template, with the labels `generated-by: loadgen` and `loadgen.virtrigaud.io/run: <run>` plus your template labels |
+| `delete` | Deletes a VM of the run (its `VMSnapshot`s follow it). Never the source of a `VMClone` that has not ended: deleting it while the provider copies its disk could leave a VM on the hypervisor that nothing records |
+| `describe` | Lists the `VirtualMachine`s in the namespace |
+| `power` | Patches `spec.powerState` of a VM of the run to `Off`, or back to `On` |
+| `reconfigure` | Patches `spec.resources.cpu` (and `spec.resources.memoryMiB` when `memoryRange` is set) of a VM of the run to a value from the range that differs from the one the run last set, which the `VirtualMachine` controller sends to the provider as a Reconfigure |
+| `snapshot` | Creates a `VMSnapshot` `loadgen-snap-<run>-<n>` of a VM of the run with `retentionPolicy.deleteOnVMDelete: true` |
+| `clone` | Creates a `VMClone` `loadgen-clone-<run>-<n>` (full clone, target powered off) of a VM of the run, preferring one the run powered off (some providers, libvirt among them, hold a clone of a running source until it is powered off); the operator creates its target VM, `loadgen-vm-<run>-clone-<n>`, with the run's labels. When the `VMClone` is `Ready`, the target becomes one of the run's VMs |
 
-**Cleanup.** VMs still present when the run ends are left in place. Remove them with:
+**How long a run takes.** The workers start no operation once `duration` has passed. An operation already in flight finishes, and so does its `--observe` wait (up to `--observe-timeout`), so a run lasts `duration` plus at most the longest operation or observation still in flight, plus the `--cleanup`. An interrupt stops the wait.
 
-```bash
-kubectl delete virtualmachine -n <namespace> -l generated-by=loadgen
-```
+**What is measured.** `Duration` is the time of the API call alone: from sending the request until the apiserver answered. It does not include the provider's work. With **`--observe`**, after each accepted request the worker also polls the object (every second, up to `--observe-timeout`) until its status reflects the request, and records `ObservedDuration`:
+
+| Operation | Observed when |
+|-----------|---------------|
+| `create` | `status.id` is set and `status.powerState` is `On` |
+| `delete` | the VM is gone |
+| `power` | `status.powerState` equals the requested state |
+| `reconfigure` | `status.currentResources` holds the requested CPU (and memory), or the VM reports `Reconfiguring=True`, reason `RestartRequired`, for the patched generation |
+| `snapshot` | the `VMSnapshot`'s `status.phase` is `Ready` |
+| `clone` | the `VMClone`'s `status.phase` is `Ready` |
+
+A VM, snapshot or clone that reaches phase `Failed`, or one not observed in time, is recorded in `ObserveError` (the API call still counts as successful). A worker waits for the observation before its next operation, so `--observe` lowers the request rate.
+
+**Cleanup.** By default everything the run created is **left in place**, and the command prints how to remove it: `kubectl delete vmsnapshots,vmclones,virtualmachines -n <namespace> -l loadgen.virtrigaud.io/run=<run>`. With **`--cleanup`** the tool deletes, at the end (also after an interrupt), the run's `VMSnapshot`s and waits until they are gone, then its `VMClone`s, the clone target VMs that carry the run's label, its VMs and the VMs whose delete it issued during the run, and waits until they are gone, up to `--cleanup-timeout`. A `VMClone` whose provider clone may still be in flight is waited for first; one that does not settle in time is left in place with its source and target VMs. It does **not** delete the target VM of a failed `VMClone` that the operator keeps on purpose (its `TargetCleanup` condition has reason `TargetKept`, or `status.targetVMID` is set, or it has a `CloneRequested` condition): removing it could leave the cloned VM on the hypervisor with nothing recording it. The tool exits non-zero, naming what is left, when anything remains. Deleting a `VMClone`, its target or its source while the provider is still copying the disk can leave a VM on the hypervisor that no `VirtualMachine` records, and the tool cannot see it: if you delete the objects of a run yourself while clones are in progress, check the hypervisor afterwards.
+
+**Exit status.** `0` when the run reached the end of its duration and, with `--cleanup`, the cleanup completed. **Non-zero** when the run was interrupted (`SIGINT` or `SIGTERM`): the results are saved and the `--cleanup` runs first, so a script can tell an interrupted run from a finished one by the status alone. Non-zero also when the cleanup left objects behind or the configuration was unusable. A signal that arrives while the cleanup is running does not stop it (send a second one to terminate the process at once). Operations that failed do not change the status: read `summary.md` and `results.csv`.
 
 **Examples:**
 
 ```bash
-# Dry run: records what would happen without creating or deleting VMs
+# Dry run: no API call at all, no kubeconfig needed
 virtrigaud-loadgen run --dry-run --namespace loadtest
 
-# Real run with a config file, results in ./perf-results
-virtrigaud-loadgen run --config loadtest.yaml --namespace loadtest --output-dir ./perf-results
+# Real run with a config file, observing the provider, and cleaning up afterwards
+virtrigaud-loadgen run --config loadtest.yaml --namespace loadtest \
+  --observe --cleanup --output-dir ./perf-results
 ```
 
 ### Metrics and Reporting
 
-Results are written to `<output-dir>/results.csv` and `<output-dir>/summary.md`. Each CSV row is one operation attempt with the columns `Operation`, `Provider`, `VMName`, `StartTime`, `Duration`, `Success`, `Error`, `Phase`.
+Results are written to `<output-dir>/results.csv` and `<output-dir>/summary.md`. Each CSV row is one operation attempt with the columns `Operation`, `Provider`, `VMName`, `StartTime`, `Duration`, `Success`, `Error`, `Phase` (what was requested) and, with `--observe`, `ObservedDuration` and `ObserveError`, then `Skipped`: `true` for a create or clone skipped because of `vmCount` (also `Success=false` with no `Error`). The `Skipped` column is new in v0.4.1.
 
-The Markdown summary contains the totals, the operation counts, and a table of count, P50, P95, P99 and max latency per operation type.
+The Markdown summary contains the totals, the number of skipped operations, and a table of count and P50, P95, P99 and max latency per operation type, plus, with `--observe`, the same for the observed time. The tool has no scenarios or pass/fail thresholds: compare the summary with your own targets.
 
 ---
 
 ## manager
 
-The `manager` binary is the VirtRigaud controller manager. It is not invoked by end users directly - it runs as a Deployment inside the cluster, installed by the Helm chart. The flags below are relevant to operators tuning its behaviour. Defined in [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/manager/main.go).
+The `manager` binary is the VirtRigaud controller manager. It is not invoked by end users directly - it runs as a Deployment inside the cluster, installed by the Helm chart. The flags below are relevant to operators tuning its behaviour. Defined in [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/manager/main.go).
 
 `manager --version` (as the first argument) prints the version and exits. The other flags use Go's `flag` syntax (`-flag` and `--flag` are equivalent), and the standard controller-runtime `--zap-*` logging flags are also accepted.
 
@@ -696,7 +746,7 @@ jobs:
 
       - name: Install vcts
         run: |
-          curl -fsSL "https://github.com/projectbeskar/virtrigaud/releases/download/v0.4.0/vcts-linux-amd64" -o vcts
+          curl -fsSL "https://github.com/projectbeskar/virtrigaud/releases/download/v0.4.1/vcts-linux-amd64" -o vcts
           chmod +x vcts
 
       - name: Validate specs
@@ -736,7 +786,7 @@ kubectl logs -n <namespace> -l app.kubernetes.io/instance=<provider-name>
 
 ## alpha-to-beta-dryrun
 
-A one-shot migration helper from the v1alpha1 API era. Defined in [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/cmd/alpha-to-beta-dryrun/main.go).
+A one-shot migration helper from the v1alpha1 API era. Defined in [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/alpha-to-beta-dryrun/main.go).
 
 !!! warning "Tombstoned"
     The `v1alpha1` API was removed before v0.3.0. This binary now exits with status 1 and an error message explaining that v1alpha1 resources should have been migrated before reaching this version. It is retained in the repository as a safety net, has no flags or functionality, and is not part of the release binaries.

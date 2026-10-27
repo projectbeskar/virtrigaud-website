@@ -14,7 +14,7 @@ provides guidelines and information for contributors.
 
 - **Go 1.26+** — required since
   [#125](https://github.com/projectbeskar/virtrigaud/pull/125) (v0.3.6 bumped
-  the toolchain floor from 1.24.0 → 1.26.0; v0.4.0 builds on **1.26.10**). The
+  the toolchain floor from 1.24.0 → 1.26.0; v0.4.1 builds on **1.26.10**). The
   repo's `go.mod` is the source of truth; CI uses `go-version-file: go.mod`
   so locally you should match.
 - Docker
@@ -218,7 +218,7 @@ below run on every PR; two are gated and in practice run on pushes only:
 | **API Conversion Tests**  | Gated on `api/` or `config/crd/` changing (push events only, as above): single-version CRDs, CRD kustomization in sync, no internal lab names in tracked files, CRD generation drift. |
 | **CI Summary**            | Aggregates most of the above (its `needs:` list is in `ci.yml`).              |
 
-CI uses `go-version-file: go.mod` for the Go version (1.26.10 in v0.4.0).
+CI uses `go-version-file: go.mod` for the Go version (1.26.10 in v0.4.1).
 
 ### Lint
 
@@ -391,8 +391,9 @@ go build -o bin/vcts ./cmd/vcts
 ./bin/vcts validate test/conformance/specs/
 ```
 
-`vcts validate` exits non-zero when a spec is invalid. `vcts run` exists but
-its step executor is not implemented in v0.4.0, so it cannot pass yet; see the
+`vcts validate` exits non-zero when a spec is invalid. `vcts run` executes the
+specs against a deployed `Provider` and creates real VMs (since v0.4.1; v0.4.0 implemented no
+steps): run it only against a non-production cluster, in a throw-away namespace. See the
 [CLI Tools Reference](../references/cli-tools.md#vcts).
 
 ## Release Process
@@ -432,10 +433,19 @@ its step executor is not implemented in v0.4.0, so it cannot pass yet; see the
    - Building the CLI binaries (`vrtg`, `vcts`, `vrtg-provider`,
      `virtrigaud-loadgen`) for linux and darwin (amd64, arm64) and windows
      (amd64)
+   - Checking, in a read-only `prepare` job (`contents: read`), that the tag is a release version and
+     that the `go.mod` files follow the module-version rule, before anything is built
+   - After the GitHub release exists, creating and pushing the `sdk/vX.Y.Z` and `proto/vX.Y.Z` tags
+     on the same commit (the `tag-go-modules` job)
 
 The project follows a **release candidate → smoke → final** pattern; v0.3.5
 and v0.3.6 each shipped on a single candidate, while v0.4.0 went through nine
-release candidates. A failing Trivy scan on the manager image is a
+release candidates and v0.4.1 through three. Since v0.4.1 each release (candidates too) also
+tags the `sdk` and `proto` Go modules as `sdk/vX.Y.Z` and `proto/vX.Y.Z` on the commit of
+`vX.Y.Z`: set the in-repository requires with `make set-module-versions VERSION=vX.Y.Z` in
+the release preparation, and check them with `make check-module-versions VERSION=vX.Y.Z`
+before you push the tag (see [Go modules](providers.md#go-modules-the-sdk-and-proto)). Never
+move or re-create a published tag. A failing Trivy scan on the manager image is a
 hard release blocker — see the v0.3.6 changelog for the OpenTelemetry CVE
 example.
 

@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # 15-Minute Quickstart
 
-This guide gets you up and running with VirtRigaud v0.4.0 in 15 minutes using a vSphere, Libvirt or Proxmox VE provider.
+This guide gets you up and running with VirtRigaud v0.4.1 in 15 minutes using a vSphere, Libvirt or Proxmox VE provider.
 
 ## Prerequisites
 
@@ -14,8 +14,12 @@ This guide gets you up and running with VirtRigaud v0.4.0 in 15 minutes using a 
 - Helm 3.8+ (3.14+ if you carry custom values across chart upgrades with `--reset-then-reuse-values`)
 - Access to a vSphere, Libvirt/KVM or Proxmox VE host
 
-!!! warning "Upgrading from v0.3.11?"
-    This page is for a new installation. v0.4.0 contains breaking changes
+!!! warning "Upgrading from v0.3.11 or v0.4.0?"
+    This page is for a new installation. v0.4.1 changes how Proxmox VMs get their
+    cloud-init user-data (SSH credentials in the Provider's Secret are now needed) and
+    makes `firmware: UEFI` effective on libvirt; see
+    [Upgrading from v0.4.0 to v0.4.1](../operations/upgrade.md#upgrading-from-v040-to-v041).
+    v0.4.0 contains breaking changes
     (cross-namespace references need `spec.consumerNamespaceSelector`,
     `spec.providerRef` is immutable once bound, vSphere needs a new vCenter
     privilege, libvirt hosts need a seed directory, and more). Read the
@@ -34,7 +38,7 @@ helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
 helm repo update virtrigaud
 
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
@@ -55,7 +59,7 @@ To skip CRDs if you manage them separately:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace virtrigaud-system \
   --create-namespace \
   --skip-crds \
@@ -71,9 +75,9 @@ resource names differ from the Helm chart (the Deployment is
 image, and apply server-side because the CRDs are too large for client-side apply:
 
 ```bash
-git clone --branch v0.4.0 https://github.com/projectbeskar/virtrigaud.git
+git clone --branch v0.4.1 https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
-(cd config/manager && kustomize edit set image controller=ghcr.io/projectbeskar/virtrigaud/manager:v0.4.0)
+(cd config/manager && kustomize edit set image controller=ghcr.io/projectbeskar/virtrigaud/manager:v0.4.1)
 kubectl create namespace virtrigaud-system
 kubectl apply --server-side --force-conflicts -k config/default
 ```
@@ -103,7 +107,7 @@ Confirm the running version through the metrics endpoint:
 ```bash
 kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8080:8080 &
 curl -s http://localhost:8080/metrics | grep '^virtrigaud_build_info'
-# virtrigaud_build_info{component="manager",...,version="v0.4.0"} 1
+# virtrigaud_build_info{component="manager",...,version="v0.4.1"} 1
 ```
 
 The `virtrigaud_circuit_breaker_state` and `virtrigaud_provider_tasks_inflight` families
@@ -138,7 +142,7 @@ spec:
     name: vsphere-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9090
       tls:
@@ -182,7 +186,7 @@ spec:
     name: libvirt-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
     service:
       port: 9090
       tls:
@@ -208,11 +212,24 @@ spec:
 
 ### Option C: Proxmox VE Provider
 
+The first VM below carries `spec.userData`, so the Proxmox provider builds a cloud-init
+seed for it on the PVE node over SSH. Besides the API token, the Secret therefore needs
+the SSH keys of `root` on the node the endpoint names, and the node needs `genisoimage`
+and `flock` (both are on a stock PVE node). In a PVE cluster, also set
+`PROVIDER_NODE_SELECTOR` in `spec.runtime.env` to that node. See
+[Proxmox cloud-init](../providers/proxmox.md#cloud-init-the-nocloud-seed).
+
 ```bash
+# ssh-keyscan from a trusted machine; compare the fingerprint with the node's
+ssh-keyscan -H proxmox.example.com > known_hosts
+
 kubectl create secret generic proxmox-credentials \
   --namespace default \
   --from-literal=token_id='virtrigaud@pve!vrtg-token' \
-  --from-literal=token_secret='your-token-secret'
+  --from-literal=token_secret='your-token-secret' \
+  --from-literal=ssh_user='root' \
+  --from-file=ssh_privatekey=./id_ed25519_virtrigaud \
+  --from-file=known_hosts=./known_hosts
 ```
 
 ```yaml
@@ -228,7 +245,7 @@ spec:
     name: proxmox-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1"
     service:
       port: 9090
       tls:
@@ -261,7 +278,7 @@ kubectl get providers
     "own namespace only", `{}` means "every namespace". A refused reference leaves the VM
     at `Ready=False`, reason `ConsumerNotAllowed`. The examples on this page keep
     everything in `default`, so no selector is needed. See
-    [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-references.md).
+    [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md).
 
 ## Step 4: Create a VM Class
 
@@ -463,7 +480,8 @@ supports.
 ### Clone a VM
 
 `VMClone` clones a VM through the same Provider (vSphere, Proxmox and libvirt; a libvirt
-full clone needs its source VM powered off, and libvirt linked clones are not supported).
+full clone needs its source VM powered off, and only vSphere makes linked clones: libvirt and
+Proxmox refuse them with `LinkedCloneUnsupported`).
 The clone stays powered off unless `options.powerOn: true`.
 
 ```yaml
@@ -493,7 +511,7 @@ present its source's identity.
 !!! warning "VMSet controller not active"
     The `VMSet` CRD is installed but the controller is a stub. Any `VMSet`
     resource shows `Ready=False / Reason=ControllerNotImplemented`.
-    Do not use VMSet in v0.4.0.
+    Do not use VMSet in v0.4.1.
 
 ```yaml
 apiVersion: infra.virtrigaud.io/v1beta1

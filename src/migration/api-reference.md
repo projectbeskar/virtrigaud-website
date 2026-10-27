@@ -5,24 +5,24 @@ SPDX-License-Identifier: Apache-2.0
 
 # VMMigration API Reference
 
-This page is aligned to **VirtRigaud v0.4.0** and reflects the
+This page is aligned to **VirtRigaud v0.4.1** and reflects the
 `infra.virtrigaud.io/v1beta1` `VMMigration` CRD and its controller as they ship.
 The authoritative sources are the Go types at
 `api/infra.virtrigaud.io/v1beta1/vmmigration_types.go` and the controller in
 `internal/controller/vmmigration_*.go`. For the generated field list see the
 [Full CRD Reference](../references/generated-crd-docs.md#vmmigration).
 
-!!! info "What v0.4.0 supports"
+!!! info "What v0.4.1 supports"
     `VMMigration` moves a VM's **primary disk** between `vsphere`, `libvirt` and
     `proxmox` providers, staged on an `s3` or `nfs` backend (`pvc` is the legacy
     compatibility path, see [storage.pvc](#storagepvc-pvcstorageconfig-compat-only)).
     A libvirt Provider with `topology: cluster` is also a target
     (**experimental**, `s3` and `nfs` only). The
-    [User Guide](user-guide.md#what-virtrigaud-v040-supports) lists which
+    [User Guide](user-guide.md#what-virtrigaud-v041-supports) lists which
     directions and backends were validated in a lab and which were not.
 
-!!! warning "Fields in the schema that the v0.4.0 controller does not use"
-    Several fields exist in the CRD but nothing reads or writes them in v0.4.0.
+!!! warning "Fields in the schema that the v0.4.1 controller does not use"
+    Several fields exist in the CRD but nothing reads or writes them in v0.4.1.
     Setting them has no effect, and the status fields stay empty:
 
     - **Spec:** `options.validationChecks.*` (no post-import check runs, so
@@ -53,7 +53,7 @@ source's advertised `supportedExportBackends` and the target's
 the requested `storage.type`, otherwise the migration fails with
 `storage backend "<type>" not supported by source provider ...`.
 
-The Helm chart in v0.4.0 has no value for `--enforce-provider-capabilities` or for
+The Helm chart in v0.4.1 has no value for `--enforce-provider-capabilities` or for
 `--migration-storage-allowed-hosts`. Add them to the manager Deployment's
 arguments yourself (for example with a Helm post-renderer or a kustomize patch).
 
@@ -86,7 +86,7 @@ namespace.
 | Source   | `.spec.source.vmRef.name`             | |
 | Target   | `.spec.target.name`                   | |
 | Phase    | `.status.phase`                       | |
-| Progress | `.status.progress.percentage`         | Always empty in v0.4.0 (not written). |
+| Progress | `.status.progress.percentage`         | Always empty in v0.4.1 (not written). |
 | Age      | `.metadata.creationTimestamp`         | |
 
 ## Spec
@@ -115,7 +115,7 @@ spec:
 !!! note "Only the primary disk is migrated"
     The controller sends one `ExportDisk` with an empty disk ID, which each provider
     resolves to the VM's primary (first, bootable) disk, and records one imported
-    disk on the target. Additional disks are not migrated in v0.4.0.
+    disk on the target. Additional disks are not migrated in v0.4.1.
 
 ### `spec.target` (`MigrationTarget`, required)
 
@@ -154,7 +154,7 @@ spec:
 | `diskFormat` | `qcow2`, `vmdk`, `raw` | `qcow2` | Format hint passed to the source provider's `ExportDisk`. The staged object is the source provider's native flattened format for `s3` (`vmdk` from vSphere, `qcow2` from libvirt and Proxmox) and always `qcow2` for `nfs`; the **target provider** converts on import. |
 | `compress` | bool | `false` | Asks the source provider to compress the export. Honoured for `qcow2` by providers that advertise export compression. |
 | `verifyChecksums` | bool | `true` | The import verifies the checksum the export reported. On `s3` that is an end-to-end SHA-256. On `nfs` no byte checksum exists (`qemu-img` computes none): integrity rests on the target's `qemu-img` check of the converted image. |
-| `timeout` | duration | `4h` in the schema | In v0.4.0 it **only bounds the wait for a source snapshot task**. It is not a limit on the whole migration. The schema defaults it to `4h` whenever `options` exists; the 2 h built-in default applies only when `options` is omitted. Each `ExportDisk` and `ImportDisk` call has its own 30-minute deadline in the manager's gRPC client. |
+| `timeout` | duration | `4h` in the schema | In v0.4.1 it **only bounds the wait for a source snapshot task**. It is not a limit on the whole migration. The schema defaults it to `4h` whenever `options` exists; the 2 h built-in default applies only when `options` is omitted. Each `ExportDisk` and `ImportDisk` call has its own 30-minute deadline in the manager's gRPC client. |
 | `retryPolicy` | `MigrationRetryPolicy` | unset | **Without a `retryPolicy` a failed migration is final.** See [Retry](#retry). |
 | `cleanupPolicy` | `Always`, `OnSuccess`, `Never` | `OnSuccess` | What happens to the staged disk, the landed disk, the source snapshot and the PVC. See [Cleanup](#cleanup). |
 | `validationChecks` | | | **Not used.** |
@@ -246,7 +246,7 @@ spec:
 
 | Layout | Name | Used by |
 |--------|------|---------|
-| `v2` | `vmmigrations_<namespace>_<name>_export.qcow2` | every migration that stages under v0.4.0 |
+| `v2` | `vmmigrations_<namespace>_<name>_export.qcow2` | every migration that stages under v0.4.1 |
 | `v1` | `vmmigrations-<namespace>-<name>-export.qcow2` | a migration an older manager already staged; it keeps the name for its import and its delete |
 
 The layout is recorded in `status.storageInfo.stagingLayout`. `v1` was ambiguous
@@ -333,7 +333,7 @@ a PVC named in `storage.pvc.name` is unmounted and left for its owner (event
 Staged files on the PVC are opened with no symbolic link followed; only a regular
 file with a single hard link is read (a PVC filesystem that reports another link
 count is refused). See the main repository's
-[PVC staging notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/examples/migration/README.md#pvc-staging-backend-legacy-what-the-provider-pods-mount).
+[PVC staging notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/examples/migration/README.md#pvc-staging-backend-legacy-what-the-provider-pods-mount).
 
 ### `spec.metadata` (`MigrationMetadata`, optional)
 
@@ -377,7 +377,7 @@ one.
   manager set `virtrigaud.io/migration`, `migration-claim`, `migrated-from`,
   `imported-disk-id`, `disk-checksum` and `migration-completed(-at)` on a
   `VirtualMachine`. See
-  [Reserved keys and the admission policy](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/admission-policy.md).
+  [Reserved keys and the admission policy](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/admission-policy.md).
 
 To fix `TargetVMNotOwned`: delete or rename the other `VirtualMachine`, or pick
 another `spec.target.name`, then create the migration again.
@@ -436,7 +436,7 @@ Other rules for a target in another namespace:
   `ConsumerNotAllowed`.
 
 Details and the query that finds affected objects before an upgrade:
-[Cross-namespace clone and migration targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-targets.md).
+[Cross-namespace clone and migration targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-targets.md).
 
 ## Cleanup
 
@@ -458,7 +458,7 @@ deleted.
 ### Staged disk: `StagingCleanup` and `DeleteStagedDisk`
 
 For `nfs` and `s3` the manager asks the **target** Provider to delete the staged
-object with the `DeleteStagedDisk` RPC ([ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0011-migration-staging-cleanup.md)).
+object with the `DeleteStagedDisk` RPC ([ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0011-migration-staging-cleanup.md)).
 The manager never touches the backend itself. The provider derives the object from the
 migration's namespace, name and stage and the recorded layout, so a tenant can only
 cause the deletion of a staging object of a migration in its own namespace. Staged
@@ -504,7 +504,7 @@ The in-use checks see only the VMs of one vCenter or libvirt host: do not share 
 landing datastore or the libvirt `default` pool directory with hypervisors the
 Provider does not manage, and run one replica of each provider. Disks left by
 migrations that failed before v0.4.0 are not touched: see
-[Leftovers from earlier releases](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md#leftovers-from-earlier-releases).
+[Leftovers from earlier releases](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md#leftovers-from-earlier-releases).
 
 ### Source snapshot and source VM: `SnapshotCleanup`, `PostMigrationCleanup`
 
@@ -554,6 +554,17 @@ with a constant message and one Warning event. What happens next:
   minute apart), and an `ExportDisk` / `ImportDisk` on a backend the provider lists in
   `resend_safe_export_backends` / `resend_safe_import_backends`, **35 minutes** after the
   marker (the call's deadline is 30 minutes), at most 3 times.
+- **Not held at all** when the provider can prove the failure (v0.4.1). A clustered libvirt
+  `ExportDisk` that an NFS server refused (`MNT3ERR_ACCES`), that an S3 service refused or
+  failed before the flattened disk was read to its end (`SignatureDoesNotMatch`,
+  `AccessDenied`, a 5xx), or that has an unusable S3 configuration, fails the attempt at once
+  and the retry policy applies, as for a single-host Provider. A flatten or convert whose
+  connection dropped, a host that stopped answering and an upload whose completing call may
+  have taken effect stay unknown. Likewise, a `VMMigration`'s failed attempt whose status
+  write conflicts with an edit, a write that fails for another reason, and a manager restart
+  before the write still leave the marker (unlike a `VirtualMachine`'s `Create`, a
+  single-host `VMClone`'s `Clone` and a `VMSnapshot`'s `SnapshotCreate`, whose answer is
+  written again): the migration is held until you confirm the attempt.
 - **Held for an operator** otherwise, including every single-host `SnapshotCreate` and
   any call through a provider image older than v0.4.0. Check what the call may have made
   (the snapshot named in the Warning event, the target's `-migrated` disk), remove it,
@@ -580,7 +591,7 @@ Remote host commands can outlive a cancelled call: single-host libvirt's flatten
 
 Alert on migrations stuck in a phase and on the three `...OutcomeUnknown` reasons. Full
 semantics, including which failures each provider treats as definite:
-[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/provider-call-outcomes.md).
+[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
 
 ## Administrator disk-size limit
 
@@ -604,7 +615,7 @@ a migration exported before the limit was set, which you delete and run again, o
 target provider that does not report `supports_import_size_limit`). A Warning event of
 the same reason accompanies it. Nothing is set unless the flag is given. An image or
 template larger than its class is not covered by the limit. See the chart README
-([Disk-size limit](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/charts/virtrigaud/README.md#disk-size-limit)).
+([Disk-size limit](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/charts/virtrigaud/README.md#disk-size-limit)).
 
 ## Migration into a clustered libvirt Provider (experimental)
 
@@ -630,12 +641,12 @@ placement is **waited for, not replaced**. The disk-space check is a filter, not
 reservation. Summary, prerequisites and limits: the
 [clustered libvirt guide](../guides/clustered/index.md); every condition and what to
 do about it:
-[Migration into a clustered provider](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
+[Migration into a clustered provider](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
 
 ## Status
 
 All fields are optional; the controller fills them in as it progresses. "Not written"
-means the v0.4.0 controller never sets the field.
+means the v0.4.1 controller never sets the field.
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -668,7 +679,7 @@ means the v0.4.0 controller never sets the field.
 
 Fields `currentPhase`, `totalBytes`, `transferredBytes`, `percentage`, `eta`,
 `transferRate` and `phaseStartTime` exist in the schema. **None is written in
-v0.4.0**, so the `Progress` column stays empty. The export and import are single
+v0.4.1**, so the `Progress` column stays empty. The export and import are single
 synchronous provider calls; follow `status.phase` and the provider log.
 
 ### `status.diskInfo` (`MigrationDiskInfo`)
@@ -1022,6 +1033,6 @@ another namespace or provider: grant it only to people trusted with that data.
 - [Full CRD Reference](../references/generated-crd-docs.md#vmmigration) - generated field reference.
 - [Clustered libvirt](../guides/clustered/index.md) - migrating into a clustered Provider.
 - [Resilience](../operations/resilience.md) - how the circuit breaker interacts with the many provider RPCs a migration issues.
-- [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) - storage-backend-agnostic migration.
-- [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0011-migration-staging-cleanup.md) - staging and landed-disk cleanup.
-- [Upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md) - upgrade guide.
+- [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) - storage-backend-agnostic migration.
+- [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0011-migration-staging-cleanup.md) - staging and landed-disk cleanup.
+- [Upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md) - upgrade guide.

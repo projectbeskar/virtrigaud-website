@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The vSphere provider manages virtual machines on VMware vSphere (vCenter Server and standalone ESXi) via the `govmomi` SDK. It is the most mature provider in the VirtRigaud tree.
 
-This page is aligned to **VirtRigaud v0.4.0**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/vsphere/server.go`.
+This page is aligned to **VirtRigaud v0.4.1**. Capability claims trace back to the provider's `GetCapabilities` response in `internal/providers/vsphere/server.go`.
 
 ## Capabilities at a glance
 
@@ -37,7 +37,7 @@ For the full cross-provider matrix and resilience / observability story, see:
 
 ## Behaviour at a glance: snapshot, revert, clone, reconfigure, disks
 
-| Area | vSphere behaviour at v0.4.0 | Code |
+| Area | vSphere behaviour at v0.4.1 | Code |
 |------|-----------------------------|------|
 | Snapshot create | `CreateSnapshot(name, description, includeMemory, quiesce=false)`; waits for the task in the call (no `TaskRef`). The snapshot id is the snapshot's managed-object id. A template or an image artifact is refused (`VM_IS_IMAGE_ARTIFACT`). | `server.go` (`SnapshotCreate`), `vm_artifact_guard.go` |
 | Snapshot revert | `spec.snapshot.revertToRef`; finds the snapshot by id or name and calls `RevertToSnapshot_Task` with `suppressPowerOn=false`, waiting in the call. A snapshot taken **with memory** powers the VM on; the controller then applies `spec.powerState`. | `server.go` (`SnapshotRevert`) |
@@ -110,7 +110,7 @@ spec:
   insecureSkipVerify: false
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9443
       tls:
@@ -120,7 +120,7 @@ spec:
         insecureSkipVerify: false
 ```
 
-A Provider used from other namespaces must set `spec.consumerNamespaceSelector`; see [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-references.md).
+A Provider used from other namespaces must set `spec.consumerNamespaceSelector`; see [Cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md).
 
 ### Service account permissions
 
@@ -246,7 +246,7 @@ spec:
     folder: "/vm/applications"   # also the import folder for prepared templates
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9443
       tls:
@@ -358,7 +358,7 @@ spec:
 - **Give each tenant's Provider its own import folder** and scope its vCenter account to it: vCenter folder permissions propagate, and anyone who can create, rename or mark as template in the import folder can plant a matching template that is then reused.
 - A manager older than ADR-0009 is still served the old way (a template named after the `VMImage`) for this release, with a warning and the counter `virtrigaud_provider_image_prepare_legacy_requests_total{provider_type="vsphere"}`; alert on it.
 
-Full rules, failure classes and the stamp: [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/image-preparation.md#vsphere-identity-safe-prepared-templates).
+Full rules, failure classes and the stamp: [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/image-preparation.md#vsphere-identity-safe-prepared-templates).
 
 ## Complete VM example
 
@@ -448,7 +448,7 @@ vCenter allows several VMs with one name in different folders, and the provider 
 - **Adoption** (`virtrigaud.io/adopt-vms`) lists ordinary VMs only: no template, no prepared-image artifact, and no VM whose owner stamp is unreadable. A VM with a readable stamp is listed with its owner UID and skipped while that `VirtualMachine` exists. A VM adoption takes over is stamped with its adopting `VirtualMachine`.
 - **Existing VMs** (created before v0.4.0) carry no stamp. VMs already bound (`status.id` set) are unaffected: every operation after `Create` uses the MOID. A create that collides with an unstamped VM fails with `ProviderConflict` instead of taking it over; adopt the VM to recover. **The protection needs the v0.4.0 vSphere provider**: an older provider ignores the owner and binds by name across the whole datacenter.
 
-Full details: [VM ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-ownership.md#vsphere).
+Full details: [VM ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-ownership.md#vsphere).
 
 ## Reconfigure
 
@@ -468,7 +468,7 @@ Other refusals before anything changes: a CPU count that is not a multiple of th
 
 **Which disk a size goes to.** `Reconfigure` **never touches the root disk**: the VMClass `diskDefaults.size` is applied by `Create` only. A `spec.disks[].sizeGiB` goes to the additional disk `Create` attached for that entry, found by the name recorded with it in the VM's ExtraConfig (`virtrigaud.disk.additional.<N>.name`), so reordering `spec.disks` never moves a size to another disk. The provider leaves a disk alone, and logs why, when no disk is recorded under the entry's name (the entry was added after the VM was created, the VM was adopted, or an earlier release attached it without a name), when the name is ambiguous, or when vCenter cannot extend it (a delta disk because the VM has snapshots or is a linked clone, or a physical-mode RDM). **A disk-size change alone does not trigger a `Reconfigure`**: the manager sends one when the effective CPU or memory changes, and the disk sizes travel with it.
 
-Full contract: [Reconfigure results](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/reconfigure-results.md#vsphere-changes-a-running-vm-cannot-take).
+Full contract: [Reconfigure results](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/reconfigure-results.md#vsphere-changes-a-running-vm-cannot-take).
 
 ## Snapshots, revert and clone
 
@@ -492,13 +492,13 @@ The provider requests no quiesce (`quiesce=false`; the `snapshotConfig.quiesce` 
 
 ### Revert
 
-Name the `VMSnapshot` in `spec.snapshot.revertToRef` of the `VirtualMachine`, with the VM powered off (`spec.powerState: "Off"`). The provider reverts with `suppressPowerOn=false`, waits for the task in the call and returns no task. A snapshot taken **with memory** leaves the VM powered on after the revert; the controller then applies `spec.powerState` (a VM whose spec says `Off` is powered off again). Watch `status.snapshotRevert` and the `SnapshotReverted` condition; the request is sent at most once, and removing and re-setting the field requests it again. The revert was exercised in the project's lab on a real vCenter during the v0.4.0 release candidates, and is covered by controller tests and the vcsim simulator. See [Reverting a VirtualMachine to a VMSnapshot](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-snapshot-revert.md).
+Name the `VMSnapshot` in `spec.snapshot.revertToRef` of the `VirtualMachine`, with the VM powered off (`spec.powerState: "Off"`). The provider reverts with `suppressPowerOn=false`, waits for the task in the call and returns no task. A snapshot taken **with memory** leaves the VM powered on after the revert; the controller then applies `spec.powerState` (a VM whose spec says `Off` is powered off again). Watch `status.snapshotRevert` and the `SnapshotReverted` condition; the request is sent at most once, and removing and re-setting the field requests it again. The revert was exercised in the project's lab on a real vCenter during the v0.4.0 release candidates, and is covered by controller tests and the vcsim simulator. See [Reverting a VirtualMachine to a VMSnapshot](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md).
 
 ### Clone
 
 `VMClone` clones a vSphere VM with `CloneVM_Task` on the Provider's default cluster, datastore and folder; the source may be running. `type: LinkedClone` creates a delta disk on the source's most recent root snapshot, creating a `clone-base-<timestamp>` snapshot on the source if it has none. The clone is left powered off (unless `spec.options.powerOn: true`) and is stamped with its target `VirtualMachine`; a clone request sent again finds the stamped clone instead of cloning twice.
 
-**Clone identity.** A clone copies its source's ExtraConfig, including `guestinfo.metadata` whose `instance-id` is the source's VM name, so cloud-init would treat the clone's first boot as the same instance and keep the source's SSH host keys and hostname. The clone's `CloneVM_Task` therefore rewrites `guestinfo.metadata` with `instance-id: virtrigaud-<target VirtualMachine uid>` and the target's hostname (and a `#cloud-config` `guestinfo.userdata`'s top-level `hostname:`/`fqdn:`). cloud-init sees a new instance on first boot, regenerates the SSH host keys and re-runs every per-instance module (`runcmd`, `packages`, `users`). It does **not** regenerate `/etc/machine-id`; seal the source (`cloud-init clean --machine-id`) if clones need their own. A source with no `guestinfo.metadata` is left untouched (the VMware datasource then takes the instance-id from the BIOS UUID, which vCenter regenerates for a clone). The vSphere provider applies **only the hostname and domain** of a clone's customization: inline or Secret user-data in the `VMClone` is logged and not applied, so a clone boots with the **source's user-data**, secrets included. Treat `create` on `vmclones` as read access to the source VM's data. Details: [A clone's host identity](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-ownership.md#a-clones-host-identity).
+**Clone identity.** A clone copies its source's ExtraConfig, including `guestinfo.metadata` whose `instance-id` is the source's VM name, so cloud-init would treat the clone's first boot as the same instance and keep the source's SSH host keys and hostname. The clone's `CloneVM_Task` therefore rewrites `guestinfo.metadata` with `instance-id: virtrigaud-<target VirtualMachine uid>` and the target's hostname (and a `#cloud-config` `guestinfo.userdata`'s top-level `hostname:`/`fqdn:`). cloud-init sees a new instance on first boot, regenerates the SSH host keys and re-runs every per-instance module (`runcmd`, `packages`, `users`). It does **not** regenerate `/etc/machine-id`; seal the source (`cloud-init clean --machine-id`) if clones need their own. A source with no `guestinfo.metadata` is left untouched (the VMware datasource then takes the instance-id from the BIOS UUID, which vCenter regenerates for a clone). The vSphere provider applies **only the hostname and domain** of a clone's customization: inline or Secret user-data in the `VMClone` is logged and not applied, so a clone boots with the **source's user-data**, secrets included. Treat `create` on `vmclones` as read access to the source VM's data. Details: [A clone's host identity](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-ownership.md#a-clones-host-identity).
 
 ## Virtual hardware version
 
@@ -506,7 +506,7 @@ The provider can create VMs at a chosen virtual hardware version (the `vsphere.h
 
 ## `status.ips`
 
-`Describe` reads `guest.ipAddress` and `guest.net` from **VMware Tools**, so a guest without Tools running shows no address. The provider skips loopback and link-local addresses of `guest.net`, and the manager then applies one filter to every provider's answer (loopback, unspecified, link-local, multicast, non-addresses and duplicates are dropped; the provider's order is kept). See [`status.ips`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/vm-status-ips.md).
+`Describe` reads `guest.ipAddress` and `guest.net` from **VMware Tools**, so a guest without Tools running shows no address. The provider skips loopback and link-local addresses of `guest.net`, and the manager then applies one filter to every provider's answer (loopback, unspecified, link-local, multicast, non-addresses and duplicates are dropped; the provider's order is kept). See [`status.ips`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-status-ips.md).
 
 ## Async task tracking
 
@@ -547,7 +547,7 @@ spec:
     name: vsphere-credentials-a
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9443
       tls:
@@ -567,7 +567,7 @@ spec:
     name: vsphere-credentials-b
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9443
       tls:

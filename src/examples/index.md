@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Examples
 
-These examples mirror the `examples/` directory of the VirtRigaud repository at **v0.4.0**. All of them use the `infra.virtrigaud.io/v1beta1` API, and every `infra.virtrigaud.io` object in them was checked against the v0.4.0 CRDs with a strict server-side dry-run (CRD schema and CEL rules), so none carries an unknown field, a wrong type or an invalid enum value. The webhooks are not part of that check. Provider images are pinned to `ghcr.io/projectbeskar/virtrigaud/provider-<type>:v0.4.0`.
+These examples mirror the `examples/` directory of the VirtRigaud repository at **v0.4.1**. All of them use the `infra.virtrigaud.io/v1beta1` API, and every `infra.virtrigaud.io` object in them was checked against the v0.4.1 CRDs with a strict server-side dry-run (CRD schema and CEL rules), so none carries an unknown field, a wrong type or an invalid enum value. The webhooks are not part of that check. Provider images are pinned to `ghcr.io/projectbeskar/virtrigaud/provider-<type>:v0.4.1`.
 
 !!! warning "Replace the placeholders before you apply anything"
     Endpoints (`vcenter.example.com`, `pve.example.com`, `192.0.2.x`), Secret names, datastores, template names and image URLs are placeholders. Credential Secrets contain `REDACTED` values.
@@ -22,11 +22,11 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 | File | What it shows |
 |------|---------------|
 | [complete-example.yaml](complete-example.yaml) | End to end on vSphere: Secret, Provider, VMClass, VMImage, VMNetworkAttachment and VirtualMachine |
-| [vm-ubuntu-small.yaml](vm-ubuntu-small.yaml) | A small Ubuntu VirtualMachine (its `spec.lifecycle` block is accepted by the API but not executed in v0.4.0) |
+| [vm-ubuntu-small.yaml](vm-ubuntu-small.yaml) | A small Ubuntu VirtualMachine (its `spec.lifecycle` block is accepted by the API but not executed in v0.4.1) |
 | [vmclass-small.yaml](vmclass-small.yaml) | A VMClass (CPU, memory, disk defaults, firmware, guest-tools policy, `extraConfig`) |
 | [vmimage-ubuntu.yaml](vmimage-ubuntu.yaml) | A VMImage |
 | [vmnetwork-app.yaml](vmnetwork-app.yaml) | A VMNetworkAttachment |
-| [vmimage-prepare-on-create.yaml](vmimage-prepare-on-create.yaml) | A libvirt VMImage with a URL source and a VirtualMachine that uses it: the provider downloads and imports the image before the VM is created (see [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/image-preparation.md)) |
+| [vmimage-prepare-on-create.yaml](vmimage-prepare-on-create.yaml) | A libvirt VMImage with a URL source and a VirtualMachine that uses it: the provider downloads and imports the image before the VM is created (see [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/image-preparation.md)) |
 | [cloud-init-with-metadata.yaml](cloud-init-with-metadata.yaml) | Cloud-init `userData` and `metaData` on a VirtualMachine, inline and from a Secret, and the default meta-data |
 
 ## Providers and credentials
@@ -37,15 +37,15 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 | [provider-libvirt.yaml](provider-libvirt.yaml) | A single-host libvirt Provider |
 | [libvirt-complete-example.yaml](libvirt-complete-example.yaml) | A complete libvirt deployment, including the image-directory and seed-directory settings (`VIRTRIGAUD_LIBVIRT_IMAGE_DIRS`, `VIRTRIGAUD_LIBVIRT_SEED_DIR`) |
 | [libvirt-advanced-example.yaml](libvirt-advanced-example.yaml) | A libvirt Provider with a host-resident image, a network and a VM |
-| [proxmox-complete-example.yaml](proxmox-complete-example.yaml) | A complete Proxmox VE setup: credentials, Provider, classes, images, networks, VMs and snapshots |
+| [proxmox-complete-example.yaml](proxmox-complete-example.yaml) | A complete Proxmox VE setup: credentials (including the SSH keys a VM with user-data needs since v0.4.1), Provider, classes, images, networks, VMs and snapshots |
 | [multi-provider-example.yaml](multi-provider-example.yaml) | vSphere and libvirt Providers in one cluster, with shared classes |
-| [shared-provider-consumer-namespaces.yaml](shared-provider-consumer-namespaces.yaml) | A Provider, VMClass and VMImage shared with other namespaces through `spec.consumerNamespaceSelector`, and a tenant VM that uses them ([cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/cross-namespace-references.md)) |
+| [shared-provider-consumer-namespaces.yaml](shared-provider-consumer-namespaces.yaml) | A Provider, VMClass and VMImage shared with other namespaces through `spec.consumerNamespaceSelector`, and a tenant VM that uses them ([cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md)) |
 | [vm-adoption-example.yaml](vm-adoption-example.yaml) | Bringing existing hypervisor VMs under management with the adoption annotations, per provider, and detaching a VM with `virtrigaud.io/orphan-on-delete` |
-| [secrets/](secrets/vsphere-creds.yaml) | Credential Secrets per provider: [vSphere](secrets/vsphere-creds.yaml), [libvirt](secrets/libvirt-creds.yaml) (SSH key or password), [Proxmox](secrets/proxmox-creds.yaml) (API token or username/password) |
+| [secrets/](secrets/vsphere-creds.yaml) | Credential Secrets per provider: [vSphere](secrets/vsphere-creds.yaml), [libvirt](secrets/libvirt-creds.yaml) (SSH key or password), [Proxmox](secrets/proxmox-creds.yaml) (API token or username/password, and the SSH keys for user-data and migration) |
 
 ## Clustered libvirt (experimental)
 
-`topology: cluster` is opt-in and experimental in v0.4.0. See the [Clustered libvirt guide](../guides/clustered/index.md).
+`topology: cluster` is opt-in and experimental in v0.4.1. See the [Clustered libvirt guide](../guides/clustered/index.md).
 
 | File | What it shows |
 |------|---------------|
@@ -64,6 +64,7 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 | [vsphere-static-ip.yaml](vsphere-static-ip.yaml) | A static IPv4 address through `guestinfo.network.*` (vSphere; the template must contain an agent that reads the keys) |
 | [disk-sizing-examples.yaml](disk-sizing-examples.yaml) | Disk sizes from the VMClass, per provider, with the cross-namespace grants the VMs need |
 | [graceful-shutdown-examples.yaml](graceful-shutdown-examples.yaml) | `OffGraceful` and `Off` power states ([Graceful shutdown](../guides/advanced/graceful-shutdown.md)); the `spec.lifecycle` block is accepted but not executed |
+| [libvirt-uefi-secureboot.yaml](libvirt-uefi-secureboot.yaml) | libvirt VMClasses with `firmware: UEFI` and with Secure Boot, TPM and VT-d, and a VM that uses them (the host needs an OVMF package; see [libvirt firmware](../providers/libvirt.md#firmware-secure-boot-and-platform-features)). Specific to this site: it has no counterpart in the repository's `examples/` |
 | [nested-virtualization.yaml](nested-virtualization.yaml) | VMClasses and VMs with nested virtualization (see [Nested virtualization](../guides/advanced/nested-virtualization.md)) |
 | [v021-feature-showcase.yaml](v021-feature-showcase.yaml) | The v0.2.1 feature set in one file (historical; kept valid against the current schema) |
 
@@ -75,7 +76,7 @@ These examples mirror the `examples/` directory of the VirtRigaud repository at 
 |------|---------------|
 | [vmclone-basic.yaml](vmclone-basic.yaml) | The basic VMClone: `source.vmRef`, `target.name`, `options.type`, `options.powerOn`, and the optional cross-namespace target |
 | [advanced/vsphere-clone-example.yaml](advanced/vsphere-clone-example.yaml) | Several VMs from one vSphere template, and a VMClone of an existing VM |
-| [advanced/proxmox-clone-example.yaml](advanced/proxmox-clone-example.yaml) | Full and linked VMClones on Proxmox VE |
+| [advanced/proxmox-clone-example.yaml](advanced/proxmox-clone-example.yaml) | Full VMClones on Proxmox VE, one with user-data of its own (Proxmox serves full clones only) |
 
 Minimal example (see `vmclone-basic.yaml` for all fields):
 
@@ -92,7 +93,7 @@ spec:
   target:
     name: my-cloned-vm
   options:
-    type: FullClone           # or LinkedClone (vSphere, Proxmox)
+    type: FullClone           # or LinkedClone (vSphere only)
     powerOn: false            # the default: the clone is left powered off
 ```
 
@@ -101,7 +102,7 @@ spec:
 
 ## Migration
 
-`VMMigration` moves a VM between providers. S3 and NFS staging are the validated backends (S3 for every pair among vSphere, libvirt and Proxmox VE; NFS for all but vSphere ⇄ Proxmox VE, see the [validation tables](../migration/user-guide.md#what-virtrigaud-v040-supports)); the PVC backend is a legacy compatibility path that does not work for Proxmox or for host-resident libvirt disks. See the [Migration user guide](../migration/user-guide.md).
+`VMMigration` moves a VM between providers. S3 and NFS staging are the validated backends (S3 for every pair among vSphere, libvirt and Proxmox VE; NFS for all but vSphere ⇄ Proxmox VE, see the [validation tables](../migration/user-guide.md#what-virtrigaud-v041-supports)); the PVC backend is a legacy compatibility path that does not work for Proxmox or for host-resident libvirt disks. See the [Migration user guide](../migration/user-guide.md).
 
 | File | What it shows |
 |------|---------------|
@@ -151,7 +152,7 @@ kubectl patch virtualmachine my-vm --type=merge \
   -p '{"spec":{"classRef":{"name":"medium"}}}'
 ```
 
-The examples are files in this site's source tree; download the ones you need, or take them from the `examples/` directory of the [repository](https://github.com/projectbeskar/virtrigaud/tree/v0.4.0/examples).
+The examples are files in this site's source tree; download the ones you need, or take them from the `examples/` directory of the [repository](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/examples).
 
 ## File organization
 
@@ -179,7 +180,7 @@ examples/
 
 ## Version compatibility
 
-- **v0.4.0**: every example here is valid against the v0.4.0 CRDs.
+- **v0.4.1**: every example here is valid against the v0.4.1 CRDs.
 - **v0.3.x**: most examples apply unchanged, but several fields and behaviours differ (for example `VMClone` on libvirt, S3 and NFS migration, `consumerNamespaceSelector`). Use the examples of the matching release.
 - **v0.2.x and older**: not supported.
 

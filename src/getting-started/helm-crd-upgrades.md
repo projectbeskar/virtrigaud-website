@@ -9,12 +9,22 @@ SPDX-License-Identifier: Apache-2.0
 
 The VirtRigaud Helm chart applies its CRDs on `helm install` **and** `helm upgrade` with a hook Job, so you do not manage CRDs by hand. Helm itself never upgrades CRDs from a chart's `crds/` directory; this hook closes that gap.
 
+!!! info "Upgrading from v0.4.0 to v0.4.1"
+    v0.4.1 has **no CRD schema change** (only the `description` texts of the CRDs differ, so `kubectl explain` shows corrected text) and no RBAC or `values.yaml` change beyond comments. The roll order is the same (CRDs, manager, providers), and `helm upgrade --version 0.4.1` re-tags the images. See [What changes on upgrade from v0.4.0 to v0.4.1](#what-changes-on-upgrade-from-v040-to-v041), and the [Upgrade Guide](../operations/upgrade.md#upgrading-from-v040-to-v041) for the actions it needs before you roll the Proxmox and libvirt providers.
+
 !!! warning "Upgrading from v0.3.11"
-    v0.4.0 has a required order (CRDs, then cross-namespace grants, then the manager, then the providers) and several breaking changes. Read the [Upgrade Guide](../operations/upgrade.md) and the [release notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md) before running `helm upgrade`.
+    v0.4.0 has a required order (CRDs, then cross-namespace grants, then the manager, then the providers) and several breaking changes. Read the [Upgrade Guide](../operations/upgrade.md) and the [release notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md) before running `helm upgrade`.
+
+## What changes on upgrade from v0.4.0 to v0.4.1
+
+- **CRDs:** no schema change. The 12 CRDs differ from v0.4.0's only in `description` texts (fields that nothing acts on now say "Accepted but not acted on in this release.", status fields no controller writes say "Not populated in this release."). One new condition reason, `RevertNotPerformed`, is a Go constant with no schema effect. Applying the CRDs is safe at any point.
+- **Chart:** with `webhooks.enabled=true` the chart renders one more validating webhook entry, `vvmclone-customization.kb.io` (failure policy always `Ignore`, timeout 5s), which only returns an admission warning when a `VMClone` sets a customization field that may hold a secret. `config/webhook` for Kustomize gains it too. Nothing else in the templates changed.
+- **kubectl image of the CRD hook:** updated to kubectl 1.35.9 on Alpine 3.24 (was 1.32.0 on 3.20), which cuts the HIGH and CRITICAL image-scan findings that have a fix from 37 to 6.
+- **`virtrigaud-provider-runtime` chart:** deprecated and removed in the next minor release. It was never published to the Helm repository; see the [Upgrade Guide](../operations/upgrade.md#deprecated-the-virtrigaud-provider-runtime-chart).
 
 ## What changes on upgrade from v0.3.11 to v0.4.0
 
-The CRD-upgrade hook applies these changes when you run `helm upgrade ... --version 0.4.0`:
+The CRD-upgrade hook applies these changes when you upgrade from v0.3.11 with `helm upgrade ... --version 0.4.1` (they are the changes of v0.4.0; v0.4.1 adds no schema change):
 
 - **New CRDs:** `hosts.infra.virtrigaud.io` and `hostpools.infra.virtrigaud.io` (clustered libvirt providers). The chart now installs 12 CRDs.
 - **`spec.consumerNamespaceSelector`** on `Provider`, `VMClass` and `VMImage`. A reference to one of these in another namespace is refused (`ConsumerNotAllowed`) unless this field selects the referencing namespace.
@@ -35,9 +45,9 @@ No field is removed. The admission rules (`spec.providerRef` and `spec.type` imm
     helm hook applies the CRDs in the same `helm upgrade` that rolls the manager. Apply the CRDs yourself first:
 
     ```bash
-    kubectl apply --server-side --force-conflicts -f config/crd/bases   # from the v0.4.0 release checkout
+    kubectl apply --server-side --force-conflicts -f config/crd/bases   # from the v0.4.1 release checkout
     # set spec.consumerNamespaceSelector on the shared objects, then:
-    helm upgrade virtrigaud virtrigaud/virtrigaud --version 0.4.0 -n virtrigaud-system --reset-then-reuse-values
+    helm upgrade virtrigaud virtrigaud/virtrigaud --version 0.4.1 -n virtrigaud-system --reset-then-reuse-values
     ```
 
     The manager's readiness probe fails while the `VirtualMachine`, `Provider`, `VMClass` or `VMImage`
@@ -69,7 +79,7 @@ VirtRigaud uses **Helm Hooks** with a Kubernetes Job to automatically apply CRDs
 VirtRigaud builds and publishes its own `kubectl` image as part of the release process. This image:
 
 - Based on Alpine Linux for minimal size (~50MB)
-- Includes kubectl 1.32.0 binary from official Kubernetes releases
+- Includes the kubectl binary from official Kubernetes releases (1.35.9 on Alpine 3.24 since v0.4.1; it was 1.32.0 on Alpine 3.20)
 - Includes bash and shell for scripting support
 - Runs as non-root user (UID 65532)
 - Verified with SHA256 checksums
@@ -147,7 +157,7 @@ crdUpgrade:
   
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl  # VirtRigaud kubectl image
-    tag: "v0.4.0"  # Set by the release to match the VirtRigaud version
+    tag: "v0.4.1"  # Set by the release to match the VirtRigaud version
   
   backoffLimit: 3
   ttlSecondsAfterFinished: 300
@@ -212,7 +222,7 @@ metadata:
 spec:
   source:
     chart: virtrigaud
-    targetRevision: 0.4.0
+    targetRevision: 0.4.1
     helm:
       values: |
         crdUpgrade:
@@ -236,7 +246,7 @@ spec:
   chart:
     spec:
       chart: virtrigaud
-      version: 0.4.0
+      version: 0.4.1
   values:
     crdUpgrade:
       enabled: true  # Automatic upgrades work!
@@ -276,7 +286,7 @@ kubectl describe job -n virtrigaud-system -l app.kubernetes.io/component=crd-upg
     helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
     helm repo update
     helm install virtrigaud virtrigaud/virtrigaud \
-      --version 0.4.0 \
+      --version 0.4.1 \
       --namespace virtrigaud-system \
       --create-namespace
     ```
@@ -317,7 +327,7 @@ kubectl describe clusterrole <role-name>
 crdUpgrade:
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl
-    tag: "v0.4.0"  # Use matching VirtRigaud version
+    tag: "v0.4.1"  # Use matching VirtRigaud version
     pullPolicy: IfNotPresent
 ```
 

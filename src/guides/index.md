@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Guides
 
-This section holds the guides for working with VirtRigaud **v0.4.0**: setting up providers, running a clustered libvirt Provider, and the advanced lifecycle topics (snapshots and revert, reconfiguration, cloning, graceful shutdown, nested virtualization, provider internals).
+This section holds the guides for working with VirtRigaud **v0.4.1**: setting up providers, running a clustered libvirt Provider, and the advanced lifecycle topics (snapshots and revert, reconfiguration, cloning, graceful shutdown, nested virtualization, provider internals).
 
 ## What is a Provider?
 
@@ -51,7 +51,7 @@ See [Provider Architecture](advanced/remote-providers.md) for the details.
 |----------|-------------|-------|
 | **vSphere** | [vSphere provider](../providers/vsphere.md) | VMware vSphere through govmomi |
 | **libvirt** | [Libvirt provider](../providers/libvirt.md) | KVM/QEMU over SSH; single host, or a [clustered Provider](clustered/index.md) (experimental) |
-| **Proxmox VE** | [Proxmox provider](../providers/proxmox.md) | PVE REST API plus SSH for disk transfer |
+| **Proxmox VE** | [Proxmox provider](../providers/proxmox.md) | PVE REST API plus SSH for the cloud-init seed (VMs with user-data) and disk transfer |
 
 Each setup guide covers prerequisites, credentials, the Provider configuration, a first VM and troubleshooting. Not all providers support the same features: see the [Provider capabilities matrix](../providers/providers-capabilities.md) for the authoritative comparison.
 
@@ -59,12 +59,12 @@ Each setup guide covers prerequisites, credentials, the Provider configuration, 
 
 | Guide | Covers |
 |-------|--------|
-| [Clustered libvirt](clustered/index.md) | `topology: cluster`: one Provider in front of several libvirt hosts, with `Host` and `HostPool`, a placement scheduler and routed per-host lifecycle (experimental in v0.4.0). Continues with [placement](clustered/placement.md), [operations and troubleshooting](clustered/operations.md) and [backup, restore and re-attach](clustered/backup-restore.md) |
+| [Clustered libvirt](clustered/index.md) | `topology: cluster`: one Provider in front of several libvirt hosts, with `Host` and `HostPool`, a placement scheduler and routed per-host lifecycle (experimental in v0.4.1). Continues with [placement](clustered/placement.md), [operations and troubleshooting](clustered/operations.md) and [backup, restore and re-attach](clustered/backup-restore.md) |
 | [VM snapshots and revert](vm-snapshots.md) | `VMSnapshot`, `spec.snapshot.revertToRef`, `status.snapshotRevert`, the `SnapshotReverted` condition, and the per-provider rules |
 | [VM status reference](vm-status.md) | Phases, conditions and their reasons, `status.ips`, and how to read and release a held (outcome unknown) provider call |
 | [Security model and multi-tenancy](security-model.md) | VM ownership, cross-namespace references, admission policy, the Provider in-use finalizer, identity-safe image preparation, private cloud-init seeds, migration storage, the disk-size limit, and what to check on upgrade |
 | [Advanced VM lifecycle](advanced/advanced-lifecycle.md) | Phases and conditions, reconfiguration results (`RestartRequired`, `ResizePendingPowerOff`), snapshots and `spec.snapshot.revertToRef`, `spec.disks` and `DisksApplied`, `status.ips`, image preparation, `orphan-on-delete`, adoption, `providerRef` immutability |
-| [VM cloning](advanced/vm-cloning.md) | `VMClone`: scope, per-provider rules (libvirt full clones need a powered-off source; libvirt linked clones are disabled), new cloud-init identity, owner stamping, cross-namespace targets |
+| [VM cloning](advanced/vm-cloning.md) | `VMClone`: scope, per-provider rules (libvirt full clones need a powered-off source; libvirt and Proxmox serve full clones only), new cloud-init identity, customization secrets that are not sent, owner stamping, cross-namespace targets |
 | [Graceful shutdown](advanced/graceful-shutdown.md) | `powerState: OffGraceful`: what each provider does and how it falls back |
 | [Nested virtualization](advanced/nested-virtualization.md) | `performanceProfile.nestedVirtualization`: what vSphere and libvirt apply, and that Proxmox ignores it |
 | [Provider architecture](advanced/remote-providers.md) | What the manager creates for a Provider, TLS, `consumerNamespaceSelector`, `topology`, the in-use finalizer, security model |
@@ -114,7 +114,7 @@ See the [Security guide](../operations/security.md) for the full recommendations
 
 - [Provider documentation](../providers/vsphere.md): [vSphere](../providers/vsphere.md), [Libvirt](../providers/libvirt.md), [Proxmox](../providers/proxmox.md)
 - [Troubleshooting](../getting-started/index.md#troubleshooting)
-- [Examples](../examples/index.md): working configurations, validated against the v0.4.0 CRDs
+- [Examples](../examples/index.md): working configurations, validated against the v0.4.1 CRDs
 - [GitHub issues](https://github.com/projectbeskar/virtrigaud/issues)
 
 ## Next steps

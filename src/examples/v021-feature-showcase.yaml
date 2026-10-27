@@ -19,7 +19,7 @@ spec:
   insecureSkipVerify: false
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     replicas: 1
     service:
       port: 9090
@@ -183,7 +183,7 @@ spec:
   
   # v0.2.1: Enhanced lifecycle management with graceful shutdown
   # NOTE: spec.lifecycle hooks and gracefulShutdownTimeout are accepted by the API but not
-  # executed or sent to the provider in v0.4.0 (see the "Advanced VM lifecycle" guide).
+  # executed or sent to the provider in v0.4.1 (see the "Advanced VM lifecycle" guide).
   lifecycle:
     gracefulShutdownTimeout: "180s"  # 3 minutes for complex applications
     

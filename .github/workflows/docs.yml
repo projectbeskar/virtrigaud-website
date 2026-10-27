@@ -65,7 +65,7 @@ jobs:
           # exactly (setup-go@v6 sets GOTOOLCHAIN=local: no auto-download of a
           # newer toolchain). Read the version from the release being
           # documented, as the VirtRigaud CI does, so a patch-level bump there
-          # (v0.4.0 requires go 1.26.10) never breaks this build.
+          # (v0.4.1 requires go 1.26.10) never breaks this build.
           go-version-file: virtrigaud/go.mod
 
       - name: Install Go documentation tools

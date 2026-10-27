@@ -5,11 +5,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # Creating Your First Virtual Machine
 
-This guide walks through creating a complete, working virtual machine from start to finish using VirtRigaud v0.4.0.
+This guide walks through creating a complete, working virtual machine from start to finish using VirtRigaud v0.4.1.
 
 ## Prerequisites
 
-- VirtRigaud v0.4.0 installed in your Kubernetes cluster
+- VirtRigaud v0.4.1 installed in your Kubernetes cluster
 - A configured Provider (vSphere, Libvirt, or Proxmox)
 - `kubectl` access to your cluster
 
@@ -48,7 +48,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         name: vsphere-creds
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
         service:
           port: 9090
           tls:
@@ -89,7 +89,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         name: libvirt-creds
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
         service:
           port: 9090
           tls:
@@ -109,12 +109,23 @@ Create credentials for your hypervisor, then create the Provider CR.
 
 === "Proxmox"
 
+    The VM in Step 4 carries `spec.userData`, so the Proxmox provider builds its cloud-init
+    seed on the PVE node over SSH (since v0.4.1). The Secret needs the SSH keys of `root` on the
+    node the endpoint names, and the node needs `genisoimage` and `flock`:
+
     ```bash
+    # known_hosts: ssh-keyscan -H proxmox.example.com from a trusted machine
     kubectl create secret generic proxmox-creds \
       --namespace default \
       --from-literal=token_id='virtrigaud@pve!vrtg-token' \
-      --from-literal=token_secret=your-token-secret
+      --from-literal=token_secret=your-token-secret \
+      --from-literal=ssh_user=root \
+      --from-file=ssh_privatekey=./id_ed25519_virtrigaud \
+      --from-file=known_hosts=./known_hosts
     ```
+
+    In a PVE cluster, set `PROVIDER_NODE_SELECTOR` in the Provider's `spec.runtime.env` to that node.
+    See [Proxmox cloud-init](../providers/proxmox.md#cloud-init-the-nocloud-seed).
 
     ```yaml
     apiVersion: infra.virtrigaud.io/v1beta1
@@ -129,7 +140,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         name: proxmox-creds
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1"
         service:
           port: 9090
           tls:
@@ -368,7 +379,7 @@ spec:
     name: vsphere-creds
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
     service:
       port: 9090
       tls:

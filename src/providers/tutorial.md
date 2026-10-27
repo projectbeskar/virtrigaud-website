@@ -5,13 +5,13 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Onboarding Tutorial
 
-This page walks you through bringing a `Provider` CR online end-to-end on a VirtRigaud v0.4.0 cluster. It uses the vSphere provider as the running example because that is the most common starting point; the same shape applies to libvirt and Proxmox with provider-type-specific tweaks called out inline.
+This page walks you through bringing a `Provider` CR online end-to-end on a VirtRigaud v0.4.1 cluster. It uses the vSphere provider as the running example because that is the most common starting point; the same shape applies to libvirt and Proxmox with provider-type-specific tweaks called out inline.
 
 If you are looking to build a **new** provider (a fresh hypervisor such as Firecracker or KubeVirt), that material lives in the developer-facing [provider development guide](../development/providers.md) — this page is for operators wiring up an existing provider against a real hypervisor.
 
 ## Prerequisites
 
-- A Kubernetes cluster with VirtRigaud v0.4.0 installed. If you do not have one yet, follow the [Helm-only install guide](../getting-started/install-helm-only.md).
+- A Kubernetes cluster with VirtRigaud v0.4.1 installed. If you do not have one yet, follow the [Helm-only install guide](../getting-started/install-helm-only.md).
 - `kubectl` configured against the cluster.
 - Cluster admin (or namespace admin in `virtrigaud-system`) — you need to create `Secret`s, `Provider`s, and at least one `VirtualMachine`.
 - Access to the hypervisor you are wiring up (vCenter / libvirt host / PVE cluster) with credentials of an account that can lifecycle VMs.
@@ -23,7 +23,7 @@ helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
 helm repo update
 
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
@@ -41,10 +41,10 @@ kubectl get pods -n virtrigaud-system
 ```bash
 kubectl port-forward -n virtrigaud-system svc/virtrigaud-manager 8080:8080 &
 curl -s http://localhost:8080/metrics | grep ^virtrigaud_build_info
-# virtrigaud_build_info{component="manager", ...version="v0.4.0"} 1
+# virtrigaud_build_info{component="manager", ...version="v0.4.1"} 1
 ```
 
-If you see `virtrigaud_build_info{version="v0.4.0"} 1`, the manager is up and the metric surface is wired. See [Observability](../operations/observability.md) for the full metric catalog.
+If you see `virtrigaud_build_info{version="v0.4.1"} 1`, the manager is up and the metric surface is wired. See [Observability](../operations/observability.md) for the full metric catalog.
 
 ## Step 2 — Create the credentials Secret
 
@@ -125,7 +125,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
       insecureSkipVerify: false       # set true ONLY in dev
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.0"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
         service:
           port: 9443
           tls:
@@ -151,7 +151,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
         name: libvirt-credentials
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.0"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
         service:
           port: 9443
           tls:
@@ -176,7 +176,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
       insecureSkipVerify: false
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.0"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1"
         service:
           port: 9443
           tls:
@@ -185,7 +185,7 @@ The `Provider` CR tells VirtRigaud how to launch the provider pod and how to rea
               name: provider-proxmox-tls   # tls.crt, tls.key, ca.crt
     ```
 
-    The PVE API token needs, besides the VM privileges, `VM.Config.Network` and `VM.Config.Cloudinit`, and (if it is not root) `SDN.Use` on the bridges in use.
+    The PVE API token needs, besides the VM privileges, `VM.Config.Network` and `VM.Config.Cloudinit`, and (if it is not root) `SDN.Use` on the bridges in use. If your VMs carry `spec.userData`, the credentials Secret also needs `ssh_user` (`root`), `ssh_privatekey` or `ssh_password`, and `known_hosts` (since v0.4.1 the provider builds the cloud-init seed on the node over SSH); see [Proxmox cloud-init](proxmox.md#cloud-init-the-nocloud-seed).
 
 !!! note "TLS block required"
     A `spec.runtime.service.tls` block is mandatory. With `enabled: true`, the Secret named by `secretRef` must exist in the Provider's namespace and hold `tls.crt`, `tls.key` and `ca.crt` (see [mTLS Configuration](security/mtls.md)). Without the block the Provider shows `TLSConfigured=False`, reason `TLSBlockMissing`, and no pod is deployed. `tls.enabled: false` is an explicit plaintext opt-out for a throwaway lab.
@@ -229,7 +229,7 @@ curl -s http://localhost:8080/metrics | grep -E '^(virtrigaud_circuit_breaker_st
 Expected (your provider name will differ):
 
 ```
-virtrigaud_build_info{component="manager", ...version="v0.4.0"} 1
+virtrigaud_build_info{component="manager", ...version="v0.4.1"} 1
 virtrigaud_circuit_breaker_state{provider_type="vsphere", provider="vsphere-lab"} 0
 virtrigaud_provider_tasks_inflight{provider_type="vsphere", provider="vsphere-lab"} 0
 ```
@@ -409,8 +409,8 @@ If you want to add a hypervisor that does not exist in the tree yet (KubeVirt, F
 
 1. Read the [provider development guide](../development/providers.md) and the [provider gRPC contract](../references/grpc-api.md).
 2. Use the in-tree mock provider (`internal/providers/mock/`) as the minimum-implementation reference.
-3. Scaffold a new provider with `vrtg-provider init <name>` (run it inside a VirtRigaud checkout or pass `--virtrigaud-path`, because the SDK and proto modules are resolved from a checkout), or copy the proxmox layout, which has the cleanest separation between the gRPC server and the REST client.
+3. Scaffold a new provider with `vrtg-provider init <name>` (the `vrtg-provider` of a release requires the SDK and proto modules at its own version, published since v0.4.1; pass `--virtrigaud-path` to resolve them from a checkout instead; `--type proxmox` scaffolds a Proxmox provider), or copy the proxmox layout, which has the cleanest separation between the gRPC server and the REST client.
 4. Register the new capability set via the SDK builder (`sdk/provider/capabilities/`).
-5. Check the conformance specs with `vcts validate` (`cmd/vcts`; the specs are in `test/conformance/specs`). `vcts run` cannot pass yet: the runner does not execute the steps of a specification. See the [CLI tools reference](../references/cli-tools.md#vcts).
+5. Check the conformance specs with `vcts validate` (`cmd/vcts`; the specs are in `test/conformance/specs`). Once the provider is deployed, `vcts run --provider <name> --set IMAGE=<vmimage>` runs the conformance tests against it (it creates real VMs, so use a non-production cluster). See the [CLI tools reference](../references/cli-tools.md#vcts).
 
 That work is outside the scope of this operator onboarding page; see the developer documentation referenced above.

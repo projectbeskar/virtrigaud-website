@@ -10,8 +10,8 @@ libvirt Provider (`Provider.spec.topology: cluster`) comes back from a backup,
 a GitOps re-apply or a delete-and-recreate, and how an administrator
 re-attaches it to the libvirt domain that is still running.
 
-!!! warning "Experimental in v0.4.0"
-    Clustered Providers are experimental in v0.4.0. See
+!!! warning "Experimental in v0.4.1"
+    Clustered Providers are experimental in v0.4.1. See
     [Clustered libvirt: overview and setup](index.md) for the feature as a
     whole. Single-host libvirt, vSphere and Proxmox Providers are not changed
     by the guards on this page; their recovery is in
@@ -71,7 +71,7 @@ re-attaches or removes the old domain (see
 | **R4**, the pre-schedule uniqueness check | manager, through the provider | before a VM is first placed | The Provider's hosts are asked for domains stamped with the VM's namespace and name. A previous incarnation holds the VM (`RestorePending`). The VM's own domain has its host recorded as `pendingHost`, and the create retry binds it. |
 
 R3 is described with the inventory and adoption features in the
-[clustered-provider inventory reference](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-provider-inventory.md#shared-storage-the-cluster-wide-disk-guard-a61).
+[clustered-provider inventory reference](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md#shared-storage-the-cluster-wide-disk-guard-a61).
 
 ### The restore marker (R1)
 
@@ -226,7 +226,7 @@ holds above leave `status.phase` at `Pending`.
   VirtualMachines carrying other manager-owned `virtrigaud.io` keys is rejected
   unless the tool's identity is in the admission policy's `exemptUsernames` or
   `exemptGroups`. See
-  [Reserved keys and the admission policy](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/admission-policy.md).
+  [Reserved keys and the admission policy](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/admission-policy.md).
 
 ## Scenarios
 
@@ -395,7 +395,7 @@ nothing, and the VM is created as new.
 
 ## Re-attach runbook
 
-Re-attaching is manual in v0.4.0. The steps need root (or the provider's SSH
+Re-attaching is manual in v0.4.1. The steps need root (or the provider's SSH
 user) on the hosts, and read access to VirtualMachines in all namespaces.
 
 !!! danger "Always name the connection: `virsh -c \"$CONN\" ...`"
@@ -565,8 +565,8 @@ re-check, R4 finds nothing and the VM is created as new.
 - [Clustered libvirt: overview and setup](index.md)
 - [Operations: routed lifecycle, host loss and troubleshooting](operations.md)
 - [Security model: ownership and multi-tenancy](../security-model.md)
-- [ADR-0007, the clustered orchestrator Provider](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/adr/0007-clustered-orchestrator-provider.md)
+- [ADR-0007, the clustered orchestrator Provider](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0007-clustered-orchestrator-provider.md)
   (amendment A6 is the decision record and threat model for this page)
-- [Libvirt domain ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/libvirt-domain-ownership.md):
+- [Libvirt domain ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-domain-ownership.md):
   the owner stamp
-- [Full reference: `docs/clustered-restore.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/clustered-restore.md)
+- [Full reference: `docs/clustered-restore.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-restore.md)
