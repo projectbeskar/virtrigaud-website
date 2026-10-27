@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Capabilities Matrix
 
-This document provides a comprehensive overview of VirtRigaud provider capabilities as of **v0.4.1**.
+This document lists the VirtRigaud provider capabilities as of **v0.4.1**.
 
 Cells marked ✅ / ❌ in this matrix are cross-referenced against each provider's `GetCapabilities` gRPC response (`internal/providers/{vsphere,libvirt,proxmox}/server.go`) and the capability builder registrations in `internal/providers/{proxmox}/capabilities.go` / `sdk/provider/capabilities/`. Where a feature is implemented in code but not yet exposed through the capability flag (or vice versa), the cell carries a footnote rather than being silently changed.
 
