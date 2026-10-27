@@ -22,7 +22,7 @@ VirtRigaud ships **12 CRDs** at v0.4.1. For the full auto-generated field refere
 | `VMNetworkAttachment` | Active |
 | `VMMigration` | Active |
 | `VMSnapshot` | Active |
-| `VMClone` | Active (`source.vmRef` only, same-provider; full clones, linked where the provider supports it) |
+| `VMClone` | Active (`source.vmRef` only, same-provider; full clones, linked where the provider supports it: vSphere only) |
 | `VMSet` | Stub — `Ready=False / ControllerNotImplemented`; no replica management |
 | `VMPlacementPolicy` | Reference-only — no standalone controller; consumed via `VirtualMachine.spec.placementRef` (and by the clustered libvirt scheduler) |
 | `Host` | Active — inventory is synced from the clustered Provider (clustered libvirt only) |
@@ -43,6 +43,10 @@ Nothing was removed. Apply the CRDs before the manager (see [Helm CRD Upgrades](
 | `VMMigration` | New `status.targetVMUID`, `targetVMClaim`, `sourceVMUID`, `storagePVCUID`, `storageInfo.importTarget`, `stagingDigest`, `stagingLayout` |
 | `VMClone` | New `status.targetUID` |
 | `VMSnapshot` | New `status.boundProvider`, `status.vmUID` |
+
+## Schema changes in v0.4.1
+
+**None.** The CRDs have no schema change from v0.4.0: only their `description` texts differ (`kubectl explain` and the CRD `description` fields show the corrected text), and one new condition reason, `RevertNotPerformed` (`SnapshotReverted=False`), is a constant in the Go API with no schema effect. The descriptions no longer carry internal tracking references or roadmap wording and say what each field does today. Fields the schema accepts but no code acts on say "Accepted but not acted on in this release." (for example `VirtualMachine.spec.lifecycle`, `spec.resources.gpu`, `spec.userData.ignition`, `Provider.spec.healthCheck`, most of `VMClone` `customization` and `options`, and every `VMSet` field: its controller is a stub); status fields no controller writes say "Not populated in this release." `ProviderSpec.insecureSkipVerify` (read by the vSphere and Proxmox provider pods, for the hypervisor endpoint) and `spec.runtime.service.tls.insecureSkipVerify` (read by the manager, for the provider's gRPC certificate) are described as the two separate switches they are. A `grpc://` `Host` endpoint passes validation, but the libvirt provider connects with `qemu+ssh://` only.
 
 ---
 
@@ -102,7 +106,7 @@ Full schema: [generated-crd-docs.md#virtualmachine](generated-crd-docs.md#virtua
 |-----------|---------|
 | `Provisioning` | The create, or why it waits (`WaitingForDependencies`, `Unschedulable`, ...) |
 | `Reconfiguring` | A resize in flight. `True/RestartRequired` means the change is saved in the persistent definition and applies at the next power cycle (power off, then on; a reboot inside the guest does not apply it). `False/ResizePendingPowerOff`, `ShrinkPendingPowerOff` and `InsufficientHostCapacity` say why a resize waits |
-| `SnapshotReverted` | A `revertToRef` request: `False/WaitingForPowerOff`, `SnapshotNotFound`, `SnapshotNotReady`, `SnapshotForAnotherVM`, `Unsupported`, `Reverting`, `RevertFailed`; `True/Reverted` |
+| `SnapshotReverted` | A `revertToRef` request: `False/WaitingForPowerOff`, `SnapshotNotFound`, `SnapshotNotReady`, `SnapshotForAnotherVM`, `Unsupported`, `Reverting`, `RevertNotPerformed` (retried, v0.4.1), `RevertFailed`; `True/Reverted` |
 | `Placed` | Clustered Providers: `True` when the VM has a host; `False` with `Unschedulable`, `RestorePending`, `OwnDomainOnAnotherHost`, `UniquenessCheckFailed`, `ProviderLacksListOwnerFilter`, ... |
 | `DeleteBlocked` | Clustered VMs: a delete is held for `HostUnreachable`, `DiskCheckFailed`, `DiskInUse` (a linked clone depends on the disk), `OwnDomainOnAnotherHost` or `ProviderUnavailable`; `Ready` is `False/DeleteBlocked` meanwhile and the delete is retried with a 15 s to 5 min backoff. `virtrigaud.io/force-delete` and `orphan-on-delete` release it. A refused `VMSnapshot` delete shows the same reason on the `VMSnapshot` |
 | `DisksApplied` | `False/NotSupportedByProvider` when `spec.disks` is set on a libvirt or Proxmox Provider. Never `True`; does not change `Ready` |
@@ -341,7 +345,7 @@ Full schema: [generated-crd-docs.md#provider](generated-crd-docs.md#provider)
 | `defaults` | `ProviderDefaults` | No | Default placement settings |
 | `rateLimit` | `RateLimit` | No | API rate limiting (qps, burst) |
 | `runtime` | `ProviderRuntimeSpec` | Yes | How the provider is executed |
-| `healthCheck` | `ProviderHealthCheck` | No | Health check configuration |
+| `healthCheck` | `ProviderHealthCheck` | No | Accepted but not acted on in this release |
 | `connectionPooling` | `ConnectionPooling` | No | Connection pool settings |
 | `topology` | `string` | No | `single` (default): one provider process bound to one host. `cluster`: the provider fronts several hosts registered as `Host` resources in a `HostPool`; accepted only on `type: libvirt` (enforced by the Provider validating webhook, so only when `webhooks.enabled=true`), experimental. **Immutable** |
 | `consumerNamespaceSelector` | `LabelSelector` | No | Namespaces, other than this one, whose VMs, `VMClone`s, `VMMigration`s and `VMSnapshot`s may use this Provider. Unset: own namespace only; `{}`: every namespace. Sharing a Provider shares everything its credentials can reach |
@@ -361,10 +365,10 @@ Full schema: [generated-crd-docs.md#provider](generated-crd-docs.md#provider)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `conditions` | `[]Condition` | Status conditions, including `CapabilitiesReported` (added v0.3.8) |
+| `conditions` | `[]Condition` | Status conditions, including `CapabilitiesReported` (added v0.3.8), `ProviderRuntimeReady` and `ProviderAvailable`. A `Provider` without a ready pod is `ProviderAvailable=False` (reason `DeploymentNotReady`) since v0.4.1 |
 | `reportedCapabilities` | `ReportedCapabilities` | Provider's self-reported capability set, fetched from `GetCapabilities` RPC (added v0.3.8) |
 | `capabilities` | `[]ProviderCapability` | Legacy capability list |
-| `healthy` | `bool` | Health-check result |
+| `healthy` | `bool` | Whether the provider's runtime Deployment has a ready pod. Follows the ready replicas since v0.4.1 (it stayed `true` once set before). Omitted from the object when `false`, so the `HEALTHY` column of `kubectl get provider` is empty, not `false` |
 | `runtime` | `ProviderRuntimeStatus` | Provider pod state: `phase` (`Pending`, `Starting`, `Running`, `Stopping`, `Failed`), `endpoint`, `readyReplicas`, `availableReplicas`, `serviceRef`, `message` |
 | `adoption` | `ProviderAdoptionStatus` | Counts for `virtrigaud.io/adopt-vms`: `discoveredVMs`, `adoptedVMs`, `failedAdoptions`, `lastDiscoveryTime`, `message` |
 | `version` | `string` | Provider binary version |
@@ -373,7 +377,7 @@ Full schema: [generated-crd-docs.md#provider](generated-crd-docs.md#provider)
 
 #### ReportedCapabilities
 
-The manager calls the provider's `GetCapabilities` RPC after each successful connect and writes the result into `status.reportedCapabilities`. A `CapabilitiesReported` condition is also set (`True` on success, `False` with reason `CapabilitiesUnavailable` if the RPC fails or the provider is unreachable).
+The manager calls the provider's `GetCapabilities` RPC and writes the result into `status.reportedCapabilities`. Since v0.4.1 it reads it once the provider Deployment's rollout is complete, again 45 seconds later, every 10 minutes while the `Provider` is healthy and one minute after a failed read (see [Provider capabilities](../providers/providers-capabilities.md#when-the-status-is-read-v041)). A `CapabilitiesReported` condition is also set (`True` on success, `False` with reason `CapabilitiesUnavailable` if the RPC fails or the provider is unreachable).
 
 | Field | Type | Description |
 |-------|------|-------------|

@@ -154,7 +154,18 @@ See the [Observability Guide](observability.md#7-virtrigaud_circuit_breaker_stat
 3. The breaker self-recovers once connectivity is restored — no manual reset. (`(*resilience.CircuitBreaker).Reset()` exists in code but is not exposed through any admin API; restarting the manager also resets every breaker.)
 
 !!! note "The Provider's `ProviderAvailable` condition is not the breaker"
-    `ProviderAvailable=True` (reason `RemoteAvailable`) means the provider's `Deployment` has ready replicas. It is not driven by RPC failures and does not turn `False` when the breaker opens. Use the breaker gauge, or the `Ready` condition of the VMs, to see a provider that is up but cannot reach its hypervisor.
+    `ProviderAvailable=True` (reason `RemoteAvailable`) means the provider's `Deployment` has ready replicas, and since v0.4.1 it turns `False` (reason `DeploymentNotReady`) with `status.healthy: false` when no pod is ready (both stayed `True` once set before). It is not driven by RPC failures and does not turn `False` when the breaker opens. A vSphere or clustered `Provider` (one replica, `Recreate` strategy) is briefly unavailable during each of its rollouts, so an alert on `ProviderAvailable=False` can fire during a roll; a `VMMigration` waits in validation and a `VMAdoption` waits until the provider is available again. Use the breaker gauge, or the `Ready` condition of the VMs, to see a provider that is up but cannot reach its hypervisor.
+
+### A refused create is retried on a backoff
+
+A `Create` that the provider refuses as an invalid specification (`Ready=False` and `Provisioning=False` with reason `ValidationError`) used to be sent again every 30 seconds for as long as the VM existed, and a libvirt `Create` copies the base image before libvirt refuses the definition. Since v0.4.1 it is sent again after 30 seconds, then 1, 2, 4 and 8 minutes, then every 10 minutes, and nothing is sent to the provider while it waits. The refusals `NotFound`, `Unimplemented` and a typed `Unauthorized` or `QuotaExceeded`, which were sent again every 5 seconds, follow the same backoff and keep reason `ProviderError`. (The typed ones come only from the manager's own code, so a remote provider's answers `NotFound` and `Unimplemented` are the ones that are paced; none of the in-tree providers answers a `Create` with either today, so that pacing is covered by unit tests and has not been run against a hypervisor.) Unchanged: a `Conflict` (2 minutes), an untyped `FailedPrecondition` or `PermissionDenied` (`CreateRefused`), a remote provider's `Unauthenticated` and `ResourceExhausted` (5 seconds), and every failure that may pass or whose outcome is unknown.
+
+- **At once.** An edit of the `VirtualMachine`'s spec, or of the spec of its `VMClass`, `VMImage` or `Provider` (the manager watches those three for a VM whose create was refused), sends the create again within seconds and starts the backoff again. A `Secret`, a `VMNetworkAttachment` or a fix on the host is picked up at the next re-check, at most 10 minutes later.
+- **The message names the next re-check:** `Provider rejected VM create (non-retryable; re-checking in 4m0s, at <time>, or at once when the VirtualMachine, its VMClass, VMImage or Provider changes): <detail>`, and `Failed to create VM (non-retryable; re-checking in ...): <detail>` for the other refusals. It read `re-checking every 30s`. A script or alert that matches the old text needs the new one.
+- **Manager restarts.** The wait is kept in the manager's memory and recovered after a restart from that message, so a restart does not send the create again early.
+- **Unchanged.** A VM refused before any provider call (a `VMClass` value or a `spec.resources` override out of range) is still re-checked every 30 seconds, and now also at once when its `VMClass` changes. A refused `Reconfigure` keeps its backoff (5 seconds doubling to 5 minutes).
+
+A `CreateBackoff` hold has new condition messages in v0.4.1 (see [VM status reference](../guides/vm-status.md#ready)).
 
 ## Provider-side connection resilience (v0.3.8)
 
@@ -250,7 +261,8 @@ The manager has no generic retry loop around provider calls. A failed call is re
 |---|---|
 | A VM's provider call failed (`Ready=False`, `ProviderError`) | 5 s |
 | A create the provider refused because it cannot prove it owns an existing VM (`ProviderConflict`) | 2 min |
-| A create refused as an invalid spec or an unsafe name (`ValidationError`) | 30 s |
+| A create the provider refuses as an invalid spec or an unsafe name (`ValidationError`), and a create answered `NotFound`, `Unimplemented` (`NotSupported`) or a typed `Unauthorized` or `QuotaExceeded` (`ProviderError`); an `ImagePrepare` whose source the provider refuses | **30 s, then 1, 2, 4 and 8 min, then every 10 min** (v0.4.1; every 30 s or 5 s before). Nothing is sent to the provider while it waits, and an edit of the VM, its `VMClass`, `VMImage` or `Provider` retries within seconds. See [A refused create is retried on a backoff](#a-refused-create-is-retried-on-a-backoff) |
+| A `VMSnapshot` create, or a `VirtualMachine` snapshot revert, the provider did not perform | **1 min doubling to 10 min**, for as long as the object exists (v0.4.1) |
 | A create held by `CreateBackoff` or `CreateRefused`; a clustered create or delete held for an unreachable host (`HostUnavailable`, `DeleteBlocked`), a failed disk check or a restore guard (`RestorePending`) | Backoff of **15 s doubling to 5 min**, counted from when the hold began |
 | A clustered VM that cannot be placed because no host can take it (`Unschedulable`) | 30 s, doubling to 2 min |
 | A clustered VM blocked by a placement misconfiguration (`NoHostPool`, a dangling `VMPlacementPolicy`, …) | 30 s |
