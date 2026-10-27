@@ -103,9 +103,9 @@ Legend: ✅ supported through VirtRigaud CRs; ⚠️ partial (see the note in th
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
 | **Basic Networking** | ✅ | ✅ | ✅ | ✅ | |
-| **Multiple NICs** | ❌ | ✅ | ✅ | ✅ | vSphere uses the first entry of `spec.networks` only |
+| **Multiple NICs** | ❌ | ✅ | ✅ | ✅ | vSphere uses the first entry of `spec.networks` only. libvirt could not create a VM with more than one NIC before v0.4.1 (libvirt refused the domain); it can now |
 | **VLAN Support** | ⚠️ | ⚠️ | ✅ | ✅ | vSphere and libvirt: attach to a VLAN-backed port group or pre-tagged bridge; VirtRigaud sets no tag. Proxmox applies `vlanTag` |
-| **Static IP** | ⚠️ | ❌ | ✅ | ✅ | vSphere: first NIC, through `guestinfo.network.*` keys the guest must consume. libvirt ignores `spec.networks[].ipAddress`. Proxmox: `ipconfigN` (needs `prefix`; needs a cloud-init drive) |
+| **Static IP** | ⚠️ | ❌ | ✅ | ✅ | vSphere: first NIC, through `guestinfo.network.*` keys the guest must consume. libvirt ignores `spec.networks[].ipAddress`. Proxmox: for a VM with user-data, the address, route and DNS go into the seed's `network-config`; for one without, `ipconfigN` (needs `prefix`; needs a PVE cloud-init drive) |
 | **DHCP** | ✅ | ✅ | ✅ | ✅ | |
 | **Bridge Networks** | ❌ | ✅ | ✅ | ✅ | libvirt `bridge`, Proxmox `vmbrN`. Proxmox also applies the NIC model |
 | **Distributed Switches** | ✅ | ❌ | ❌ | ✅ | vSphere attaches a NIC to a port group by name and reports `standard` and `distributed` network types, so a distributed port group works. VirtRigaud does not create or manage switches |
@@ -116,11 +116,13 @@ Legend: ✅ supported through VirtRigaud CRs; ⚠️ partial (see the note in th
 |------------|---------|---------|---------|------|-------|
 | **Template Deployment** | ✅ | ✅ | ✅ | ✅ | Deploy from templates or base images |
 | **Clone Operations** | ✅ | ✅[^clone] | ✅ | ✅ | `VMClone`, same provider only |
-| **Linked Clones** | ✅ | ❌[^clone] | ⚠️ | ✅ | Proxmox: PVE allows a linked clone only from a template source, and VirtRigaud does not check for one |
+| **Linked Clones** | ✅ | ❌[^clone] | ❌[^pvelinked] | ✅ | libvirt and Proxmox refuse a `VMClone` with `type: LinkedClone` (`LinkedCloneUnsupported`) |
 | **Full Clones** | ✅ | ✅[^clone] | ✅ | ✅ | libvirt: source VM must be powered off |
 | **VM Reconfiguration** | ⚠️ | ✅ | ⚠️ | ✅ | See Reconfigure |
 
 [^clone]: libvirt `Clone` is implemented for **full clones** (#153/#208/#221): the per-VM UEFI `<nvram>` varstore is copied to an independent file, hot-add headroom is preserved across a class-override clone, and a clone gets its own cloud-init instance id and SSH host keys. **Linked clones are disabled since v0.4.0**: a linked clone reads its source VM's live disk, and powering the source on corrupts the clone. `GetCapabilities` reports `SupportsLinkedClones=false` and a `VMClone` with `options.type: LinkedClone` fails with `LinkedCloneUnsupported`. Linked clones made by earlier releases keep working, but their source cannot be deleted, reverted or snapshotted while they exist. Earlier documentation (including v0.3.9 footnotes) listed libvirt linked clones as supported — that is reversed in v0.4.0.
+
+[^pvelinked]: Proxmox never made linked clones: every `Create` from a template and every `Clone` is a full clone. Before v0.4.1 the provider still advertised linked-clone support and `Clone` passed `full=0` for a linked request; since v0.4.1 it reports no linked-clone support, its `Clone` refuses a linked request, and the `VMClone` controller refuses a `LinkedClone` for it before calling the provider.
 
 [^reconfigure]: What `Reconfigure` does per provider (`docs/reconfigure-results.md` in the main repository). **libvirt** (`SupportsHonestReconfigure=true`): each change is applied live and persisted, or persisted only and reported as restart required (`Reconfiguring=True/RestartRequired`: power-cycle the VM; a reboot inside the guest does not apply it), or the call fails. Online CPU/memory works **only on VMs created with the hot-add flags** (`VMClass.spec.performanceProfile.cpuHotAddEnabled` and/or `memoryHotAddEnabled` at create time; 4× memory ceiling, vCPU capped at 64). A memory shrink of a running VM always needs a restart. **vSphere**: CPU, memory and growth of additional disks named in `spec.disks`. It refuses a change the running VM cannot take (no hot-add, a memory decrease) before changing anything, shown as `Reconfiguring=False/ResizePendingPowerOff` until the VM is powered off; the root disk is never resized; the provider does not report the honest-result flag. **Proxmox**: CPU and memory only, no disk; a change PVE leaves pending until the next boot is reported as applied. Proxmox still advertises `SupportsReconfigureOnline` and `SupportsDiskExpansionOnline`; the ❌ cells above describe what the provider actually does.
 
@@ -195,11 +197,26 @@ See the [VM Migration docs](../migration/user-guide.md) for the full guide.
 
 [^migratenfs]: As of v0.3.11 (ADR-0006 Slice 4, #236), the **NFS** staging backend was validated for libvirt ⇄ libvirt, libvirt ⇄ vSphere and libvirt ⇄ Proxmox, against a real NFS server (vSphere ⇄ Proxmox over NFS was not run). Instead of an object store, the disk is staged on an NFS export and moved with `qemu-img`'s native transport (no PVC, no pod relay, no S3 credentials). **libvirt** (host-side) and **vSphere** (pod-side) use qemu-img's `nfs://` libnfs driver directly; the vSphere image bakes in the Debian `qemu-block-extra` package. **Proxmox uses a kernel NFS mount** — `pve-qemu-kvm` ships no libnfs driver (qemu-img rejects `nfs://` with `Unknown protocol 'nfs'`), so the node mounts the export the way PVE's native NFS storage does and runs qemu-img against the mount. `nfs.uid`/`nfs.gid` are effectively mandatory for cross-provider migrations (AUTH_SYS authorizes by the numeric uid/gid presented, and each leg runs as a different identity) — set them to the export owner. See the [VM Migration User Guide](../migration/user-guide.md#nfs-staging).
 
+### Virtual Platform (VMClass)
+
+Settings of the `VMClass` that choose the VM's firmware and virtual hardware. They take effect when a VM is created; a change to a VMClass does not change existing VMs.
+
+| Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
+|------------|---------|---------|---------|------|-------|
+| **UEFI firmware** (`firmware: UEFI`) | ✅ | ✅ | ❌ | ❌ | libvirt honours it since v0.4.1 (q35 machine, OVMF; the host needs an OVMF package). `BIOS`, `EFI` and an unset value select BIOS. Proxmox keeps the template's firmware |
+| **Secure Boot** (`securityProfile.secureBoot`) | ✅ | ✅ | ❌ | ❌ | libvirt: works since v0.4.1, with Secure Boot enforced from the first boot; which keys the guest trusts depends on the host's OVMF package |
+| **VT-d / IOMMU** (`securityProfile.vtdEnabled`) | ✅ | ⚠️ | ❌ | ❌ | libvirt: an emulated Intel IOMMU on q35 since v0.4.1; the virtio devices do not go through it, so it is not DMA isolation |
+| **Nested virtualization** (`performanceProfile.nestedVirtualization`) | ✅ | ✅ | ❌ | ❌ | libvirt: works since v0.4.1 (`host-passthrough`); nesting must be enabled in the host's KVM module |
+| **TPM** (`securityProfile.tpmEnabled`) | ✅ | ✅ | ❌ | ❌ | libvirt: an emulated TPM 2.0 (`swtpm` on the host) |
+
+libvirt details, host prerequisites and the secure boot trust model: [libvirt firmware](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-firmware.md) and the [libvirt provider page](libvirt.md#firmware-secure-boot-and-platform-features). On a clustered libvirt Provider every host that can receive a UEFI or secure boot VM needs the OVMF package: the scheduler does not consider firmware.
+
 ### Guest Operating System
 
 | Capability | vSphere | Libvirt | Proxmox | Mock | Notes |
 |------------|---------|---------|---------|------|-------|
-| **Cloud-Init** | ✅ | ✅ | ✅ | ✅ | vSphere guestinfo, libvirt NoCloud ISO (private, in the host seed directory), Proxmox native cloud-init drive |
+| **Cloud-Init** | ✅ | ✅ | ✅ | ✅ | vSphere guestinfo, libvirt NoCloud ISO (private, in the host seed directory), Proxmox NoCloud seed CD-ROM built over SSH (since v0.4.1; the whole user-data applies, and it needs SSH credentials in the Provider's Secret) |
+| **Cloud-Init on clone** | ✅ | ✅ | ⚠️ | ✅ | vSphere and libvirt clones re-run the source's user-data. A Proxmox clone does not: it gets a seed of its own with the `VMClone`'s inline user-data (else one that configures nothing) |
 | **Guest Tools** | ❌ | ❌ | ❌ | ❌ | `VMClass.spec.guestToolsPolicy` is passed to providers but none acts on it; install tools through cloud-init |
 | **Guest Agent** | ✅ | ✅ | ✅ | ✅ | VMware Tools (vSphere) or the QEMU guest agent report IPs |
 | **Guest Customization** | ⚠️ | ⚠️ | ❌ | ✅ | `VMClone` applies hostname, domain and inline cloud-init only (vSphere, libvirt); sysprep, networks and time zone are not applied. Proxmox clone ignores customization |
@@ -250,6 +267,17 @@ kubectl get provider vsphere-prod -n virtrigaud-system \
   -o jsonpath='{.status.conditions[?(@.type=="CapabilitiesReported")]}'
 ```
 
+#### When the status is read (v0.4.1)
+
+In v0.4.0, `status.reportedCapabilities` could keep what the previous provider image reported after a roll of `spec.runtime.image`: the manager read it over its cached connection, which a terminating pod of the old ReplicaSet could still answer, and nothing read it again. The gates that read it (image import, clustered resizes, snapshot reverts, migration backends) then acted on the old image's answer. Since v0.4.1 the manager reads the capabilities:
+
+- only once the provider Deployment's rollout is complete, over a connection opened for the read (a read gives up after 10 seconds);
+- again when the Deployment changes, once more 45 seconds after the rollout completed, every 10 minutes while the `Provider` is healthy, and one minute after a failed read (`CapabilitiesReported=False`, reason `CapabilitiesUnavailable`; the recorded capabilities are kept).
+
+Expect the new image's answer within about a minute of the rollout completing. A provider image re-pulled under the same tag is caught by the 10-minute read. While a rollout is stuck, the capabilities of the old pods are kept.
+
+`status.healthy` and the `ProviderAvailable` condition follow the Deployment's ready replicas: a `Provider` without a ready pod is `ProviderAvailable=False` (reason `DeploymentNotReady`) and `healthy: false`. Both stayed `True` once set before v0.4.1. The field `healthy` is omitted from the object when it is `false`, so the `HEALTHY` column of `kubectl get provider` is empty, not `false`. A vSphere or clustered `Provider` (one replica, `Recreate` strategy) is briefly unavailable during each of its rollouts, so an alert on these can fire during a roll.
+
 ### Opt-in enforcement: `--enforce-provider-capabilities` (v0.3.8, #176)
 
 A new manager flag **`--enforce-provider-capabilities`** gates snapshot and migration operations on the reported capabilities:
@@ -273,6 +301,7 @@ Beyond the flags shown on `Provider.status.reportedCapabilities`, `GetCapabiliti
 | Flag | vSphere | Libvirt (single) | Libvirt (clustered) | Proxmox | Mock |
 |------|:---:|:---:|:---:|:---:|:---:|
 | `supports_clustering` | no | no | **yes** | no | no |
+| `supports_linked_clones` (the `VMClone` controller refuses `LinkedClone` without it) | yes | no | no | no (not advertised since v0.4.1) | yes |
 | `supports_image_artifact_identity` (ADR-0009; import-style `ImagePrepare` is held without it) | yes | yes | no | yes | yes |
 | `supports_honest_reconfigure` (a clustered Provider's resizes are held without it) | no | yes | yes | no | no |
 | `supports_routed_clone`, `supports_routed_adoption`, `supports_list_owner_filter`, `supports_routed_import` | no | no | **yes** | no | no |
@@ -317,6 +346,7 @@ These are the features VirtRigaud exposes for each provider. Hypervisor-native f
 - **Online reconfiguration** (#203) for VMs created with the hot-add flags, reported honestly (live, restart required, or failed).
 - **Online disk expansion** (#201): grow-only, root disk.
 - **Full clones** (#153/#208/#221), same provider, source powered off. **Linked clones are disabled.**
+- **Platform features** (v0.4.1): UEFI (`firmware: UEFI`), Secure Boot, an emulated IOMMU (VT-d), nested virtualization and VMs with several network interfaces define and start on libvirt 10.
 - **Image preparation** (#154): `VMImage` `url` sources downloaded, converted and published in a storage pool; `path` sources copied from allowed directories.
 - **Snapshots**: memory snapshots on running VMs; snapshot revert for snapshots taken powered off; delete-order protection for memory snapshots.
 - **Private cloud-init seeds** in a dedicated host directory (`/var/lib/libvirt/virtrigaud-seeds`, mode `0711`).
@@ -326,10 +356,11 @@ These are the features VirtRigaud exposes for each provider. Hypervisor-native f
 
 ### Proxmox VE
 
-- **REST API** with an API token (`token_id`, `token_secret`) or username/password; an SSH data plane for migration.
+- **REST API** with an API token (`token_id`, `token_secret`) or username/password; an SSH data plane for migration and for the cloud-init seed.
 - **Templates**: `VMImage.source.proxmox` (`templateID` or `templateName`); URL import is refused.
 - **Networks**: bridge, VLAN tag, NIC model and static IP are applied (token needs `VM.Config.Network`, `VM.Config.Cloudinit` and `SDN.Use`).
-- **Cloud-init drive** placed on the storage of the VM's disk.
+- **Cloud-init**: the whole `spec.userData` through a NoCloud seed CD-ROM built on the node over SSH (since v0.4.1), kept out of the boot order. Needs SSH credentials in the Provider's Secret; a VM without user-data uses PVE's own cloud-init drive, placed on the storage of the VM's disk.
+- **Full clones only**: linked clones are not advertised since v0.4.1.
 - **Guest agent IP detection** and a console link to the PVE web UI.
 - **Reconfigure**: CPU and memory only.
 - **Memory snapshots** (PVE-native) and **snapshot revert** (rollback task).
@@ -446,6 +477,7 @@ Support is best-effort and there is no long-term-support line; see [Versioning](
 
 ## Version History
 
+- **v0.4.1**: **Proxmox** builds a NoCloud seed over SSH so the whole `spec.userData` reaches the guest (breaking for VMs that carry user-data: SSH credentials in the Provider's Secret), keeps the seed out of the boot order, answers a VMID race "not performed", gives a clone the class's memory, and **no longer advertises linked clones**. **libvirt** secure boot, `firmware: UEFI` (now honoured: a behaviour change), VT-d, nested virtualization and multi-NIC VMs work; a snapshot whose overlay file already exists is refused for good and "not performed" snapshot and revert answers are retried. The manager retries a refused create on a backoff, keeps a provider's answer across a status-write conflict, re-reads `status.reportedCapabilities` after a provider roll and follows the ready replicas in `status.healthy` and `ProviderAvailable`. `vcts run`, `virtrigaud-loadgen` and `vrtg-provider init --type proxmox` work. See the [upgrade notes](../operations/upgrade.md#upgrading-from-v040-to-v041).
 - **v0.4.0**: **Clustered libvirt providers (experimental)** — `topology: cluster` with `Host`/`HostPool`, a placement scheduler and routed per-host calls; libvirt reports `SupportsHonestReconfigure` (a change that only reaches the persistent definition is reported `RestartRequired`); **libvirt linked clones are disabled** (`SupportsLinkedClones=false`, `LinkedCloneUnsupported`); **snapshot revert** (`spec.snapshot.revertToRef`) on all providers; `spec.disks` is reported as not attached on libvirt and Proxmox (`DisksApplied=False`); Proxmox applies bridge, VLAN, NIC model and static IP and places the cloud-init drive on the VM's storage; identity-safe image preparation (`SupportsImageArtifactIdentity`) on vSphere, libvirt and Proxmox; the owner-stamp, staged/landed disk delete, resend-safe backend and import size-limit flags (see [Provider capability flags](#provider-capability-flags-for-clustered-and-security-contracts)).
 - **v0.3.11**: **NFS cross-hypervisor migration staging backend (ADR-0006 Slice 4, #236)** — a second storage-agnostic `VMMigration` backend alongside S3, lab-validated against a real NFS server for libvirt ⇄ libvirt, libvirt ⇄ vSphere and libvirt ⇄ Proxmox VE (vSphere ⇄ Proxmox VE over NFS was not run). The disk is staged on an NFS export and moved with `qemu-img`'s native transport (no PVC, no relay, no S3 credentials): libvirt (host-side) and vSphere (pod-side) use the `nfs://` libnfs driver; **Proxmox kernel-mounts** the export (`pve-qemu-kvm` ships no libnfs). `nfs.uid`/`nfs.gid` are effectively mandatory for cross-provider migrations (AUTH_SYS identity). With the S3 matrix (Slices 1–3) this delivered #236's backend-agnostic design. Proxmox now advertises **s3 and nfs** (not PVC).
 - **v0.3.9**: Libvirt online CPU/memory reconfigure (#203) — `SupportsReconfigureOnline=true`; hot-add headroom provisioned at create via VMClass flags; lab-verified live. Libvirt online disk expansion (#201) — `SupportsDiskExpansionOnline=true`; `virsh blockresize` + best-effort in-guest FS grow; lab-verified. Libvirt memory snapshots (#202) — `SupportsMemorySnapshots=true`; RAM-inclusive checkpoints on running VMs. Libvirt Clone (#153) — `SupportsLinkedClones=true`; qcow2 overlay (linked) + full copy, same-provider. Libvirt clone hardening (#208/#221) — UEFI nvram re-pointed per clone; hot-add headroom preserved across class-override clones. End-to-end image preparation (#154) — `SupportsImageImport=true`; `VMImage.spec.prepare` drives lazy import on libvirt/vSphere/Proxmox. Proxmox export compression (#219) — honors `Compress` for qcow2 targets. vSphere memory snapshots (#200) — `SupportsMemorySnapshots=true`; `CreateSnapshot(memory=true)`.
