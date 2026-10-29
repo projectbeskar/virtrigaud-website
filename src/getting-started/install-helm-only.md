@@ -130,6 +130,7 @@ checkout of the release tag), or the manager stays unready.
 | `manager.maxDiskSize` | empty | Administrator ceiling on every disk VirtRigaud creates or grows (for example `500Gi`). Empty means no ceiling beyond the CRD's 64Ti per disk. |
 | `manager.providerTmpSizeLimit` | per type | `sizeLimit` of every provider pod's `/tmp` emptyDir. Defaults: vSphere `512Gi`, libvirt and Proxmox `1Gi`. A pod that writes more is evicted. |
 | `manager.providerTmpSizeLimitMax` | empty | Ceiling on what a `Provider` annotation (`infra.virtrigaud.io/tmp-size-limit`) may ask for. |
+| `manager.clientQPS`, `manager.clientBurst` | `20`, `40` | Client-side rate limits of the manager's own Kubernetes API requests, per REST client (`--client-qps`, `--client-burst`; added in v0.4.2). Not API-server limits. Raise them only if VM creation bursts wait on the manager's client, and raise `manager.resources.limits.cpu` with them. Zero, negative and non-numeric values fail the chart render. |
 | `crdUpgrade.enabled` | `true` | Applies the CRDs in a pre-install and pre-upgrade hook Job. |
 
 The complete list is in the chart's [`values.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/charts/virtrigaud/values.yaml)

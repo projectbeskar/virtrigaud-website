@@ -12,6 +12,8 @@ is a router, not a duplicate.
 !!! warning "Upgrading? Read the Upgrade Guide first"
     From v0.4.0, [Upgrading from v0.4.0 to v0.4.1](upgrade.md#upgrading-from-v040-to-v041) lists three actions: SSH credentials for Proxmox Providers whose VMs carry user-data, a check of libvirt VMClasses with `firmware: UEFI`, and rotating secrets set in a `VMClone`'s `spec.customization`.
 
+    From v0.4.1 (v0.4.2 is not released yet): [Upgrading from v0.4.1 to v0.4.2](upgrade.md#upgrading-from-v041-to-v042) needs the CRDs before the manager (one new optional status field), re-checks clustered admissions inherited from an earlier manager, changes the polling cadence, and restricts rollback while a clustered VM holds a resize reservation.
+
     From v0.3.11:
     v0.4.0 is a security-hardening release with breaking changes (cross-namespace
     references need a grant, `providerRef` is immutable once bound, a new vCenter
@@ -37,7 +39,7 @@ is a router, not a duplicate.
 | [Observability](observability.md) | What VirtRigaud exposes on `/metrics`: the `virtrigaud_*` families wired in code, with their labels and when they populate. No invented metrics. |
 | [Resilience](resilience.md) | The per-`Provider` CircuitBreaker (`internal/transport/grpc/client.go`), failure classification (`isInfraFailure`), default thresholds (`FailureThreshold=10`, `ResetTimeout=60s`, `HalfOpenMaxCalls=3`), and provider-side connection resilience (vSphere vCenter keepalive/reconnect, libvirt SSH retry, migration-PVC delete safety). |
 | [Security](security.md) | Canonical operator-facing security reference. STRIDE pass, credential-flow diagram, the mTLS/SSH host-key controls, the remaining gRPC-auth disclosure, and the compensating controls a regulated deployment must layer on top. |
-| [Upgrade Guide](upgrade.md) | **v0.4.0 → v0.4.1** (actions for Proxmox user-data, libvirt UEFI and `VMClone` secrets; what changed in status, backoff and logs; known limitations; verification), then **v0.3.11 → v0.4.0**: pre-flight checks, the required order (hosts and accounts, CRDs, consumer grants, manager, providers), every breaking change with its action, new privileges, changed chart values, in-flight migrations, upgrading from a release candidate, rollback caveats. Plus notes for older releases, GitOps and troubleshooting. |
+| [Upgrade Guide](upgrade.md) | **v0.4.1 → v0.4.2** (not released yet: the new `resizeReservation` status field and CRD ordering, re-check of inherited admissions, polling and connection changes, client rate limits, rollback restrictions, known limitations), then **v0.4.0 → v0.4.1** (actions for Proxmox user-data, libvirt UEFI and `VMClone` secrets; what changed in status, backoff and logs; known limitations; verification), then **v0.3.11 → v0.4.0**: pre-flight checks, the required order (hosts and accounts, CRDs, consumer grants, manager, providers), every breaking change with its action, new privileges, changed chart values, in-flight migrations, upgrading from a release candidate, rollback caveats. Plus notes for older releases, GitOps and troubleshooting. |
 
 ### Security sub-pages
 

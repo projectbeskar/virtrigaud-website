@@ -322,6 +322,8 @@ The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typ
 | `--provider-tmp-size-limit` | empty | `sizeLimit` of the `/tmp` volume of every provider pod (a quantity or `none`); empty keeps the per-type defaults. Chart value `manager.providerTmpSizeLimit`. Added in v0.4.0. |
 | `--provider-tmp-size-limit-max` | empty | Ceiling on that `sizeLimit`; larger annotation values are clamped to it. Chart value `manager.providerTmpSizeLimitMax`. Added in v0.4.0. |
 | `--max-disk-size` | empty | Administrator's ceiling on the size of every disk VirtRigaud creates or grows (`1Gi` to `64Pi`, binary units). Chart value `manager.maxDiskSize`. Added in v0.4.0. |
+| `--client-qps` | `20` | Client-side rate limit of the manager's Kubernetes API requests, in requests per second: a positive number. It applies separately to each REST client the manager builds (one per API resource type) and is not an API-server limit. Zero, negative and non-numeric values make the manager refuse to start. Chart value `manager.clientQPS`. Added in v0.4.2. |
+| `--client-burst` | `40` | Requests each of those REST clients may send at once before `--client-qps` applies: a positive whole number. Chart value `manager.clientBurst`. Added in v0.4.2. |
 
 `--grpc-dial-timeout` and `--circuit-breaker-*` flags do not exist; the circuit-breaker thresholds are built in. The Helm chart has no generic `extraArgs` value; see [Setting flags with Helm](../references/cli-tools.md#setting-flags-with-helm).
 

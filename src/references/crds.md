@@ -90,7 +90,7 @@ Full schema: [generated-crd-docs.md#virtualmachine](generated-crd-docs.md#virtua
 | `conditions` | `[]Condition` | Status conditions (see below) |
 | `observedGeneration` | `int64` | Last observed generation |
 | `boundProvider` | `BoundProviderRef` | The Provider object (`name`, `namespace`, `uid`) the VM is bound through. Written only by the operator |
-| `placement` | `VMPlacementStatus` | Clustered Providers only: `host`, `pool`, `pendingHost`, `pendingResources`, `memoryCeilingMiB`, `excludedHosts`, `lastScheduledTime`, `reason` |
+| `placement` | `VMPlacementStatus` | Clustered Providers only: `host`, `pool`, `pendingHost`, `pendingResources`, `memoryCeilingMiB`, `resizeReservation`, `excludedHosts`, `lastScheduledTime`, `reason` |
 | `snapshotRevert` | `SnapshotRevertStatus` | State of a `spec.snapshot.revertToRef` request: `snapshotName`, `snapshotUID`, `phase` (`Pending`, `Reverting`, `Succeeded`, `Failed`), `attempts`, `taskRef`, `message` and timestamps |
 | `lastTaskRef` | `string` | Reference to last async task |
 | `reconfigureTaskRef` | `string` | Reconfiguration task tracker |
@@ -105,9 +105,9 @@ Full schema: [generated-crd-docs.md#virtualmachine](generated-crd-docs.md#virtua
 | Condition | Meaning |
 |-----------|---------|
 | `Provisioning` | The create, or why it waits (`WaitingForDependencies`, `Unschedulable`, ...) |
-| `Reconfiguring` | A resize in flight. `True/RestartRequired` means the change is saved in the persistent definition and applies at the next power cycle (power off, then on; a reboot inside the guest does not apply it). `False/ResizePendingPowerOff`, `ShrinkPendingPowerOff` and `InsufficientHostCapacity` say why a resize waits |
+| `Reconfiguring` | A resize in flight. `True/ResizeReserved` (clustered Providers) means an admitted resize-up is recorded in `status.placement.resizeReservation` and its outcome is not recorded yet. `True/RestartRequired` means the change is saved in the persistent definition and applies at the next power cycle (power off, then on; a reboot inside the guest does not apply it). `False/ResizePendingPowerOff`, `ShrinkPendingPowerOff`, `InsufficientHostCapacity` and `InheritedAdmissionOverCapacity` say why a resize waits |
 | `SnapshotReverted` | A `revertToRef` request: `False/WaitingForPowerOff`, `SnapshotNotFound`, `SnapshotNotReady`, `SnapshotForAnotherVM`, `Unsupported`, `Reverting`, `RevertNotPerformed` (retried, v0.4.1), `RevertFailed`; `True/Reverted` |
-| `Placed` | Clustered Providers: `True` when the VM has a host; `False` with `Unschedulable`, `RestorePending`, `OwnDomainOnAnotherHost`, `UniquenessCheckFailed`, `ProviderLacksListOwnerFilter`, ... |
+| `Placed` | Clustered Providers: `True` when the VM has a host; `False` with `Unschedulable`, `InheritedAdmissionOverCapacity`, `RestorePending`, `OwnDomainOnAnotherHost`, `UniquenessCheckFailed`, `ProviderLacksListOwnerFilter`, ... |
 | `DeleteBlocked` | Clustered VMs: a delete is held for `HostUnreachable`, `DiskCheckFailed`, `DiskInUse` (a linked clone depends on the disk), `OwnDomainOnAnotherHost` or `ProviderUnavailable`; `Ready` is `False/DeleteBlocked` meanwhile and the delete is retried with a 15 s to 5 min backoff. `virtrigaud.io/force-delete` and `orphan-on-delete` release it. A refused `VMSnapshot` delete shows the same reason on the `VMSnapshot` |
 | `DisksApplied` | `False/NotSupportedByProvider` when `spec.disks` is set on a libvirt or Proxmox Provider. Never `True`; does not change `Ready` |
 | `DiskSizeWithinLimit` | `False/DiskSizeExceedsLimit` when a resize withheld a disk growth because of `manager.maxDiskSize` |

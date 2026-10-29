@@ -44,7 +44,7 @@ A transient provider error (`Ready=False` / `ProviderError`) on a VM that exists
 |-----------|---------|
 | `Ready` | The VM is usable. When `False`, its reason says why (for example `ProviderError`, `PowerStateUnmanaged`, `DeleteBlocked`, `ConsumerNotAllowed`) |
 | `Provisioning` | The create is in flight or waiting (`WaitingForDependencies`, `CreateRequested`, ...) |
-| `Reconfiguring` | A resize is in flight (`Updating`), pending a restart (`RestartRequired`), or settled (`ReconcileSuccess`); failure reasons include `ProviderError`, `ResizePendingPowerOff`, `ProviderLacksHonestReconfigure` |
+| `Reconfiguring` | A resize is in flight (`Updating`; on a clustered Provider also `ResizeReserved`, an admitted resize recorded before it is sent), pending a restart (`RestartRequired`), or settled (`ReconcileSuccess`); failure reasons include `ProviderError`, `ResizePendingPowerOff`, `ProviderLacksHonestReconfigure` |
 | `Deleting` | The delete is in progress |
 | `SnapshotReverted` | Present only while `spec.snapshot.revertToRef` is set ([below](#reverting-to-a-snapshot)) |
 | `DisksApplied` | `False` / `NotSupportedByProvider` when `spec.disks` is set on a libvirt or Proxmox Provider ([below](#additional-disks-specdisks)) |

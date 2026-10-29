@@ -675,18 +675,22 @@ The `manager` binary is the VirtRigaud controller manager. It is not invoked by 
 | `--provider-tmp-size-limit` | empty | `sizeLimit` of the writable `/tmp` volume of every provider pod the manager runs: a positive quantity such as `20Gi`, or `none` for no limit. Empty keeps the per-type defaults (vSphere 512Gi, others 1Gi). A Provider's `infra.virtrigaud.io/tmp-size-limit` annotation overrides it. |
 | `--provider-tmp-size-limit-max` | empty | Ceiling on that `/tmp` `sizeLimit`: a positive quantity, or empty for no ceiling. With it set, a larger annotation value (or `none`) is clamped to it with a Warning event, and `--provider-tmp-size-limit` and the per-type defaults are capped at it. |
 | `--max-disk-size` | empty | Administrator's ceiling on the size of every disk VirtRigaud creates or grows: a whole number of bytes from `1Gi` to `64Pi`, such as `500Gi` (use binary units: `500G` is about 465.7Gi). Empty means no ceiling beyond the CRD bounds. A Provider's `infra.virtrigaud.io/max-disk-size` annotation can only lower it. Larger existing disks are kept and never shrunk. An invalid value stops the manager at startup. |
+| `--client-qps` | `20` | Client-side rate limit of the manager's Kubernetes API requests, in requests per second: a positive number. It applies separately to each REST client the manager builds (controller-runtime builds one per API resource type), so `VirtualMachine` writes do not share a budget with `Host` status updates. It is not an API-server limit. Zero, negative and non-numeric values make the manager refuse to start. Raising it can speed up VM creation when the manager waits on it, at the cost of more manager CPU and more load on the API server and etcd. Added in v0.4.2. |
+| `--client-burst` | `40` | Requests each of those REST clients may send at once before `--client-qps` applies: a positive whole number. Added in v0.4.2. |
 
-The last three were added after v0.3.11. The circuit-breaker thresholds and the gRPC dial timeout are not command-line flags.
+The `--provider-tmp-size-limit*` and `--max-disk-size` flags were added after v0.3.11, and `--client-qps` and `--client-burst` in v0.4.2. The effective client limits are logged once at startup and take effect at a restart. The circuit-breaker thresholds and the gRPC dial timeout are not command-line flags.
 
 ### Setting flags with Helm
 
-The chart always passes `--metrics-bind-address`, `--health-probe-bind-address`, `--leader-elect` and, when webhooks are enabled, `--webhook-cert-path`. Three flags have chart values:
+The chart always passes `--metrics-bind-address`, `--health-probe-bind-address`, `--leader-elect`, `--client-qps` and `--client-burst` (the last two from v0.4.2, unless you empty their values) and, when webhooks are enabled, `--webhook-cert-path`. Five flags have chart values:
 
 ```yaml
 manager:
   providerTmpSizeLimit: "20Gi"       # --provider-tmp-size-limit
   providerTmpSizeLimitMax: "200Gi"   # --provider-tmp-size-limit-max
   maxDiskSize: "500Gi"               # --max-disk-size (also renders the VM/VMClass disk-size admission webhooks when webhooks.enabled=true)
+  clientQPS: 20                      # --client-qps (default 20; v0.4.2)
+  clientBurst: 40                    # --client-burst (default 40; v0.4.2)
 ```
 
 The chart has no generic `extraArgs` value, so `--enforce-provider-capabilities` and `--migration-storage-allowed-hosts` cannot be set through `values.yaml`. Append them to the manager container's arguments, for example:

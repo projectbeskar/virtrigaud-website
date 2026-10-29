@@ -5,9 +5,15 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Upgrade Guide
 
-This guide covers upgrading VirtRigaud installations: the **v0.4.0 to v0.4.1**
-path first, then the **v0.3.11 to v0.4.0** path, the notes for older releases,
-rollback, GitOps and troubleshooting.
+This guide covers upgrading VirtRigaud installations: the **v0.4.1 to v0.4.2**
+path first (control-plane scalability and clustered admission safety), then
+**v0.4.0 to v0.4.1**, then the **v0.3.11 to v0.4.0** path, the notes for older
+releases, rollback, GitOps and troubleshooting.
+
+!!! info "v0.4.2 is not released yet"
+    The section [Upgrading from v0.4.1 to v0.4.2](#upgrading-from-v041-to-v042) describes the
+    release candidate code that is being prepared for v0.4.2. The latest stable release is
+    **v0.4.1**; do not install `0.4.2` from the chart repository until the release is published.
 
 !!! info "From v0.4.0, read [Upgrading from v0.4.0 to v0.4.1](#upgrading-from-v040-to-v041)"
     v0.4.1 is a patch release with no CRD schema change and the same roll order
@@ -32,6 +38,89 @@ rollback, GitOps and troubleshooting.
     [`docs/upgrading.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md);
     this page is the website's operating summary of it, checked against the v0.4.0
     code.
+
+## Upgrading from v0.4.1 to v0.4.2
+
+v0.4.2 makes the manager scale to large clustered Providers and closes gaps in how a clustered Provider's capacity is reserved. It changes the meaning of no API field, no provider and no gRPC message; it adds one optional `VirtualMachine` status field, `status.placement.resizeReservation`. The roll order is unchanged: **CRDs, then the manager, then the providers**. **No provider image change is required**, because the gRPC contract is unchanged. The exhaustive per-change reference is the repository's [`docs/upgrading.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/upgrading.md) and its [release notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/release-notes/v0.4.2.md); this section is the website's operating summary of them.
+
+!!! warning "Two things to do before you upgrade, one to know before you roll back"
+    - **Install the new CRDs before the new manager.** With the v0.4.1 CRD the new manager fails readiness, naming `status.placement.resizeReservation`, whatever the Providers' topology. The `virtrigaud` chart's pre-upgrade CRD hook does this.
+    - **Expect a one-time re-check of inherited admissions** on clustered Providers when the manager is replaced ([below](#manager-replacement-inherited-admissions-are-re-checked)).
+    - **Do not roll back while a clustered VM holds a resize reservation**, and roll the manager and the chart back together ([below](#rolling-back-to-v041)).
+
+```bash
+helm repo update
+helm upgrade virtrigaud virtrigaud/virtrigaud --version 0.4.2 \
+  -n virtrigaud-system --reset-then-reuse-values
+```
+
+Single-host Providers (vSphere, Proxmox, single-host libvirt) are affected mainly by the polling, status-write and connection changes under [Behaviour changes](#behaviour-changes-that-are-visible-but-not-breaking). The admission changes apply to `topology: cluster` Providers.
+
+### CRDs first: `status.placement.resizeReservation`
+
+`VirtualMachine` gains one additive, optional status field, `status.placement.resizeReservation`, a `{cpu, memoryMiB}` footprint. For a `topology: cluster` Provider, an admitted resize-up is recorded there **before** `Reconfigure` is sent, and released only once the provider has confirmed the applied size (see [Placement](../guides/clustered/placement.md#durable-resize-reservation)).
+
+- Existing `VirtualMachine` objects need no migration: a VM without the field is counted exactly as before.
+- With an older CRD the API server prunes the field. The manager reports it missing and fails readiness, and any clustered resize-up is held with `Reconfiguring=False/PlacementError` instead of being sent unreserved.
+- The CRDs have no other schema change.
+
+### Manager replacement: inherited admissions are re-checked
+
+Replacing the manager (this upgrade, a rolling restart or any later leader change) hands the new instance pending creates, pending clone targets and resize reservations it did not admit itself. Each is checked once against its host's committed capacity before `Create`, `Clone` or `Reconfigure` is sent. One that no longer fits is **not executed**: its record is kept and keeps counting, and the VM waits with reason `InheritedAdmissionOverCapacity` (`Placed=False` for a create or clone, `Reconfiguring=False` for a resize) until the host has room. Bound VMs (describe, power, delete) are never held by this check. Releasing a held admission is an administrator decision; see [Operations and troubleshooting](../guides/clustered/operations.md#an-admission-held-with-inheritedadmissionovercapacity).
+
+!!! warning "There is no provider-side fencing"
+    Leader election does not stop a previous manager that is paused (not merely slow) from acting on an answer it receives when it resumes, before it notices it lost its lease. The re-check stops the *new* manager from executing an admission that no longer fits; it does not stop the old one. Restarting a provider pod does not cancel an operation it already accepted. Make sure the old manager pod is gone, not merely not leading, before you act on a held admission.
+
+### Behaviour changes that are visible but not breaking
+
+- **Running VMs are polled every 2 minutes** (5 minutes when powered off; a suspended VM every 2 minutes). v0.4.1 polled every VM every 10 seconds because of a defect in how the requeue interval read the provider's power state. `status.powerState` and `status.ips` of a VM changed outside VirtRigaud are refreshed on that cadence. A VM without an address, or in an unknown state, is still polled every 10 seconds. A status write that would store nothing is no longer sent.
+- **A provider connection is validated once**, not before every call: a cached client is reused while its Provider's configuration, its connection and its circuit breaker are unchanged. On a single-host libvirt Provider this removes one `virsh` call to the host per VM reconcile.
+- **A clustered Provider is reconciled on a 60-second resync** instead of on every Host heartbeat. A change to the content of a Host credential Secret (a rotated SSH key) therefore reaches the provider pod on the next resync; see [When the Secret is re-rendered](../guides/clustered/index.md#when-the-secret-is-re-rendered).
+- **A new VM is described right after its `Create`**, instead of 5 seconds later.
+- **A placement is released on evidence, never on a timer alone.** An in-memory placement is dropped when the cache shows its record, the API server rejected its write, or an authoritative read resolves an ambiguous write. While a write is unresolved the VM is not placed again.
+- **A resize reservation is released only on a confirmed `Reconfigure`** (`Reconfiguring=False/ReconcileSuccess` recorded after the reservation, and a `Describe` reporting the VM's vCPUs and memory maximum). Writing a reservation sets `Reconfiguring=True/ResizeReserved` (phase `Reconfiguring`) until the `Reconfigure`'s outcome is recorded, so an earlier resize's success never releases a newer reservation. See [VM Status Reference](../guides/vm-status.md#reconfiguring).
+- **A placed VM whose VMClass is deleted or no longer granted** is counted from its recorded size, never at the minimum footprint of 1 vCPU and 128 MiB. If nothing records its size, every capacity admission on its Provider is refused and retried until the class or the grant is restored; the manager logs `placed VirtualMachine has no recorded size and its VMClass cannot be resolved`, naming the VM. See [Committed capacity](../guides/clustered/placement.md#committed-capacity).
+
+### Configurable Kubernetes client rate limits
+
+The manager's client-side Kubernetes API rate limits, fixed at 20 requests per second with a burst of 40 in v0.4.1, are set by `--client-qps` and `--client-burst` (chart values `manager.clientQPS` and `manager.clientBurst`). **Nothing changes unless you set them**: the defaults are 20 and 40. They are client-side limits applied to each of the manager's REST clients, not API-server limits, and they change only at a manager restart.
+
+- **Helm:** the chart now passes `--client-qps=20 --client-burst=40` by default, so the manager Deployment changes (one rollout of the manager pod) with the same limits. Carry your own values with `helm upgrade --reset-then-reuse-values` (Helm 3.14+), not `--reuse-values`: `--reuse-values` reuses the v0.4.1 chart's defaults, including its image tags, so the manager stays on v0.4.1 while the chart's CRD hook still applies the new CRDs. With `--reuse-values` and the image tags set explicitly, the manager starts without the flags and applies its defaults (the same values). A zero, negative or non-numeric value fails the chart render.
+- **Kustomize:** `config/manager` passes neither flag; the defaults apply.
+
+See [Manager flags](../api-reference/cli.md#virtrigaud-manager-flags) and [Installation: optional values](../getting-started/install-helm-only.md#optional-values-worth-knowing). Measured once, in a disposable benchmark cluster with a fake provider, raising QPS from 20 to 100 cut the median time to `Ready` of a 100-VM burst from 20.5 s to 7.9 s, at the price of more manager CPU and some retried conflicts. It is not a recommendation for production clusters.
+
+### Security update: `golang.org/x/net` v0.62.0
+
+The Go modules move `golang.org/x/net` from v0.60.0 to v0.62.0, which fixes CVE-2026-78661 (GO-2026-6860) and CVE-2026-97045 (GO-2026-6866); the new version also moves `x/crypto`, `x/sys`, `x/term` and `x/text`. `govulncheck` reported both advisories at module level only: no vulnerable symbol is reachable from VirtRigaud code. No behaviour change is intended. The images carry the updated modules.
+
+### Manager image build
+
+The manager is now built from the `cmd/manager` package, not from the single file `cmd/manager/main.go`. This matters only if you build the image yourself from `build/Dockerfile.manager`; use the Dockerfile and `make build` of the release you build.
+
+### Known limitations in v0.4.2
+
+- **No provider-side fencing** (above).
+- **Leader-transition window.** A `pendingHost` write that the old leader sent but never saw answered can be stored after the new leader's cache synced. Until the new leader's cache shows it, the host can be overbooked. That admission is not executed if it no longer fits.
+- **A withdrawn resize can keep its reservation indefinitely.** Setting the spec back to the recorded size sends nothing, so a reservation whose last `Reconfiguring` reason is `ValidationError`, `InsufficientHostCapacity`, `InheritedAdmissionOverCapacity` or `ResizeReserved` is not released. No timer releases it, because expiring it could free room that a `Reconfigure` sent earlier may still use. It stays, and keeps counting, until the next resize the provider confirms or the VM is deleted: this over-reserves capacity, it never overbooks a host. **Do not remove it by hand** without proof that no earlier `Reconfigure` can still execute ([procedure](../guides/clustered/placement.md#a-withdrawn-resize-can-keep-its-reservation-indefinitely)). A safe recovery mechanism is future work, tracked in [issue #468](https://github.com/projectbeskar/virtrigaud/issues/468).
+- **Future asynchronous clustered providers** must give each `Reconfigure` a recoverable operation identity and accept a repeated request idempotently before they are admitted for clustered resizes. The libvirt provider's `Reconfigure` is synchronous and declarative.
+- **Placement is still serialized per Provider.** With the client rate limit raised, the per-Provider placement step was the next limit measured.
+- **The client rate limits apply to every resource type alike.**
+
+### Rolling back to v0.4.1
+
+**A `helm rollback` can succeed and still be unsafe.** Check the conditions below first; Helm does not.
+
+- **Do not roll back while any clustered VM has an outstanding resize reservation.** A v0.4.1 manager rewrites the whole status without `status.placement.resizeReservation`, so a resize in flight (a reconfigure task, a change pending a restart, or a failed or uncertain attempt) is counted only at its recorded size again, and its host can be overbooked. This rollback is unsupported. List the VMs that still hold one, and roll back only when the command prints nothing:
+
+    ```bash
+    kubectl get virtualmachines -A -o jsonpath='{range .items[?(@.status.placement.resizeReservation)]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}'
+    ```
+
+    Let those resizes finish and be confirmed. Setting a VM's size back in its spec does not necessarily release its reservation (see the withdrawn-resize limitation above); while one stays, rolling back remains unsupported.
+- **Roll back the manager and the chart together** (`helm rollback`). A v0.4.1 manager image with the v0.4.2 chart does not start: it rejects the unknown `--client-qps` and `--client-burst` flags. If you roll back the image alone, remove those flags first.
+- **The newer CRD stays installed**, because the chart's CRD hook runs on install and upgrade, not on rollback. That is supported: a v0.4.1 manager works with it.
+- After a rollback, a v0.4.1 manager does not re-check inherited admissions.
 
 ## Upgrading from v0.4.0 to v0.4.1
 

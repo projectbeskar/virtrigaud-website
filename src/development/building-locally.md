@@ -21,7 +21,7 @@ This guide covers building VirtRigaud from source and building the documentation
 
 | Concern             | Canonical path                       |
 |---------------------|--------------------------------------|
-| Manager entrypoint  | `cmd/manager/main.go`                |
+| Manager entrypoint  | `cmd/manager` (package; `main.go` plus the client rate-limit flags from v0.4.2) |
 | Manager Dockerfile  | `build/Dockerfile.manager`           |
 | Builder image       | `docker.io/golang:1.26.10` (override via `BUILDER_IMAGE`) |
 | Runtime base image  | `gcr.io/distroless/static:nonroot` (override via `BASE_IMAGE`) |
@@ -64,7 +64,7 @@ make test
 ### Build Targets
 
 ```bash
-# Build manager (from cmd/manager/main.go → bin/manager)
+# Build manager (from the cmd/manager package → bin/manager)
 make build
 
 # Build a specific provider (CGO_ENABLED=0; binaries land in bin/).

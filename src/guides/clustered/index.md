@@ -307,6 +307,29 @@ once idle, so a reload does not interrupt a call in progress.
     this one. The manager writes only this one Secret and never deletes
     Secrets; it is garbage-collected with the Provider.
 
+### When the Secret is re-rendered
+
+The render runs on every reconcile of the clustered Provider. What starts one,
+and so how quickly a change reaches the provider pod:
+
+| Change | Re-rendered |
+|---|---|
+| A `Host` is created or deleted, or its `spec` (endpoint, `credentialSecretRef`, labels, `providerRef`, `poolRef`), labels, annotations or deletion state changes | At once (the Provider controller watches Hosts) |
+| A `HostPool` of the Provider, or the `Provider` itself, changes | At once |
+| The **content of a credential Secret** (`ssh-privatekey`, `known_hosts`): rotated, or created or fixed for a host that was left out | **On the next periodic reconcile.** Credential Secrets are not watched; a clustered Provider is requeued about every 60 seconds |
+| A `Host`'s status only (the heartbeat, capacity, health) | Nothing: a status-only change does not reconcile the Provider |
+
+The credential row is eventually consistent. The 60 seconds is the nominal
+requeue interval of a healthy clustered Provider, not a propagation deadline:
+until the next reconcile the provider pod keeps the previous key (and a host
+left out stays out). The end-to-end delay also depends on the Provider
+controller's queue and any error backoff, and on the kubelet's Secret volume
+sync (often around a minute), which delivers the rewritten file to the provider
+pod that then reloads it. To start the re-render at once, touch the `Host`: set
+or change any annotation, for example
+`kubectl annotate host <name> -n <namespace> rotated-at="$(date +%s)" --overwrite`.
+The kubelet's sync delay still applies after that.
+
 ## What "experimental" means here
 
 - **Opt-in, no flag.** There is no feature gate and no Helm value to switch
