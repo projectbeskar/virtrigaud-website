@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Security Model and Multi-Tenancy
 
-This page describes what VirtRigaud **v0.4.1** enforces when several teams
+This page describes what VirtRigaud **v0.4.2** enforces when several teams
 (namespaces) share a cluster, a `Provider` or a hypervisor, and what you have
 to configure for it. It covers VM ownership, cross-namespace references, the
 admission policy, the `Provider` in-use finalizer, prepared-image identity,
@@ -38,8 +38,8 @@ v0.3.11.
 | A namespace uses another namespace's `Provider`, `VMClass`, `VMImage` only if it is granted | The controllers (`spec.consumerNamespaceSelector`) | [Cross-namespace references](#cross-namespace-references) |
 | A clone or migration creates a VM in another namespace only if that namespace allows it | The controllers (a `Namespace` annotation) | [Cross-namespace targets](#cross-namespace-clone-and-migration-targets) |
 | Only the manager writes the `virtrigaud.io` markers on a `VirtualMachine` | A `ValidatingAdmissionPolicy` in the API server | [Admission policy](#admission-policy-reserved-keys) |
-| A `Provider` that VMs still use is not deleted from under them | A finalizer on the `Provider` ([ADR-0010](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0010-provider-in-use-finalizer.md)) | [Provider in-use finalizer](#provider-in-use-finalizer) |
-| A prepared image belongs to the `VMImage` and source it was prepared for | The providers, with an image stamp ([ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0009-prepared-image-artifact-identity.md)) | [Identity-safe image preparation](#identity-safe-image-preparation) |
+| A `Provider` that VMs still use is not deleted from under them | A finalizer on the `Provider` ([ADR-0010](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0010-provider-in-use-finalizer.md)) | [Provider in-use finalizer](#provider-in-use-finalizer) |
+| A prepared image belongs to the `VMImage` and source it was prepared for | The providers, with an image stamp ([ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0009-prepared-image-artifact-identity.md)) | [Identity-safe image preparation](#identity-safe-image-preparation) |
 | A VM's cloud-init user-data is not readable by other local users of a libvirt host | The libvirt provider, with a private seed directory | [Private cloud-init seeds](#private-cloud-init-seeds-libvirt) |
 | Provider pods mount only the migration storage a live migration needs | The manager | [Migration storage](#migration-storage) |
 | No disk above an administrator's ceiling is created or grown | The manager (`manager.maxDiskSize`) | [Disk-size limit](#disk-size-limit) |
@@ -166,8 +166,8 @@ because a detached domain keeps running outside the capacity accounting.
   create a VM at a freed VMID (`VM.Allocate` on a shared pool or an inherited
   path) can exploit that. Do not grant `VM.Allocate` where VirtRigaud's VMs
   live to anyone but the provider's own tokens and your administrators.
-  [ADR-0012](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0012-proxmox-legacy-unstamped-name-rule.md)
-  describes how the rule is to be retired; none of that is in v0.4.1.
+  [ADR-0012](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0012-proxmox-legacy-unstamped-name-rule.md)
+  describes how the rule is to be retired; none of that is in v0.4.2.
 - **A stamp is tamper-evident, not tamper-proof.** Whoever can edit the VM
   configuration on the hypervisor (vSphere `AdvancedConfig`, libvirt metadata,
   Proxmox `VM.Config.Options`) can rewrite the stamp. The hypervisor's ACLs are
@@ -225,7 +225,7 @@ spec:
     name: vsphere-creds
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.2"
     service:
       port: 9090
   consumerNamespaceSelector:
@@ -285,7 +285,7 @@ spec:
 ```
 
 The complete example, applied together, is
-[`examples/shared-provider-consumer-namespaces.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/examples/shared-provider-consumer-namespaces.yaml).
+[`examples/shared-provider-consumer-namespaces.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/examples/shared-provider-consumer-namespaces.yaml).
 
 Points that catch people out:
 
@@ -562,7 +562,7 @@ pool file. It used to be named after the `VMImage` alone and accepted as "alread
 prepared" if anything of that name existed, so two same-named `VMImage`s in
 different namespaces collided, and a tenant allowed to use a shared `Provider`
 could pre-create the artifact another tenant's VMs are cloned from
-([ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0009-prepared-image-artifact-identity.md)).
+([ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0009-prepared-image-artifact-identity.md)).
 
 Now every prepare carries the `VMImage`'s UID, namespace, name and a digest of
 its `spec.source`, and:
@@ -626,7 +626,7 @@ must sit directly in an allowed image directory
 (`VIRTRIGAUD_LIBVIRT_IMAGE_DIRS`, default `/var/lib/libvirt/images`), must not
 be in use by any domain, and is always **copied** into the VM's own disk, never
 attached in place. vSphere `templateName` must name a real template. Details:
-[Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/image-preparation.md).
+[Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/image-preparation.md).
 
 ## Private cloud-init seeds (libvirt)
 
@@ -857,12 +857,12 @@ is unknown is not sent again to a provider that does not report owner re-bind).
 
 The reference documents in the main repository carry the full detail, including
 every edge case:
-[VM ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-ownership.md),
-[libvirt domain ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-domain-ownership.md),
-[cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md),
-[cross-namespace targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-targets.md),
-[admission policy](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/admission-policy.md),
-[image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/image-preparation.md) and
-[upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md).
+[VM ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/vm-ownership.md),
+[libvirt domain ownership](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-domain-ownership.md),
+[cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/cross-namespace-references.md),
+[cross-namespace targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/cross-namespace-targets.md),
+[admission policy](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/admission-policy.md),
+[image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/image-preparation.md) and
+[upgrading from v0.3.11](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/upgrading.md).
 For what each condition reason means on a `VirtualMachine`, see
 [VM status reference](vm-status.md).

@@ -5,9 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # Writing a Provider
 
-This page is aligned to **VirtRigaud v0.4.1** and describes how to build a
+This page is aligned to **VirtRigaud v0.4.2** and describes how to build a
 provider against the public SDK in
-[`sdk/provider/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/sdk/provider).
+[`sdk/provider/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.2/sdk/provider).
 External providers are first-class — they implement the same gRPC contract
 as the in-tree vSphere/Libvirt/Proxmox providers and the manager dials them
 identically.
@@ -66,7 +66,7 @@ vrtg-provider verify
 - `publish` writes a catalog entry and records conformance as not run
   (`core: skip`); it never claims a pass.
 
-[`cmd/provider-mock/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/provider-mock/main.go)
+[`cmd/provider-mock/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/provider-mock/main.go)
 together with `internal/providers/mock/` is a fuller reference implementation.
 
 ## Go modules: the SDK and proto
@@ -83,13 +83,13 @@ directives:
 | `github.com/projectbeskar/virtrigaud/proto` | `proto/vX.Y.Z` | The provider gRPC contract (`provider.proto`) and its generated Go bindings |
 
 ```bash
-go get github.com/projectbeskar/virtrigaud/sdk@v0.4.1 github.com/projectbeskar/virtrigaud/proto@v0.4.1
+go get github.com/projectbeskar/virtrigaud/sdk@v0.4.2 github.com/projectbeskar/virtrigaud/proto@v0.4.2
 ```
 
 - **Use the same version for both.** The SDK requires the root module and the proto
   module at its own version, so `go get` of the SDK alone selects all three at that
   version unless your module requires a newer one. The modules need the Go version of
-  the release's `go.mod` (`go 1.26.10` for v0.4.1); with the default `GOTOOLCHAIN=auto`
+  the release's `go.mod` (`go 1.26.10` for v0.4.2); with the default `GOTOOLCHAIN=auto`
   the `go` command downloads it.
 - **Before v0.4.1 there are no tags.** Releases up to and including v0.4.0 have no
   `sdk/` or `proto/` tags: `go get github.com/projectbeskar/virtrigaud/sdk@v0.4.0` fails
@@ -114,14 +114,14 @@ Root and SDK require each other (Go allows a cycle between modules; there is non
 packages): the SDK may import the root module's `internal/` packages because Go decides
 `internal/` visibility by import path. Inside the repository, `replace` directives resolve
 the other modules from the working tree; a consumer ignores them. The lockstep rule and the
-release procedure are in [`docs/go-modules.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/go-modules.md).
+release procedure are in [`docs/go-modules.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/go-modules.md).
 The generated Go bindings are imported from
 `github.com/projectbeskar/virtrigaud/proto/rpc/provider/v1`.
 
-## Contract surface (v0.4.1)
+## Contract surface (v0.4.2)
 
 The gRPC contract lives in
-[`proto/provider/v1/provider.proto`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/proto/provider/v1/provider.proto)
+[`proto/provider/v1/provider.proto`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/proto/provider/v1/provider.proto)
 (service `provider.v1.Provider`) and is a separate Go module. The RPCs your
 provider must implement (or explicitly answer with `Unimplemented`) are:
 
@@ -216,7 +216,7 @@ re-sends an uncertain Create to a provider that does not report
 ## SDK packages
 
 The SDK is laid out as five packages under
-[`sdk/provider/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/sdk/provider):
+[`sdk/provider/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.2/sdk/provider):
 
 | Package | What it gives you | Source |
 |--------|------------------|--------|
@@ -226,13 +226,13 @@ The SDK is laid out as five packages under
 | `errors` | Typed errors (`NewNotFound`, `NewInvalidSpec`, etc.) that map cleanly to gRPC status codes via `.GRPCStatus()`. | `sdk/provider/errors/errors.go` |
 | `client` | High-level gRPC client (mostly useful for testing your provider end-to-end from another Go program). | `sdk/provider/client/client.go` |
 
-The [`sdk/provider/doc.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/sdk/provider/doc.go)
+The [`sdk/provider/doc.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/sdk/provider/doc.go)
 is the canonical entry point; it includes a working server example.
 
 ### Compatibility commitment
 
 `sdk/` is a separate Go module from `internal/`. Per
-[`sdk/provider/doc.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/sdk/provider/doc.go):
+[`sdk/provider/doc.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/sdk/provider/doc.go):
 
 > The SDK abstracts the underlying gRPC protocol and provides stable
 > interfaces that will not change in minor releases, even if the internal
@@ -328,7 +328,7 @@ func main() {
 ```
 
 `lookupVM` and `describeVM` stand for your own hypervisor code. The skeleton
-above (minus those two helpers) compiles against the v0.4.1 SDK.
+above (minus those two helpers) compiles against the v0.4.2 SDK.
 
 ### Why the `Unimplemented` embedding matters
 
@@ -382,7 +382,7 @@ Capabilities the manager reads from `GetCapabilitiesResponse`
 `Clone` return a non-linked synthetic response is the kind of drift that
 caused real audit findings against the in-tree libvirt provider
 (see [Libvirt Host Prep](../operations/libvirt-host-prepare.md#linked-clones-qcow2-backing-files)).
-In v0.4.1 the in-tree libvirt provider implements full clones and advertises
+In v0.4.2 the in-tree libvirt provider implements full clones and advertises
 `supports_linked_clones: false` (it refuses a linked clone because the source
 disk is not frozen), so a [VMClone](../guides/advanced/vm-cloning.md) that asks
 for a linked clone against a libvirt source is refused cleanly rather than
@@ -529,7 +529,7 @@ configuration.
 ## proto + SDK regeneration
 
 The protobuf bindings are owned by the
-[`proto/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/proto)
+[`proto/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.2/proto)
 module and regenerated with `buf`:
 
 ```bash
@@ -620,8 +620,8 @@ end-to-end; it's the SDK in production, minus a real hypervisor.
 
 ## See also
 
-- [SDK doc.go](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/sdk/provider/doc.go) — canonical usage example.
-- [proto/provider/v1/provider.proto](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/proto/provider/v1/provider.proto) — the contract.
+- [SDK doc.go](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/sdk/provider/doc.go) — canonical usage example.
+- [proto/provider/v1/provider.proto](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/proto/provider/v1/provider.proto) — the contract.
 - [Provider gRPC API](../references/grpc-api.md) — the generated reference for the contract.
 - [Provider Tutorial](../providers/tutorial.md) — operator-facing walkthrough.
 - [Provider Capabilities Matrix](../providers/providers-capabilities.md) —

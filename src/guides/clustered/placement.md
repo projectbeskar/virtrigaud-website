@@ -10,7 +10,7 @@ manager chooses a host for it. This page describes how that choice is made,
 what a `VMPlacementPolicy` can and cannot do, how the choice is recorded on the
 VM, and what to do when no host fits.
 
-!!! warning "Experimental in v0.4.1"
+!!! warning "Experimental in v0.4.2"
     Clustered Providers are experimental. See
     [Clustered libvirt: overview and setup](index.md). The scheduler is
     deliberately simple: it filters hosts, then ranks the survivors. It runs
@@ -20,8 +20,8 @@ VM, and what to do when no host fits.
 ## What the scheduler decides
 
 The scheduler is a pure function in
-[`internal/scheduler`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/internal/scheduler).
-The [VirtualMachine controller](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/internal/controller/virtualmachine_controller.go)
+[`internal/scheduler`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.2/internal/scheduler).
+The [VirtualMachine controller](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/internal/controller/virtualmachine_controller.go)
 gathers its inputs on the create path:
 
 | Input | Where it comes from |
@@ -59,7 +59,7 @@ first one that fails is the reason reported for that host:
 | 11 | VM (anti-)affinity | Required VM affinity and anti-affinity terms (below) |
 
 Two checks exist in the scheduler but are **never active for an ordinary VM
-in v0.4.1**: a required storage pool (`storage.virtrigaud.io/pool-<name>`) and
+in v0.4.2**: a required storage pool (`storage.virtrigaud.io/pool-<name>`) and
 a required machine type. The controller does not derive either from a VM, so
 those labels and `Host.status.machineTypes` do not influence placement.
 
@@ -110,9 +110,26 @@ free = allocatable × overcommit ratio − committed
       (`status.placement.pendingResources`);
     - a created VM counts at `status.currentResources` (the size the provider
       applied), falling back to its `VMClass` size;
+    - a VM with an outstanding resize counts, per resource, at the larger of
+      `status.placement.resizeReservation` and its applied size (see
+      [Durable resize reservation](#durable-resize-reservation));
     - a VM whose class enables **memory hot-add** counts at its memory
       *ceiling*, 4 times its memory, recorded in
       `status.placement.memoryCeilingMiB` when it was scheduled;
+    - a VM whose `VMClass` was deleted, or is not granted to the VM's namespace,
+      sizes nothing from the class. It counts from its recorded size
+      (`status.currentResources`, or `status.placement.pendingResources` while
+      its create is pending) and, while no memory ceiling is recorded for it, at
+      the memory hot-add ceiling of that size, because the class's hot-add
+      setting is unknown. This over-counts; it never under-counts. **When
+      nothing records its size** (a VM bound by a build that did not record
+      it), its footprint cannot be established and every capacity admission on
+      its Provider (scheduling, resizes, clones and the re-check of inherited
+      admissions) is refused and retried with a backoff. The manager logs
+      `placed VirtualMachine has no recorded size and its VMClass cannot be
+      resolved`, naming the VM, and the hosts' committed-capacity gauges keep
+      their last value. Restore the `VMClass`, or the namespace's grant to it,
+      to resume. Bound VMs keep being described, powered and deleted;
     - every VM counts at least 1 vCPU and 128 MiB.
 - **Not counted:** domains on the host that VirtRigaud does not manage, and the
   hypervisor's own use. To keep room for them, set a ratio below 1 (for
@@ -124,12 +141,28 @@ reconciles have chosen but not yet recorded, picks a host, and records its own
 pick before the lock is released. Two VMs with mutually hard anti-affinity do
 not land on the same host.
 
+A recorded pick is released only on evidence, never on a timer alone: when the
+informer cache shows its `pendingHost` or `host` (for a resize, its
+`resizeReservation` or a recorded size that covers it), when the API server
+rejected its write, or when an authoritative read resolves a write whose answer
+was lost. A pick whose write was never sent is dropped after 2 minutes (a
+resize's after 5.5 minutes). One whose write was sent is kept until evidence
+settles it, however long that takes, and is reported as stale. While a write is
+unresolved the VM is not placed again.
+
 **Resizing a placed VM** is checked the same way. When a `VMClass` or
 `spec.resources` change would grow a clustered VM's CPU or memory, the
-controller checks that the growth fits in the VM's own host. If not, nothing is
-sent, the VM keeps running at its current size, and it gets
+controller checks that the growth fits in the VM's own host. If it fits, the
+admitted size is first written to `status.placement.resizeReservation` (see
+[Durable resize reservation](#durable-resize-reservation)) and only then is the
+resize sent. If not, nothing is sent, the VM keeps running at its current size, and it gets
 `Reconfiguring=False` with reason `InsufficientHostCapacity`; the resize is
-retried after 30 seconds, 1 minute, then every 2 minutes. A **shrink** of a
+retried after 30 seconds, 1 minute, then every 2 minutes. If you withdraw such a
+refused resize (set the spec back to the current size), the
+`Reconfiguring=False/InsufficientHostCapacity` condition stays until the next
+resize ([issue #473](https://github.com/projectbeskar/virtrigaud/issues/473)). It
+is stale: nothing is reserved or retried for it, and the phase, `Ready` and the
+capacity accounting are not affected. A **shrink** of a
 running VM is applied only while it is powered off
 (`Reconfiguring=False/ShrinkPendingPowerOff`); VirtRigaud never powers a VM off
 by itself to apply one. A change the running domain cannot take is kept in the
@@ -138,6 +171,128 @@ domain definition and applies at the next power-off and power-on
 Provider only if it reports `status.reportedCapabilities.supportsHonestReconfigure`;
 otherwise the VM gets `Reconfiguring=False/ProviderLacksHonestReconfigure`
 (upgrade the provider image).
+
+### Durable resize reservation
+
+A clustered resize-up is recorded **before** the `Reconfigure` is sent, so a
+manager restart or a leader change can never leave a size the provider applied
+counted nowhere:
+
+1. Under the per-Provider lock the manager computes the footprint to reserve:
+   per resource, the larger of what the VM holds (its recorded size with its
+   memory ceiling, and any reservation still outstanding) and what it asks for.
+   A change that grows one resource and shrinks the other keeps the shrinking
+   one at its held size.
+2. It writes that footprint to `status.placement.resizeReservation` with a
+   status update checked against the object's version. The `Reconfigure` is
+   sent only when the write was stored **and** the API server's answer still
+   carries the field. With a CRD older than the field, the API server prunes it:
+   nothing is sent and the VM gets `Reconfiguring=False/PlacementError` naming
+   the field. The same write sets `Reconfiguring=True` with reason
+   `ResizeReserved` (the VM's phase is `Reconfiguring`), replacing any earlier
+   outcome, so a `ReconcileSuccess` left by an earlier resize can never release
+   the new reservation. Only the `Reconfigure`'s own outcome replaces
+   `ResizeReserved`.
+3. While the field is set, the VM counts at the larger of it and its recorded
+   size, per resource, in placement decisions and in the committed-capacity
+   gauges. It is never lowered while set. A later request within the
+   reservation goes on under it; one that grows beyond it is admitted for that
+   growth only, and written again before it is sent.
+4. **Settlement rule.** The reservation is cleared only in a later reconcile in
+   which nothing about the VM's size is unresolved: no reconfigure needed or
+   due, no reconfigure task, `Reconfiguring=False` with reason `ReconcileSuccess`
+   recorded after the reservation was written (the provider confirmed a
+   `Reconfigure` sent under it), and a `Describe` that reports the VM's vCPUs
+   and memory maximum. Any other state keeps it: a failed, unanswered, partial,
+   restart-pending or asynchronous resize; `ResizeReserved` (an outcome never
+   recorded, for example because the manager stopped after sending the
+   `Reconfigure`); a resize refused before it was sent (such as
+   `InheritedAdmissionOverCapacity`); no condition at all; or a reason the
+   manager does not know.
+
+```yaml
+status:
+  placement:
+    host: host-a
+    resizeReservation: {cpu: 4, memoryMiB: 8192}   # present only while a resize-up is outstanding
+  conditions:
+    - type: Reconfiguring
+      status: "True"
+      reason: ResizeReserved
+```
+
+**What this guarantees, and what it does not.** A `Reconfigure` is never sent
+without a stored reservation, and a reservation is released only on a
+confirmation recorded after it was written. There is still no provider-side
+fencing: a paused previous manager can send a `Reconfigure` it admitted before
+it notices it lost its lease (see
+[Admissions inherited from an earlier manager](#admissions-inherited-from-an-earlier-manager)).
+
+#### A withdrawn resize can keep its reservation indefinitely
+
+Setting the VM's size back in its spec withdraws a resize but does **not**
+necessarily release its reservation. With the spec back at the recorded size,
+nothing is sent, so nothing can confirm the reservation's outcome. It stays, and
+keeps counting against the host, when the last `Reconfiguring` reason is one the
+manager does not retry by itself:
+
+- `ValidationError`, `InsufficientHostCapacity` or
+  `InheritedAdmissionOverCapacity` (a later step was refused after the
+  reservation was stored);
+- `ResizeReserved` (the manager stopped before recording the outcome, and a new
+  manager found the resize already withdrawn).
+
+After `ProviderError` or `ResizePendingPowerOff`, the manager sends the
+`Reconfigure` again by itself, so a confirmed result still releases it.
+
+No timer releases a reservation whose outcome is unresolved, because expiring it
+could free room that a `Reconfigure` sent earlier may still use. It is released
+by the next resize the provider confirms, or when the VM is deleted. The cost is
+over-reservation, never an overbooked host. There is **no supported way to
+remove one by hand** today. Do not clear it unless you have established that
+every manager and provider process that might have sent or received a
+`Reconfigure` for the VM has exited, that nothing for the VM still runs on its
+host, and that the domain's vCPUs and maximum memory are no more than its
+recorded size. VirtRigaud cannot check this for you. A safe recovery mechanism
+is tracked in
+[issue #468](https://github.com/projectbeskar/virtrigaud/issues/468).
+
+After a restart, a VM whose reservation covers its requested size has its
+`Reconfigure` sent again under it without a new admission. The libvirt
+provider's `Reconfigure` is synchronous and sets the domain to the requested
+size, so repeating a call that already ran changes nothing.
+
+### Admissions inherited from an earlier manager
+
+A pending create, a pending clone target and a resize reservation are durable
+admissions: whoever reconciles the VM next acts on them (`Create`, `Clone`,
+`Reconfigure`). A manager instance acts at once only on an admission it
+recorded or checked itself, matched exactly (VM, Provider, host, recorded size
+and memory ceiling, and for a clone the clone it belongs to). Any other one,
+after a restart, a leader change, or a write the previous leader sent just
+before losing its lease that landed after the new leader had already placed
+other VMs, is first checked again under the Provider's lock, against the same
+committed capacity as every other decision (the VM's own record is not counted
+twice). A bound VM is never checked this way: describing, powering, deleting
+and recovering it are unaffected however full its host is, and neither is a
+re-attach of a VM whose own domain already runs on the host.
+
+If an inherited admission no longer fits, nothing is sent to the provider, the
+record is **kept** and still counts against the host, and the VM gets
+`Placed=False` (a create or clone) or `Reconfiguring=False` (a resize) with
+reason `InheritedAdmissionOverCapacity`. The message names only the VM's own
+size: no host and no capacity figure (the host is in `status.placement`, the
+arithmetic in the manager log). It is re-checked with the placement backoff (30
+seconds, 1 minute, then every 2 minutes) and proceeds by itself once the host
+has room, for example after another VM is deleted, moved or shrunk, or the
+pool's overcommit ratio is raised. VirtRigaud never clears an inherited
+admission by itself. When it does not clear, see
+[An admission held with `InheritedAdmissionOverCapacity`](operations.md#an-admission-held-with-inheritedadmissionovercapacity).
+
+!!! warning "No provider-side fencing"
+    The re-check stops the *new* manager from executing an admission that no
+    longer fits. It does not stop a paused previous manager that resumes and
+    acts on an answer it received before it noticed it lost its lease.
 
 ## VMPlacementPolicy
 
@@ -195,9 +350,9 @@ already runs one.
 ### What is wired and what is not
 
 The scheduler reads a subset of the policy. Everything else in the CRD is
-accepted by the schema and **has no effect** on a clustered Provider in v0.4.1.
+accepted by the schema and **has no effect** on a clustered Provider in v0.4.2.
 
-| Field | Effect in v0.4.1 |
+| Field | Effect in v0.4.2 |
 |-------|------------------|
 | `hard.hosts`, `hard.excludedHosts` | **Hard filter.** Host names; `hosts` is an allow-list when non-empty |
 | `hard.nodeSelector` | **Hard filter.** Each key/value must equal `Host.spec.labels` |
@@ -256,6 +411,8 @@ status:
     pendingHost: host-a
     pendingResources: {cpu: 2, memoryMiB: 2048}
     memoryCeilingMiB: 0
+    # present only while a resize-up is outstanding:
+    resizeReservation: {cpu: 4, memoryMiB: 8192}
     # present only after a name conflict:
     excludedHosts: [host-b]
 ```
@@ -346,6 +503,7 @@ The sizes the scheduler works with are bounded by the schema:
 | `VMClass.spec.cpu` | 1 to 128 |
 | `VMClass.spec.memory` | non-negative, below 10^14 bytes (about 90.9 TiB; the CRD message says 100Ti) |
 | `status.placement.pendingResources` | CPU at most 128, memory at most 100 TiB (104857600 MiB) |
+| `status.placement.resizeReservation` | Same bounds as `pendingResources` |
 | `status.placement.memoryCeilingMiB` | 0 to 104857600 |
 | Footprint of any VM in the accounting | at least 1 vCPU and 128 MiB |
 
@@ -420,6 +578,8 @@ These are not scheduler rejections but appear on the VM's `Provisioning` or
 | `Placed=False/HostExcluded`, `AllHostsExcluded` | See [Excluded hosts](#excluded-hosts) | |
 | `Placed=False/RestorePending`, `OwnDomainOnAnotherHost` | A previous incarnation, or the VM's own domain on another host, holds it | See [Backup, restore and re-attach](backup-restore.md) |
 | `Placed=False/PendingSizeGrew` | The `VMClass` grew while the create was pending | Restore the class or delete the VM |
+| `Placed=False/InheritedAdmissionOverCapacity` | A pending create or clone target recorded by an earlier manager no longer fits its host. Nothing is sent; the record is kept and keeps counting. Re-checked on the placement backoff (up to 2 minutes) | Free room on the recorded host; see [Admissions inherited from an earlier manager](#admissions-inherited-from-an-earlier-manager) |
+| `Reconfiguring=False/InheritedAdmissionOverCapacity` | The same, for a resize reservation | Same |
 | `Ready=False/VMMissingOnHost` | The bound host reports no domain for this VM. It is **not** re-created, on that host or elsewhere, because without fencing that could give two copies of one disk. Re-checked every 2 minutes | Restore the domain on the host, or delete and re-create the `VirtualMachine` |
 | `Ready=False/PlacementTopologyMismatch` | See [Topology is immutable](#topology-is-immutable) | |
 
@@ -433,4 +593,14 @@ These are not scheduler rejections but appear on the VM's `Provisioning` or
 - Capacity accounting sees only VirtRigaud-managed VMs. Other domains on a host
   take real memory the scheduler does not know about.
 - There is no per-tenant quota: tenants share the pool first come, first served.
+- There is no provider-side fencing of a previous manager: see
+  [Admissions inherited from an earlier manager](#admissions-inherited-from-an-earlier-manager).
+- A withdrawn resize can keep its reservation indefinitely, and v0.4.2 has no
+  automatic recovery for it
+  ([issue #468](https://github.com/projectbeskar/virtrigaud/issues/468)); see
+  [above](#a-withdrawn-resize-can-keep-its-reservation-indefinitely).
+- A withdrawn refused resize keeps a stale `InsufficientHostCapacity`
+  condition until the next resize; it reserves nothing
+  ([issue #473](https://github.com/projectbeskar/virtrigaud/issues/473)).
+- Placement decisions are serialized per Provider.
 - The scheduler does not consider firmware. A VMClass with `firmware: UEFI` or `securityProfile.secureBoot` needs an OVMF package on the host the VM is placed on; a VM placed on a host without one is refused (`ValidationError`) and is re-checked on that host (it keeps its pending host, and is never moved to another). Install the package on every host that can receive such a VM, or delete the VM. On a pool whose hosts have different OVMF packages, VMs of one VMClass can get different firmware builds. See [libvirt: firmware](../../providers/libvirt.md#firmware-secure-boot-and-platform-features).

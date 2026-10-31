@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # Nested Virtualization Support
 
 !!! note "Provider support differs, and none of it is covered by end-to-end tests"
-    The VMClass field `spec.performanceProfile.nestedVirtualization` exists in the API. In v0.4.1 it is **applied by the vSphere and libvirt providers and ignored by the Proxmox provider** (see [the support table](#what-each-provider-does)). On libvirt it never worked before v0.4.1: the VM required both `vmx` and `svm`, so it did not start. VirtRigaud does not run end-to-end nested-virtualization scenarios (a guest that runs its own VMs) in CI or in its lab validation; on libvirt the lab checked that the domain is defined and starts. If you need it for a production workload, validate the configuration on your own hosts first.
+    The VMClass field `spec.performanceProfile.nestedVirtualization` exists in the API. In v0.4.2 it is **applied by the vSphere and libvirt providers and ignored by the Proxmox provider** (see [the support table](#what-each-provider-does)). On libvirt it never worked before v0.4.1: the VM required both `vmx` and `svm`, so it did not start. VirtRigaud does not run end-to-end nested-virtualization scenarios (a guest that runs its own VMs) in CI or in its lab validation; on libvirt the lab checked that the domain is defined and starts. If you need it for a production workload, validate the configuration on your own hosts first.
 
 ## Overview
 

@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Helm-only Installation
 
-This guide covers installing VirtRigaud v0.4.1 using only Helm (CRDs included in the chart) and verifying the installation is healthy. To upgrade an existing installation, read the [Upgrade Guide](../operations/upgrade.md) and [Automatic CRD Upgrades](helm-crd-upgrades.md) first.
+This guide covers installing VirtRigaud v0.4.2 using only Helm (CRDs included in the chart) and verifying the installation is healthy. To upgrade an existing installation, read the [Upgrade Guide](../operations/upgrade.md) and [Automatic CRD Upgrades](helm-crd-upgrades.md) first.
 
 ## Prerequisites
 
@@ -23,11 +23,11 @@ helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
 helm repo update virtrigaud
 ```
 
-### Install VirtRigaud v0.4.1
+### Install VirtRigaud v0.4.2
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.1 \
+  --version 0.4.2 \
   --namespace virtrigaud-system \
   --create-namespace \
   --wait \
@@ -111,7 +111,7 @@ writes. Run it with `manager.replicaCount: 2` when you enable webhooks.
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.1 \
+  --version 0.4.2 \
   --namespace virtrigaud-system \
   --create-namespace \
   --skip-crds \
@@ -130,10 +130,11 @@ checkout of the release tag), or the manager stays unready.
 | `manager.maxDiskSize` | empty | Administrator ceiling on every disk VirtRigaud creates or grows (for example `500Gi`). Empty means no ceiling beyond the CRD's 64Ti per disk. |
 | `manager.providerTmpSizeLimit` | per type | `sizeLimit` of every provider pod's `/tmp` emptyDir. Defaults: vSphere `512Gi`, libvirt and Proxmox `1Gi`. A pod that writes more is evicted. |
 | `manager.providerTmpSizeLimitMax` | empty | Ceiling on what a `Provider` annotation (`infra.virtrigaud.io/tmp-size-limit`) may ask for. |
+| `manager.clientQPS`, `manager.clientBurst` | `20`, `40` | Client-side rate limits of the manager's own Kubernetes API requests, per REST client (`--client-qps`, `--client-burst`; added in v0.4.2). Not API-server limits. Raise them only if VM creation bursts wait on the manager's client, and raise `manager.resources.limits.cpu` with them. Zero, negative and non-numeric values fail the chart render. |
 | `crdUpgrade.enabled` | `true` | Applies the CRDs in a pre-install and pre-upgrade hook Job. |
 
-The complete list is in the chart's [`values.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/charts/virtrigaud/values.yaml)
-and [README](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/charts/virtrigaud/README.md).
+The complete list is in the chart's [`values.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/charts/virtrigaud/values.yaml)
+and [README](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/charts/virtrigaud/README.md).
 
 ## Verify Installation
 
@@ -143,23 +144,23 @@ and [README](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/charts/virt
 # Manager pod is running
 kubectl get pods -n virtrigaud-system
 
-# Helm release is at v0.4.1
+# Helm release is at v0.4.2
 helm list -n virtrigaud-system
 # NAME         NAMESPACE          REVISION  CHART                APP VERSION
-# virtrigaud   virtrigaud-system  1         virtrigaud-0.4.1     v0.4.1
+# virtrigaud   virtrigaud-system  1         virtrigaud-0.4.2     v0.4.2
 ```
 
 Expected output from `helm list`:
 
-- `CHART` column: `virtrigaud-0.4.1`
-- `APP VERSION` column: `v0.4.1`
+- `CHART` column: `virtrigaud-0.4.2`
+- `APP VERSION` column: `v0.4.2`
 
 ### Verify the manager image tag
 
 ```bash
 kubectl get deployment virtrigaud-manager -n virtrigaud-system \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
-# ghcr.io/projectbeskar/virtrigaud/manager:v0.4.1
+# ghcr.io/projectbeskar/virtrigaud/manager:v0.4.2
 ```
 
 ### Confirm metrics are available
@@ -172,7 +173,7 @@ curl -s http://localhost:8080/metrics | grep '^virtrigaud_build_info'
 Expected:
 
 ```
-virtrigaud_build_info{component="manager",git_sha="<sha>",go_version="go1.26.x",version="v0.4.1"} 1
+virtrigaud_build_info{component="manager",git_sha="<sha>",go_version="go1.26.x",version="v0.4.2"} 1
 ```
 
 Metric families (seeded to 0 at boot before any Provider CRs are created):
@@ -280,12 +281,12 @@ spec:
   source:
     chart: virtrigaud
     repoURL: https://projectbeskar.github.io/virtrigaud
-    targetRevision: "0.4.1"
+    targetRevision: "0.4.2"
     helm:
       values: |
         manager:
           image:
-            tag: v0.4.1
+            tag: v0.4.2
 ```
 
 With Argo CD (`helm template` render-then-apply), use `webhooks.certificates.source: cert-manager` if you enable webhooks; the default self-signed certificate is regenerated on every sync.
@@ -302,14 +303,14 @@ spec:
   chart:
     spec:
       chart: virtrigaud
-      version: "0.4.1"
+      version: "0.4.2"
       sourceRef:
         kind: HelmRepository
         name: virtrigaud
   values:
     manager:
       image:
-        tag: v0.4.1
+        tag: v0.4.2
 ```
 
 ## Uninstalling
@@ -356,7 +357,7 @@ kubectl get crd -o name | grep '\.infra\.virtrigaud\.io$' | xargs kubectl delete
 
    ```bash
    helm install virtrigaud virtrigaud/virtrigaud \
-     --version 0.4.1 \
+     --version 0.4.2 \
      --namespace virtrigaud-system \
      --create-namespace
    ```

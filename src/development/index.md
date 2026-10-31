@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # Development
 
 Reference for contributors and external provider authors working against
-**VirtRigaud v0.4.1**.
+**VirtRigaud v0.4.2**.
 
 ## Where to go from here
 
@@ -19,13 +19,13 @@ Reference for contributors and external provider authors working against
 | Internal provider deep dives (vSphere, Libvirt, Proxmox) | [Provider docs](../providers/vsphere.md) |
 | API surface — CRDs, gRPC contract, metrics catalog | [References section](../references/generated-crd-docs.md) |
 
-## Prerequisites (v0.4.1)
+## Prerequisites (v0.4.2)
 
 The toolchain floor first moved in v0.3.6 (PR
-[#125](https://github.com/projectbeskar/virtrigaud/pull/125)); v0.4.1 builds
+[#125](https://github.com/projectbeskar/virtrigaud/pull/125)); v0.4.2 builds
 on **Go 1.26.10**:
 
-- **Go 1.26+** (v0.4.1 builds on **1.26.10**) — `go.mod` is the source of
+- **Go 1.26+** (v0.4.2 builds on **1.26.10**) — `go.mod` is the source of
   truth; CI uses `go-version-file: go.mod` so you should match locally.
   `sdk/go.mod` and `proto/go.mod` carry the same `go` line. Source builders
   must match it; **binary consumers via released container images are
@@ -132,7 +132,7 @@ hack/                             dev and CI helper scripts
 ```
 
 A few legacy paths that appear in older docs **do not exist** in
-v0.4.1 — ignore any reference to them:
+v0.4.2 — ignore any reference to them:
 
 - `api/v1beta1/` (the old kubebuilder default — use
   `api/infra.virtrigaud.io/v1beta1/`).

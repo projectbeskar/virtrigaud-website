@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Bearer Token Authentication
 
-!!! note "In v0.4.1 the gRPC channel is secured by mTLS, not bearer tokens. This page is primarily about hypervisor API tokens."
+!!! note "In v0.4.2 the gRPC channel is secured by mTLS, not bearer tokens. This page is primarily about hypervisor API tokens."
     As of v0.4.0 (unchanged since v0.3.7) the manager↔provider gRPC channel is authenticated by **mutual TLS with a client-cert SAN allow-list** (see [mTLS](mtls.md)), not by a bearer token. A bearer token is unnecessary when the manager is the only legitimate caller, so the in-tree manager does **not** attach an `Authorization: Bearer <token>` metadata header on outbound RPCs.
 
     The provider SDK still exposes `middleware.AuthConfig.BearerTokenAuth` and an operator-supplied `ValidateToken` callback (`sdk/provider/middleware`) for **external** provider authors who want it in addition to (or instead of) mTLS. If you enable Bearer-token auth on a provider that the in-tree manager dials, the manager will get back `codes.PermissionDenied` and reconciles will fail — so treat gRPC-channel bearer auth as an external-provider feature, not an in-tree production path.
@@ -17,7 +17,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Scope 1: Hypervisor API tokens
 
-This is the **production-relevant** form of bearer-token-style authentication in v0.4.1. It applies to the Proxmox provider today and is the model for any future REST-API-based provider.
+This is the **production-relevant** form of bearer-token-style authentication in v0.4.2. It applies to the Proxmox provider today and is the model for any future REST-API-based provider.
 
 ### Proxmox API tokens
 
@@ -93,12 +93,12 @@ spec:
   credentialSecretRef:
     name: proxmox-prod-credentials
   runtime:
-    image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1
+    image: ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.2
 ```
 
 #### Token rotation
 
-Token rotation is a multi-step operation in v0.4.1:
+Token rotation is a multi-step operation in v0.4.2:
 
 1. Create a new token in PVE.
 2. Update the K8s Secret (or your ExternalSecret) with the new `token_id` / `token_secret`.
@@ -187,7 +187,7 @@ The in-tree manager's gRPC client does not attach a bearer token to outbound cal
 There is no `authorization`-header-injecting interceptor. If you enable `BearerTokenAuth: true` on the server side, every RPC from the in-tree manager will fail with `codes.PermissionDenied`.
 
 !!! note "The in-tree channel is authenticated by mTLS, not bearer tokens"
-    In v0.4.1 the manager authenticates to providers with a **client certificate** verified against a configured CA and a SAN allow-list (see [mTLS](mtls.md)). That is the in-tree authentication path; there is no plan to also send a bearer token from the in-tree manager. SDK bearer-token auth remains an optional control for external provider authors who want an additional or alternative gate on top of (or instead of) mTLS.
+    In v0.4.2 the manager authenticates to providers with a **client certificate** verified against a configured CA and a SAN allow-list (see [mTLS](mtls.md)). That is the in-tree authentication path; there is no plan to also send a bearer token from the in-tree manager. SDK bearer-token auth remains an optional control for external provider authors who want an additional or alternative gate on top of (or instead of) mTLS.
 
 ### Why this is not "JWT with scopes"
 

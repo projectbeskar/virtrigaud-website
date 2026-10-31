@@ -5,9 +5,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Upgrade Guide
 
-This guide covers upgrading VirtRigaud installations: the **v0.4.0 to v0.4.1**
-path first, then the **v0.3.11 to v0.4.0** path, the notes for older releases,
-rollback, GitOps and troubleshooting.
+This guide covers upgrading VirtRigaud installations: the **v0.4.1 to v0.4.2**
+path first (control-plane scalability, clustered admission safety and Provider
+fault isolation), including the path from a v0.4.2 release candidate, then
+**v0.4.0 to v0.4.1**, then the **v0.3.11 to v0.4.0** path, the notes for older
+releases, rollback, GitOps and troubleshooting.
 
 !!! info "From v0.4.0, read [Upgrading from v0.4.0 to v0.4.1](#upgrading-from-v040-to-v041)"
     v0.4.1 is a patch release with no CRD schema change and the same roll order
@@ -32,6 +34,166 @@ rollback, GitOps and troubleshooting.
     [`docs/upgrading.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.0/docs/upgrading.md);
     this page is the website's operating summary of it, checked against the v0.4.0
     code.
+
+## Upgrading from v0.4.1 to v0.4.2
+
+v0.4.2 is a patch release of v0.4.1. It makes the manager scale to large clustered Providers, closes gaps in how a clustered Provider's capacity is reserved, stops one VM's failures from blocking its Provider's other VMs, and updates `golang.org/x/net` for two security advisories. It changes the meaning of no API field and no gRPC message, but it **adds one optional `VirtualMachine` status field** (`status.placement.resizeReservation`) and **two manager flags**, and **rolling back is unsupported while a clustered VM holds a resize reservation**. The exhaustive per-change reference is the repository's [`docs/upgrading.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/upgrading.md) and the [v0.4.2 release notes](https://github.com/projectbeskar/virtrigaud/releases/tag/v0.4.2); this section is the website's operating summary of them. If you run v0.4.2-rc1 or v0.4.2-rc2, follow [Upgrading from a v0.4.2 release candidate](#upgrading-from-a-v042-release-candidate).
+
+The roll order is unchanged: **CRDs, then the manager, then the providers**. The gRPC contract is unchanged, so providers need no configuration change, but **roll the provider images too**: every binary is rebuilt with `golang.org/x/net` v0.62.0, and the vSphere and Proxmox providers carry fixes. **Roll the vSphere providers together with the manager**: a vSphere provider older than v0.4.2-rc2 behind a v0.4.2 manager does not renew a vCenter session it lost during an outage on its own (restart its pod if that happens; see [vSphere session keepalive](../providers/vsphere.md#session-keepalive-and-recovery)).
+
+!!! warning "Before you upgrade, and before you roll back"
+    - **Install the new CRDs before the new manager.** With the v0.4.1 CRD the new manager fails readiness, naming `status.placement.resizeReservation`, whatever the Providers' topology. The `virtrigaud` chart's pre-upgrade CRD hook does this.
+    - **Check the image tags Helm will keep** (`helm get values`) and override any you pinned ([below](#helm-values-and-pinned-image-tags)).
+    - **Roll each `Provider`'s `spec.runtime.image` yourself**: Helm does not change it ([below](#provider-images-specruntimeimage)).
+    - **Expect a one-time re-check of inherited admissions** on clustered Providers when the manager is replaced ([below](#manager-replacement-inherited-admissions-are-re-checked)).
+    - **Do not roll back while a clustered VM holds a resize reservation**, and roll the manager and the chart back together ([below](#rolling-back-to-v041)).
+
+Single-host Providers (vSphere, Proxmox, single-host libvirt) are affected mainly by the polling, status-write, connection and circuit-breaker changes under [Behaviour changes](#behaviour-changes-that-are-visible-but-not-breaking). The admission changes apply to `topology: cluster` Providers.
+
+### Upgrade procedure
+
+1. **Inspect the values Helm will carry over**, and note every image tag you set yourself:
+
+    ```bash
+    helm get values virtrigaud -n virtrigaud-system
+    ```
+
+2. **Check for outstanding resize reservations** (on a first upgrade from v0.4.1 there are none; the command matters for a later rollback, see [Rolling back to v0.4.1](#rolling-back-to-v041)):
+
+    ```bash
+    kubectl get virtualmachines -A -o jsonpath='{range .items[?(@.status.placement.resizeReservation)]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}'
+    ```
+
+3. **Upgrade the chart** with `--reset-then-reuse-values` (Helm 3.14+). Its pre-upgrade hook applies the CRDs with the `kubectl` image (`ghcr.io/projectbeskar/virtrigaud/kubectl:v0.4.2`, `kubectl` 1.35.10) before the manager rolls. Add a `--set` for each tag you pinned in step 1:
+
+    ```bash
+    helm repo update
+    helm upgrade virtrigaud virtrigaud/virtrigaud --version 0.4.2 \
+      -n virtrigaud-system --reset-then-reuse-values
+    # only if you pinned tags, for example:
+    #   --set manager.image.tag=v0.4.2 --set crdUpgrade.image.tag=v0.4.2
+    ```
+
+4. **Roll the providers** by setting `spec.runtime.image` on each `Provider` to the v0.4.2 image, the vSphere providers in the same change as the manager ([below](#provider-images-specruntimeimage)).
+5. **Check the images that actually run** ([below](#check-the-images-that-actually-run)).
+
+If you apply the CRDs yourself instead of through the chart, apply them from the v0.4.2 chart or tag first (see [Helm CRD Upgrades](../getting-started/helm-crd-upgrades.md)).
+
+### CRDs first: `status.placement.resizeReservation`
+
+`VirtualMachine` gains one additive, optional status field, `status.placement.resizeReservation`, a `{cpu, memoryMiB}` footprint. For a `topology: cluster` Provider, an admitted resize-up is recorded there **before** `Reconfigure` is sent, and released only once the provider has confirmed the applied size (see [Placement](../guides/clustered/placement.md#durable-resize-reservation)).
+
+- Existing `VirtualMachine` objects need no migration: a VM without the field is counted exactly as before.
+- With an older CRD the API server prunes the field. The manager reports it missing and fails readiness, and any clustered resize-up is held with `Reconfiguring=False/PlacementError` instead of being sent unreserved.
+- The CRDs have no other schema change. All 12 CRDs ship in the chart (`crds/`) and are applied by its hook.
+
+### Helm values and pinned image tags
+
+The chart now passes `--client-qps=20 --client-burst=40` to the manager by default, so the manager Deployment changes (one rollout of the manager pod) with the same limits as before.
+
+- **Use `--reset-then-reuse-values`, not `--reuse-values`.** `--reuse-values` reuses the v0.4.1 chart's defaults, including its image tags, so the manager stays on v0.4.1 while the chart's CRD hook still applies the new CRDs. If you do use `--reuse-values`, also set the image tags (for example `--set manager.image.tag=v0.4.2`); the manager then starts without the flags and applies its defaults (the same values).
+- **Image tags you set yourself are kept by both options.** `--reset-then-reuse-values` drops only the old chart's defaults: a tag you supplied (`manager.image.tag`, `crdUpgrade.image.tag`, or a `providers.*.image.tag` for a chart-templated provider) is carried over unchanged. Override every pinned tag that still names v0.4.1, or pin the release's digests if you mirror images.
+- **A later plain `helm upgrade` reuses the previous revision's values.** If you set a tag to roll back, upgrade again with `--reset-then-reuse-values` or set the tag explicitly.
+- **Kustomize:** `config/manager` passes neither flag; the defaults apply.
+
+### Provider images: `spec.runtime.image`
+
+A provider the manager deploys from a `Provider` resource runs the image in that resource's `spec.runtime.image`. **Helm does not change it**, and the manager does not pick a new image by itself. Set it on each `Provider`, for example:
+
+```bash
+kubectl patch provider <provider-name> -n <provider-namespace> --type merge \
+  -p '{"spec":{"runtime":{"image":"ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.2"}}}'
+```
+
+The images are `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.2`, `provider-libvirt:v0.4.2` and `provider-proxmox:v0.4.2`. Changing the image rolls the provider's Deployment. A clustered Provider runs one replica, so its rollout is a short outage for its VMs' calls. Roll the vSphere providers in the same change as the manager.
+
+### Check the images that actually run
+
+```bash
+# the manager (and any chart-templated provider)
+kubectl -n virtrigaud-system get deploy \
+  -o custom-columns=NAME:.metadata.name,IMAGE:.spec.template.spec.containers[*].image
+# the providers deployed from Provider resources
+kubectl get providers.infra.virtrigaud.io -A \
+  -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name,IMAGE:.spec.runtime.image
+# the running pods, and that the manager pod is the new one and Ready
+kubectl -n virtrigaud-system get pods \
+  -o custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready
+```
+
+Every VirtRigaud image should end in `:v0.4.2`. To check that what runs is the published release, compare the pods' image digests (`kubectl get pod <pod> -o jsonpath='{.status.containerStatuses[*].imageID}'`) with the release's, and verify signatures as described in [Verifying release images](security.md#verifying-release-artifacts).
+
+### Upgrading from a v0.4.2 release candidate
+
+From v0.4.2-rc1 or v0.4.2-rc2 to v0.4.2 only the manager and provider images change: the CRDs, RBAC, the chart's templates and values and the gRPC contract are the same as both candidates', so there is nothing to migrate. Compared with rc1, v0.4.2 also changes the manager's circuit-breaker accounting, the vSphere provider's session keepalive and one Proxmox error reason ([#472](https://github.com/projectbeskar/virtrigaud/issues/472)); compared with rc2, the code is the same and the images are rebuilt from the release tag. Roll **the manager and every provider together**.
+
+1. **Chart:** `helm upgrade` to the v0.4.2 chart with `--reset-then-reuse-values`. List the tags you pinned with `helm get values virtrigaud -n virtrigaud-system` and override each one that names a release candidate (for example `--set manager.image.tag=v0.4.2`, `crdUpgrade.image.tag`, any `providers.*.image.tag`), because both `--reuse-values` and `--reset-then-reuse-values` keep a tag you supplied.
+2. **Providers:** set `spec.runtime.image` on each `Provider` to the v0.4.2 image. Include the vSphere providers in the same change as the manager.
+3. **Check the images that actually run** ([above](#check-the-images-that-actually-run)): no VirtRigaud image should still end in `:v0.4.2-rc1` or `:v0.4.2-rc2`.
+4. **Resize reservations** written by a release candidate are kept and keep counting; the rollback restrictions in [Rolling back to v0.4.1](#rolling-back-to-v041) apply to them too.
+
+### Manager replacement: inherited admissions are re-checked
+
+Replacing the manager (this upgrade, a rolling restart or any later leader change) hands the new instance pending creates, pending clone targets and resize reservations it did not admit itself. Each is checked once against its host's committed capacity before `Create`, `Clone` or `Reconfigure` is sent (a resize whose requested size the VM's recorded size already covers has nothing left to admit and is not held). One that no longer fits is **not executed**: its record is kept and keeps counting, and the VM waits with reason `InheritedAdmissionOverCapacity` (`Placed=False` for a create or clone, `Reconfiguring=False` for a resize) until the host has room. Bound VMs (describe, power, delete) are never held by this check. Nothing is cleared automatically; releasing a held admission is an administrator decision that needs positive proof; see [Operations and troubleshooting](../guides/clustered/operations.md#an-admission-held-with-inheritedadmissionovercapacity).
+
+!!! warning "There is no provider-side fencing"
+    Leader election does not stop a previous manager that is paused (not merely slow) from acting on an answer it receives when it resumes, before it notices it lost its lease. The re-check stops the *new* manager from executing an admission that no longer fits; it does not stop the old one. Restarting a provider pod does not cancel an operation it already accepted. Make sure the old manager pod is gone, not merely not leading, before you act on a held admission.
+
+### Behaviour changes that are visible but not breaking
+
+- **Running VMs are polled every 2 minutes** (5 minutes when powered off; a suspended VM every 2 minutes). v0.4.1 polled every VM every 10 seconds because of a defect in how the requeue interval read the provider's power state. `status.powerState` and `status.ips` of a VM changed outside VirtRigaud are refreshed on that cadence. A VM without an address, or in an unknown state, is still polled every 10 seconds. A status write that would store nothing is no longer sent.
+- **A provider connection is validated once**, not before every call: a cached client is reused while its Provider's configuration, its connection and its circuit breaker are unchanged. On a single-host libvirt Provider this removes one `virsh` call to the host per VM reconcile.
+- **A Provider's circuit breaker counts failures of the Provider, not of one VM** ([#472](https://github.com/projectbeskar/virtrigaud/issues/472), fixed in v0.4.2-rc2). A failure the provider's gRPC server answered with `Internal` or `Unknown` (how the providers report one VM's backend error) is not counted; failures the provider did not answer, and answers with `Unavailable` or `DeadlineExceeded`, still count, so a Provider that is down still opens the breaker. See [Resilience: circuit breaker](resilience.md#circuit-breaker).
+- **The vSphere provider logs in to vCenter again on its own** after a failed re-login: its keepalive keeps trying every 5 minutes instead of stopping. See [vSphere session keepalive](../providers/vsphere.md#session-keepalive-and-recovery).
+- **Proxmox: "exists elsewhere in the cluster" is VM-scoped.** That answer now also carries the `VM_OPERATION_FAILED` reason, so it no longer counts toward the Provider's breaker; its code and message are unchanged.
+- **A clustered Provider is reconciled on a 60-second resync** instead of on every Host heartbeat. A change to the content of a Host credential Secret (a rotated SSH key) therefore reaches the provider pod on the next resync; see [When the Secret is re-rendered](../guides/clustered/index.md#when-the-secret-is-re-rendered).
+- **A new VM is described right after its `Create`**, instead of 5 seconds later.
+- **A placement is released on evidence, never on a timer alone.** An in-memory placement is dropped when the cache shows its record, the API server rejected its write, or an authoritative read resolves an ambiguous write. While a write is unresolved the VM is not placed again.
+- **A resize reservation is released only on a confirmed `Reconfigure`** (`Reconfiguring=False/ReconcileSuccess` recorded after the reservation, and a `Describe` reporting the VM's vCPUs and memory maximum). Writing a reservation sets `Reconfiguring=True/ResizeReserved` (phase `Reconfiguring`) until the `Reconfigure`'s outcome is recorded, so an earlier resize's success never releases a newer reservation. See [VM Status Reference](../guides/vm-status.md#reconfiguring).
+- **A placed VM whose VMClass is deleted or no longer granted** is counted from its recorded size, never at the minimum footprint of 1 vCPU and 128 MiB. If nothing records its size, every capacity admission on its Provider is refused and retried until the class or the grant is restored; the manager logs `placed VirtualMachine has no recorded size and its VMClass cannot be resolved`, naming the VM. See [Committed capacity](../guides/clustered/placement.md#committed-capacity).
+- **ImagePrepare from an older manager is still served.** As in v0.4.0 and v0.4.1, an identity-less request from a manager older than v0.4.0 is served in deprecated legacy mode, logged at `WARN` and counted in `virtrigaud_provider_image_prepare_legacy_requests_total`. The refusal the v0.4.1 documentation announced for "the release after v0.4.1" is deferred to a later release, not chosen yet; the log line now ends `refused in a later release` instead of `refused from the next release`.
+
+### Configurable Kubernetes client rate limits
+
+The manager's client-side Kubernetes API rate limits, fixed at 20 requests per second with a burst of 40 in v0.4.1, are set by `--client-qps` and `--client-burst` (chart values `manager.clientQPS` and `manager.clientBurst`). **Nothing changes unless you set them**: the defaults are 20 and 40. They are client-side limits applied to each of the manager's REST clients, not API-server limits, and they change only at a manager restart. A zero, negative or non-numeric value fails the chart render. See [Helm values and pinned image tags](#helm-values-and-pinned-image-tags) for how the chart passes them.
+
+See [Manager flags](../api-reference/cli.md#virtrigaud-manager-flags) and [Installation: optional values](../getting-started/install-helm-only.md#optional-values-worth-knowing). Measured once, in a disposable benchmark cluster with a fake provider, raising QPS from 20 to 100 cut the median time to `Ready` of a 100-VM burst from 20.5 s to 7.9 s, at the price of more manager CPU and some retried conflicts. It is not a recommendation for production clusters.
+
+### Security update: `golang.org/x/net` v0.62.0 and `kubectl` 1.35.10
+
+The Go modules move `golang.org/x/net` from v0.60.0 to v0.62.0, which fixes CVE-2026-78661 (GO-2026-6860) and CVE-2026-97045 (GO-2026-6866); the new version also moves `x/crypto`, `x/sys`, `x/term`, `x/text`, `x/sync` and `x/tools`. `govulncheck` reported both advisories at module level only: no vulnerable function is reachable from VirtRigaud code. The manager and provider images carry the updated modules, so roll the providers as well as the manager. The chart's CRD-hook image ships `kubectl` 1.35.10 (was 1.35.9). Some findings remain; see [Security: v0.4.2 dependency and image findings](security.md#release-v042-dependency-and-image-findings).
+
+### Manager image build
+
+The manager is now built from the `cmd/manager` package, not from the single file `cmd/manager/main.go`. This matters only if you build the image yourself from `build/Dockerfile.manager`; use the Dockerfile and `make build` of the release you build.
+
+### Known limitations in v0.4.2
+
+- **No provider-side fencing** (above).
+- **Leader-transition window.** A `pendingHost` write that the old leader sent but never saw answered can be stored after the new leader's cache synced. Until the new leader's cache shows it, the host can be overbooked. That admission is not executed if it no longer fits.
+- **A withdrawn resize can keep its reservation indefinitely.** Setting the spec back to the recorded size sends nothing, so a reservation whose last `Reconfiguring` reason is `ValidationError`, `InsufficientHostCapacity`, `InheritedAdmissionOverCapacity` or `ResizeReserved` is not released. No timer releases it, because expiring it could free room that a `Reconfigure` sent earlier may still use. It stays, and keeps counting, until the next resize the provider confirms or the VM is deleted: this over-reserves capacity, it never overbooks a host. **Do not remove it by hand** without proof that no earlier `Reconfigure` can still execute ([procedure](../guides/clustered/placement.md#a-withdrawn-resize-can-keep-its-reservation-indefinitely)). v0.4.2 has no automatic recovery for this; a safe recovery mechanism is tracked in [issue #468](https://github.com/projectbeskar/virtrigaud/issues/468).
+- **A withdrawn refused resize keeps its `Reconfiguring` condition** ([issue #473](https://github.com/projectbeskar/virtrigaud/issues/473)). After a resize refused with `InsufficientHostCapacity` is withdrawn, the condition stays until the next resize. It does not mean capacity is reserved: nothing is reserved or retried, and the phase, `Ready` and the accounting are not affected. v0.4.1 behaves the same way.
+- **What the circuit breaker still counts.** The breaker classifies a failure by its gRPC code. An answer with `Unavailable` or `DeadlineExceeded` still counts even when it concerns one VM, and a Provider whose gRPC server answers `Internal` or `Unknown` for every VM (an unreachable hypervisor, lost credentials) does not open the breaker. See [Resilience: what the breaker still counts](resilience.md#what-the-breaker-still-counts).
+- **Future asynchronous clustered providers** must give each `Reconfigure` a recoverable operation identity and accept a repeated request idempotently before they are admitted for clustered resizes. The libvirt provider's `Reconfigure` is synchronous and declarative.
+- **Clustered libvirt Providers remain experimental**; the admission and accounting changes apply to them only.
+- **Placement is still serialized per Provider.** With the client rate limit raised, the per-Provider placement step was the next limit measured.
+- **The client rate limits apply to every resource type alike** and change only at a restart.
+
+### Rolling back to v0.4.1
+
+**A `helm rollback` can succeed and still be unsafe.** Check the conditions below first; Helm does not.
+
+- **Do not roll back while any clustered VM has an outstanding resize reservation.** A v0.4.1 manager rewrites the whole status without `status.placement.resizeReservation`, so a resize in flight (a reconfigure task, a change pending a restart, or a failed or uncertain attempt) is counted only at its recorded size again, and its host can be overbooked. This rollback is unsupported. List the VMs that still hold one, and roll back only when the command prints nothing:
+
+    ```bash
+    kubectl get virtualmachines -A -o jsonpath='{range .items[?(@.status.placement.resizeReservation)]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}'
+    ```
+
+    Let those resizes finish and be confirmed. Setting a VM's size back in its spec does not necessarily release its reservation (see the withdrawn-resize limitation above); while one stays, rolling back remains unsupported. Do not clear a reservation by hand to make a rollback possible: that is the unsafe case this restriction exists for, unless you have the proof described in the [withdrawn-resize procedure](../guides/clustered/placement.md#a-withdrawn-resize-can-keep-its-reservation-indefinitely). If a reservation cannot be released safely, stay on v0.4.2 ([#468](https://github.com/projectbeskar/virtrigaud/issues/468)).
+- **Roll back the manager and the chart together** (`helm rollback`). A v0.4.1 manager image with the v0.4.2 chart does not start: it rejects the unknown `--client-qps` and `--client-burst` flags. If you roll back the image alone, remove those flags first.
+- **The newer CRD stays installed**, because the chart's CRD hook runs on install and upgrade, not on rollback. That is supported: a v0.4.1 manager works with it.
+- After a rollback, a v0.4.1 manager does not re-check inherited admissions, and its circuit breaker no longer gets the v0.4.2 fault-isolation accounting.
+- Rolling the providers back to v0.4.1 brings back `golang.org/x/net` v0.60.0 and the two CVEs it fixes.
 
 ## Upgrading from v0.4.0 to v0.4.1
 
@@ -229,8 +391,8 @@ The limitations of v0.4.0 that this release fixes (V12, the Proxmox user-data, t
 - **A libvirt `ImagePrepare` download is cut off after about 4.5 minutes, whatever `spec.prepare.timeout` says.** Prepare large images from a source close to the libvirt host. → [libvirt provider: Images](../providers/libvirt.md#images)
 - **The `VMClone` customization secret fields are only warned about,** and only with webhooks enabled. → [VM Cloning](../guides/advanced/vm-cloning.md#customization-secrets-are-not-sent)
 - **Proxmox: a VM with user-data is tied to one node and its seed to its storage;** the seed is written once, at `Create`; NICs a template has but `spec.networks` does not name are not configured; user-data given to a `VMClone` by Secret reference is not applied; the user-data is stored in plaintext in the seed volume; and the SSH credential is root on the node. → [Proxmox known limitations](../providers/proxmox.md#known-limitations-of-the-seed)
-- **Proxmox: a `VMClone` and its target deleted while the clone runs leave the cloned VM on PVE,** and neither `vcts` nor `virtrigaud-loadgen` can see it. A VMID race can still end "outcome unknown"; a `VMClone` whose source is locked is held as `CloneOutcomeUnknown` until it is sent again; a `VMSnapshot` create that PVE fails is not retried. → [Proxmox known limitations](../providers/proxmox.md#known-limitations-at-v041)
-- **libvirt: a leftover overlay file is never removed for you,** snapshot and revert overlays are `0600` and the disk check needs `VR_DISK_READ` to read them, a create from a `source.libvirt.path` image goes through the same check, files left by an earlier release's refused create stay, and the pool refresh of a VM delete covers the host that ran it. → [libvirt known limitations](../providers/libvirt.md#known-limitations-at-v041)
+- **Proxmox: a `VMClone` and its target deleted while the clone runs leave the cloned VM on PVE,** and neither `vcts` nor `virtrigaud-loadgen` can see it. A VMID race can still end "outcome unknown"; a `VMClone` whose source is locked is held as `CloneOutcomeUnknown` until it is sent again; a `VMSnapshot` create that PVE fails is not retried. → [Proxmox known limitations](../providers/proxmox.md#known-limitations-at-v042)
+- **libvirt: a leftover overlay file is never removed for you,** snapshot and revert overlays are `0600` and the disk check needs `VR_DISK_READ` to read them, a create from a `source.libvirt.path` image goes through the same check, files left by an earlier release's refused create stay, and the pool refresh of a VM delete covers the host that ran it. → [libvirt known limitations](../providers/libvirt.md#known-limitations-at-v042)
 - **libvirt UEFI: no memory snapshot, and no revert of UEFI variables.** On a clustered Provider whose hosts have different OVMF packages, VMs of one VMClass can get different firmware builds, and a change to a VMClass's `firmware` or `securityProfile` does not change existing VMs. → [libvirt: Firmware](../providers/libvirt.md#firmware-secure-boot-and-platform-features)
 - **A refused create is re-sent on a backoff,** and a change that is not a spec change of the VM, its `VMClass`, `VMImage` or `Provider` is picked up at the next re-check, at most 10 minutes later. A libvirt refusal that comes from the define, other than a missing UEFI firmware, still copies the image on each re-check and removes the copy. That includes a secure boot VM on a host that has a Secure Boot build of OVMF but not the one with keys enrolled. A remote provider's `Unauthenticated` and `ResourceExhausted` answers are not paced.
 - **`virtrigaud-loadgen` can fill a datastore** (`vmCount` times the disk size, plus snapshots). → [CLI Tools Reference](../references/cli-tools.md#virtrigaud-loadgen)
@@ -241,7 +403,7 @@ The limitations of v0.4.0 that this release fixes (V12, the Proxmox user-data, t
 - **`vrtg snapshot`, `clone`, `diag`, `init`, `conformance` and `provider logs`** are still not implemented and exit non-zero naming the alternative.
 - **Minor:** libvirt hosts keep the empty per-VM lock files `/tmp/virtrigaud-locks/{export,import,clone}-<domain>.lock` after the VM is gone; the redaction of staging locations also replaces every parent directory of an NFS export path, so an unrelated path in a clustered provider's error can read `<staged object>/libvirt/images/...`; two libvirt provider log lines mislead ("exists but no domain uses it; overwriting it" and "VM has a create in flight; sending an owner-checked delete to its pending host"); and every create logs `ERROR Command failed: sudo restorecon ...` on a host without SELinux, followed by a warning.
 
-**Carried forward from v0.4.0** (checked against the v0.4.1 code): metrics are served over plain HTTP by default; clustered libvirt providers are experimental; a migrated guest can boot without network or with a new identity (R36, ADR-0014); part of a Proxmox network attachment is not applied; deleting a namespace that holds an in-use `Provider`; the Proxmox legacy name rule and the two-request owner check; the admission policy needs Kubernetes 1.30+; vSphere CPU or memory changes of a running VM need hot-add; a disk-size change alone does not trigger a `Reconfigure`; `spec.disks` is reported on libvirt and Proxmox but not attached; snapshot revert on libvirt needs a snapshot taken powered off and libvirt 9.9+; the check that a snapshot delete keeps the VM's other snapshots is not atomic with the delete; a libvirt guest on a host bridge needs the guest agent to show `status.ips`; held calls need an operator; remote host commands can outlive a cancelled call, and Proxmox `nfs` is not re-send safe; provider locks are per process (one replica per Provider); landed disks are not deleted in some cases; NFS staging cleanup leaves a 0-byte file on libvirt and vSphere targets; `verifyChecksums` does not checksum NFS migrations; and leftovers from earlier releases are not cleaned up automatically. They are described in the sections below and on the pages linked from them (for example [Security model](../guides/security-model.md), [VM status](../guides/vm-status.md), [Proxmox](../providers/proxmox.md#known-limitations-at-v041), [Migration](../migration/user-guide.md)), and in the repository's [v0.4.1 release notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/release-notes/next.md#known-limitations).
+**Carried forward from v0.4.0** (checked against the v0.4.1 code): metrics are served over plain HTTP by default; clustered libvirt providers are experimental; a migrated guest can boot without network or with a new identity (R36, ADR-0014); part of a Proxmox network attachment is not applied; deleting a namespace that holds an in-use `Provider`; the Proxmox legacy name rule and the two-request owner check; the admission policy needs Kubernetes 1.30+; vSphere CPU or memory changes of a running VM need hot-add; a disk-size change alone does not trigger a `Reconfigure`; `spec.disks` is reported on libvirt and Proxmox but not attached; snapshot revert on libvirt needs a snapshot taken powered off and libvirt 9.9+; the check that a snapshot delete keeps the VM's other snapshots is not atomic with the delete; a libvirt guest on a host bridge needs the guest agent to show `status.ips`; held calls need an operator; remote host commands can outlive a cancelled call, and Proxmox `nfs` is not re-send safe; provider locks are per process (one replica per Provider); landed disks are not deleted in some cases; NFS staging cleanup leaves a 0-byte file on libvirt and vSphere targets; `verifyChecksums` does not checksum NFS migrations; and leftovers from earlier releases are not cleaned up automatically. They are described in the sections below and on the pages linked from them (for example [Security model](../guides/security-model.md), [VM status](../guides/vm-status.md), [Proxmox](../providers/proxmox.md#known-limitations-at-v042), [Migration](../migration/user-guide.md)), and in the repository's [v0.4.1 release notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/release-notes/next.md#known-limitations).
 
 ### Upgrading from a v0.4.1 release candidate
 

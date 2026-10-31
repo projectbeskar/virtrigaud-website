@@ -35,7 +35,7 @@ spec:
     name: proxmox-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.2"
     service:
       port: 9443
       # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).

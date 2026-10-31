@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # VM Migration Guide - architecture and internals
 
 This page is the **architectural deep dive** for VirtRigaud's `VMMigration` flow in
-v0.4.1. It complements the practical [User Guide](user-guide.md) and the
+v0.4.2. It complements the practical [User Guide](user-guide.md) and the
 field-by-field [API Reference](api-reference.md).
 
 If you want to migrate a VM today, start with the User Guide. If you want to
@@ -35,11 +35,11 @@ failed migration, read on.
 | Provider RPC implementations | `internal/providers/{vsphere,libvirt,proxmox}/` (`ExportDisk`, `ImportDisk`, `staged_disk.go`, `landed_disk.go`) |
 | Manager-side gRPC client | `internal/transport/grpc/client.go` |
 | gRPC contract | `proto/provider/v1/provider.proto` |
-| Design records | [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md), [ADR-0007 Addendum B](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0007-clustered-orchestrator-provider.md), [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0011-migration-staging-cleanup.md), [ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0014-migrated-guest-network.md) |
+| Design records | [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md), [ADR-0007 Addendum B](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0007-clustered-orchestrator-provider.md), [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0011-migration-staging-cleanup.md), [ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0014-migrated-guest-network.md) |
 
 ## What was validated
 
-The [User Guide](user-guide.md#what-virtrigaud-v041-supports) has the full tables. In
+The [User Guide](user-guide.md#what-virtrigaud-v042-supports) has the full tables. In
 short: v0.3.11 validated every pair among vSphere, libvirt and Proxmox over S3, and
 five pairs over NFS (libvirt to libvirt, libvirt and vSphere both ways, libvirt and
 Proxmox both ways). The v0.4.0 release candidates re-ran many of them, added migration
@@ -90,7 +90,7 @@ bucket or NFS export, not on a Kubernetes PVC mounted into provider pods.
 4. **The manager never touches the backend.** Dialling tenant-chosen S3 endpoints and
    NFS servers from the manager, which holds cluster-wide RBAC, would move the SSRF
    surface into the most privileged component. Every read, write and delete of a staged
-   object is done by a provider ([ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0011-migration-staging-cleanup.md)),
+   object is done by a provider ([ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0011-migration-staging-cleanup.md)),
    and the manager only checks the host against its SSRF policy first.
 
 PVC mode is retained for backward compatibility. Its constraints: it works only
@@ -177,7 +177,7 @@ that a restart, a leader change or a stale cache cannot send one twice by accide
   re-send safe, 35 minutes later, at most 3 times. Operator confirmation is the
   annotation `virtrigaud.io/operation-outcome=not-performed@<attempt id>`. See
   [User Guide](user-guide.md#a-migration-held-with-outcomeunknown) and
-  [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
+  [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/provider-call-outcomes.md).
 - **Results are not lost to a conflict.** A status write that loses to a concurrent
   write is re-applied to the live object (same UID and phase) rather than dropped by a
   requeue. If it cannot be written at all, the result is kept in memory for the next
@@ -219,12 +219,12 @@ chart's `ValidatingAdmissionPolicy` additionally reserves the provenance annotat
 the manager (Kubernetes 1.30+). For a granted cross-namespace migration the lookup of
 the migration in the VM's own namespace finds nothing, so the disk is copied or the
 create is refused, never attached in place
-([Cross-namespace targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-targets.md)).
+([Cross-namespace targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/cross-namespace-targets.md)).
 
 ## Cleanup architecture
 
 Three kinds of artifact outlive a failed or finished migration, and each is removed by an
-RPC to a **provider**, with the same pattern ([ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0011-migration-staging-cleanup.md)):
+RPC to a **provider**, with the same pattern ([ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0011-migration-staging-cleanup.md)):
 
 | Artifact | RPC | Sent to | Condition |
 |----------|-----|---------|-----------|
@@ -311,7 +311,7 @@ the same gates:
 ## Migration into a clustered Provider
 
 For a target Provider with `topology: cluster`
-([ADR-0007 Addendum B](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0007-clustered-orchestrator-provider.md#addendum-b-2026-10-18-migration-into-a-clustered-provider-p3-cold-path),
+([ADR-0007 Addendum B](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0007-clustered-orchestrator-provider.md#addendum-b-2026-10-18-migration-into-a-clustered-provider-p3-cold-path),
 experimental) the order inverts, because the disk must land on the host that will run
 the VM:
 
@@ -331,7 +331,7 @@ the VM:
 5. A retry or deletion before the target is created deletes the unbound target first.
 
 Operator guide: [Migrating into a clustered Provider](clustered-target.md); summary and limits: [Clustered libvirt](../guides/clustered/index.md); every reason:
-[Migration into a clustered provider](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
+[Migration into a clustered provider](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b).
 
 ## Reconciler instrumentation
 
@@ -350,7 +350,7 @@ Indirect signals from the provider RPCs a migration drives:
 - `virtrigaud_circuit_breaker_state{provider_type, provider}` - one breaker per Provider.
   A long migration issues many RPCs back to back, so it is a demanding test of the
   breaker. See
-  [Resilience](../operations/resilience.md#circuitbreaker-on-the-provider-grpc-path-v036).
+  [Resilience](../operations/resilience.md#circuit-breaker).
 
 ## Provider-side responsibilities
 
@@ -397,7 +397,7 @@ For NFS, the node kernel-mounts the export and presents the migration's `nfs.uid
 `nfs.gid` through `setpriv`. A stage is removed when the target VM's create consumes it;
 a migration that fails between import and create has its stage removed by the
 landed-disk delete (tested against a simulated node only), and
-[stale stages from earlier releases](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md#stale-proxmox-import-stages)
+[stale stages from earlier releases](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/upgrading.md#stale-proxmox-import-stages)
 need a periodic sweep.
 
 ### The staging URL contract
@@ -506,7 +506,7 @@ Key properties:
 - **Post-import validation and progress.** `options.validationChecks` and
   `status.progress` are in the schema and not used.
 - **A migrated guest's network and identity.** Designed in
-  [ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0014-migrated-guest-network.md)
+  [ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0014-migrated-guest-network.md)
   (carry the source NICs' MACs, present the source's instance-id), not implemented; see
   [The migrated guest's network](user-guide.md#the-migrated-guests-network).
 
@@ -520,7 +520,7 @@ Key properties:
 - [Security model](../guides/security-model.md) - cross-namespace targets, migration storage mounts and the disk-size limit.
 - [Resilience](../operations/resilience.md) - circuit breaker behaviour during long migrations.
 - [Full CRD Reference](../references/generated-crd-docs.md#vmmigration) - generated CRD documentation.
-- [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) -
+- [ADR-0006](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0006-storage-backend-agnostic-cross-hypervisor-migration.md) -
   the storage-backend-agnostic migration model.
-- [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0011-migration-staging-cleanup.md) -
+- [ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0011-migration-staging-cleanup.md) -
   staged and landed disk cleanup.

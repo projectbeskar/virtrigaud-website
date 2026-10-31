@@ -7,13 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 
 This page describes the actual versioning model VirtRigaud follows today, the API-stability commitment, and how the project chooses release tags.
 
-It is aligned to **VirtRigaud v0.4.1** (the current latest).
+It is aligned to **VirtRigaud v0.4.2** (the current latest).
 
 ## TL;DR
 
-- **Current latest**: `v0.4.1`. Helm chart `--version 0.4.1`. Provider images tagged `v0.4.1`.
+- **Current latest**: `v0.4.2`. Helm chart `--version 0.4.2`. Provider images tagged `v0.4.2`.
 - **CRD API version**: `infra.virtrigaud.io/v1beta1` is the **stable** API. Breaking changes need an ADR.
-- **Release pattern**: release candidates, a soak against real hypervisors, then the final tag. v0.4.0 went through nine release candidates and v0.4.1 through three.
+- **Release pattern**: release candidates, a soak against real hypervisors, then the final tag. v0.4.0 went through nine release candidates, v0.4.1 through three and v0.4.2 through two.
 - **Go modules**: since v0.4.1 each release also tags the `sdk` and `proto` Go modules (`sdk/vX.Y.Z`, `proto/vX.Y.Z`); earlier releases have no such tags.
 - **Support**: best-effort on the latest minor. The project does not maintain LTS branches. Upgrade to the latest patch within the current minor to get fixes.
 
@@ -23,14 +23,14 @@ VirtRigaud is composed of several artefacts that each carry a version label:
 
 | Component | Where it lives | Versioning notes |
 |-----------|----------------|------------------|
-| Manager binary | `cmd/manager` → `ghcr.io/projectbeskar/virtrigaud/manager:v0.4.1` | Tracks the project release tag exactly. |
-| Provider binaries | `cmd/provider-{vsphere,libvirt,proxmox,mock}` → `ghcr.io/projectbeskar/virtrigaud/provider-*:v0.4.1` | Currently released in lockstep with the manager. |
-| Helm chart | `charts/virtrigaud` | Chart version matches the project release without the `v` (`0.4.1`); the release workflow sets `Chart.yaml` and the image tags in `values.yaml` when it packages the chart. |
+| Manager binary | `cmd/manager` → `ghcr.io/projectbeskar/virtrigaud/manager:v0.4.2` | Tracks the project release tag exactly. |
+| Provider binaries | `cmd/provider-{vsphere,libvirt,proxmox,mock}` → `ghcr.io/projectbeskar/virtrigaud/provider-*:v0.4.2` | Currently released in lockstep with the manager. |
+| Helm chart | `charts/virtrigaud` | Chart version matches the project release without the `v` (`0.4.2`); the release workflow sets `Chart.yaml` and the image tags in `values.yaml` when it packages the chart. |
 | CRD API | `api/infra.virtrigaud.io/v1beta1` | `v1beta1` — stable in the Kubernetes sense; see [API stability](#api-stability-v1beta1) below. |
 | gRPC contract | `proto/provider/v1/provider.proto` | Separate Go module, tagged `proto/vX.Y.Z` with each release since v0.4.1. New RPCs land additively; breaking proto changes would require a major proto-package bump. CI runs `buf breaking` against the pull request's target branch since v0.4.1. |
 | Provider SDK | `sdk/` | Separate Go module. Used by external provider authors. Tagged `sdk/vX.Y.Z` with each release since v0.4.1 (none for v0.4.0 and earlier). |
 
-All of the above are tagged together as `v0.4.1` for the v0.4.1 release (`sdk/v0.4.1` and `proto/v0.4.1` point at the same commit as `v0.4.1`; see [Go modules](../development/providers.md#go-modules-the-sdk-and-proto)). The `mock` provider is a development image and is not published under release tags.
+All of the above are tagged together as `v0.4.2` for the v0.4.2 release (`sdk/v0.4.2` and `proto/v0.4.2` point at the same commit as `v0.4.2`; see [Go modules](../development/providers.md#go-modules-the-sdk-and-proto)). The `mock` provider is a development image and is not published under release tags.
 
 ## Semantic versioning
 
@@ -53,7 +53,7 @@ The project rule is that a breaking change to the v1beta1 contract needs an ADR 
 
 There is no `v1alpha*` and no `v1` for the `infra.virtrigaud.io` group — operators target `v1beta1` for all CRs.
 
-The 12 CRDs at v0.4.1: `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMMigration`, `VMSnapshot`, `VMSet`, `VMPlacementPolicy`, `VMClone`, `Host`, `HostPool` (the last two are new in v0.4.0). `VMAdoption` is a controller, not a CRD.
+The 12 CRDs at v0.4.2: `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMMigration`, `VMSnapshot`, `VMSet`, `VMPlacementPolicy`, `VMClone`, `Host`, `HostPool` (the last two are new in v0.4.0). `VMAdoption` is a controller, not a CRD.
 
 ## Release cadence and pattern
 
@@ -63,9 +63,9 @@ Releases land on a "ship when ready" cadence; the project does not commit to a f
 |------|---------|
 | `-rcN` (release candidate) | Cut from `main` once all gates are green. Pre-release: not for production. |
 | soak | Candidates are deployed against real hypervisors and exercised. Each finding goes back to `main` for a fix and a new candidate. |
-| final | Tag promoted to its production name (for example `v0.4.1`) and shipped to the Helm repo. |
+| final | Tag promoted to its production name (for example `v0.4.2`) and shipped to the Helm repo. |
 
-Track record: v0.3.3 took four candidates; v0.3.5 and v0.3.6 one each (v0.3.6 caught three HIGH-severity OpenTelemetry CVEs at the scan gate and was re-cut); v0.4.0 took nine (`rc3` was tagged but its release run was stopped by the image scan, so no `rc3` was published); v0.4.1 took three, and ships the code of the third.
+Track record: v0.3.3 took four candidates; v0.3.5 and v0.3.6 one each (v0.3.6 caught three HIGH-severity OpenTelemetry CVEs at the scan gate and was re-cut); v0.4.0 took nine (`rc3` was tagged but its release run was stopped by the image scan, so no `rc3` was published); v0.4.1 took three, and ships the code of the third; v0.4.2 took two (rc2 fixed a regression found while qualifying rc1, [#472](https://github.com/projectbeskar/virtrigaud/issues/472)), and ships the code of the second.
 
 If you are choosing a version for production, prefer the latest final tag, and read the [Upgrade Guide](../operations/upgrade.md) before moving across a minor.
 
@@ -75,14 +75,14 @@ The chart version is identical to the project version. Always pin in production:
 
 ```bash
 helm install virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.1 \
+  --version 0.4.2 \
   --namespace virtrigaud-system \
   --create-namespace
 ```
 
 ```bash
 helm upgrade virtrigaud virtrigaud/virtrigaud \
-  --version 0.4.1 \
+  --version 0.4.2 \
   --namespace virtrigaud-system \
   --reset-then-reuse-values
 ```
@@ -96,7 +96,7 @@ Provider pods run separate images, each tagged to the same version as the manage
 ```yaml
 spec:
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.2"
 ```
 
 A provider image must be compatible with the manager that drives it. Keep the provider images on the same release as the manager. When you upgrade, roll the CRDs first, then the manager, then the providers; the [Upgrade Guide](../operations/upgrade.md) lists the few cases where a provider must not be rolled ahead of the manager (libvirt, Proxmox) or must be rolled promptly after it (clustered libvirt, `ImagePrepare` identity).
@@ -136,7 +136,7 @@ These categories are treated as breaking and require an ADR + a deprecation cycl
 | Older CR objects on a newer manager | Always valid (additive evolution only). |
 | Newer CR objects on an older manager | Not supported. The older manager will reject the unknown fields. Upgrade the manager first. |
 | Provider image newer than the manager | Best-effort. Do not pin a provider image to a release later than the manager; with a v0.3.11 manager, a v0.4.0 Proxmox provider fails every Proxmox-target `VMMigration` (it needs the manager's verified-stage fields). |
-| Manager newer than provider images | Supported while you stage the rollout (CRDs, manager, providers), with known degradations: for example a v0.4.1 manager holds import-style image prepares and clustered resizes until the provider reports `supportsImageArtifactIdentity` / `supportsHonestReconfigure`, and with a v0.4.0 libvirt provider it reads a single-host failed revert as a failure and retries every "not performed" snapshot create every 10 minutes instead of failing (roll the libvirt providers promptly). |
+| Manager newer than provider images | Supported while you stage the rollout (CRDs, manager, providers), with known degradations: for example a v0.4.2 manager holds import-style image prepares and clustered resizes until the provider reports `supportsImageArtifactIdentity` / `supportsHonestReconfigure`, and with a v0.4.0 libvirt provider it reads a single-host failed revert as a failure and retries every "not performed" snapshot create every 10 minutes instead of failing (roll the libvirt providers promptly). |
 
 For the canonical step-by-step upgrade (v0.3.11 → v0.4.0 has a required order and several breaking changes; v0.4.0 → v0.4.1 keeps the order and has a few actions of its own), see the [Upgrade Guide](../operations/upgrade.md).
 
@@ -148,7 +148,7 @@ The project does **not** maintain long-term-support branches. Support is best-ef
 - **Prior minor** — community-only. No proactive backports; fixes accepted via PR.
 - **Older** — not supported. Upgrade.
 
-If you operate VirtRigaud in a regulated environment, pin to a specific patch and upgrade on a schedule rather than chasing latest. Each release tag is reproducible: the manager binary emits `virtrigaud_build_info{version="v0.4.1"}` on `/metrics`, and the container image digest is signed and published to ghcr.io.
+If you operate VirtRigaud in a regulated environment, pin to a specific patch and upgrade on a schedule rather than chasing latest. Each release tag is reproducible: the manager binary emits `virtrigaud_build_info{version="v0.4.2"}` on `/metrics`, and the container image digest is signed and published to ghcr.io.
 
 ## Where to track releases
 
@@ -158,7 +158,7 @@ If you operate VirtRigaud in a regulated environment, pin to a specific patch an
 
 ## Choosing a version
 
-- **New installs**: use `v0.4.1`.
+- **New installs**: use `v0.4.2`.
 - **Upgrading from `v0.4.0`**: v0.4.1 is a patch release with no CRD schema change and the same roll order (CRDs, manager, providers), but it has breaking changes for Proxmox VMs that carry user-data and for libvirt VMClasses with `firmware: UEFI`. Read [Upgrading from v0.4.0 to v0.4.1](../operations/upgrade.md#upgrading-from-v040-to-v041) first.
 - **Upgrading from `v0.3.11`**: read the [Upgrade Guide](../operations/upgrade.md) first. v0.4.0 is a security-hardening release with breaking changes (cross-namespace grants, immutable `spec.providerRef`, a new vCenter privilege, libvirt host preparation, and more) and a required order: CRDs, then grants, then the manager, then the providers.
 - **Upgrading from older `v0.3.x`**: upgrade to v0.3.11 first, or read every intermediate CHANGELOG block.
@@ -166,6 +166,6 @@ If you operate VirtRigaud in a regulated environment, pin to a specific patch an
 
 ## API reference
 
-- [Capability matrix](providers-capabilities.md) — per-provider capabilities at v0.4.1.
+- [Capability matrix](providers-capabilities.md) — per-provider capabilities at v0.4.2.
 - [Generated CRD reference](../references/generated-crd-docs.md).
 - [Provider gRPC contract reference](../references/grpc-api.md).

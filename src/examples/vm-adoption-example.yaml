@@ -34,7 +34,7 @@ spec:
     name: vsphere-prod-credentials
     namespace: default
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.2"
     service:
       port: 9443
       # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
@@ -66,7 +66,7 @@ spec:
     name: vsphere-prod-credentials
     namespace: default
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.2"
     service:
       port: 9443
       # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
@@ -127,7 +127,7 @@ spec:
     name: libvirt-prod-credentials
     namespace: default
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.2"
     service:
       port: 9443
       # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).
@@ -154,7 +154,7 @@ spec:
     name: proxmox-prod-credentials
     namespace: default
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.2"
     service:
       port: 9443
       # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).

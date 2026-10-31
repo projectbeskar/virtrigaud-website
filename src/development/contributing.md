@@ -14,7 +14,7 @@ provides guidelines and information for contributors.
 
 - **Go 1.26+** — required since
   [#125](https://github.com/projectbeskar/virtrigaud/pull/125) (v0.3.6 bumped
-  the toolchain floor from 1.24.0 → 1.26.0; v0.4.1 builds on **1.26.10**). The
+  the toolchain floor from 1.24.0 → 1.26.0; v0.4.2 builds on **1.26.10**). The
   repo's `go.mod` is the source of truth; CI uses `go-version-file: go.mod`
   so locally you should match.
 - Docker
@@ -218,7 +218,7 @@ below run on every PR; two are gated and in practice run on pushes only:
 | **API Conversion Tests**  | Gated on `api/` or `config/crd/` changing (push events only, as above): single-version CRDs, CRD kustomization in sync, no internal lab names in tracked files, CRD generation drift. |
 | **CI Summary**            | Aggregates most of the above (its `needs:` list is in `ci.yml`).              |
 
-CI uses `go-version-file: go.mod` for the Go version (1.26.10 in v0.4.1).
+CI uses `go-version-file: go.mod` for the Go version (1.26.10 in v0.4.2).
 
 ### Lint
 

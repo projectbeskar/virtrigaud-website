@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider Capabilities Matrix
 
-This document lists the VirtRigaud provider capabilities as of **v0.4.1**.
+This document lists the VirtRigaud provider capabilities as of **v0.4.2**.
 
 Cells marked ✅ / ❌ in this matrix are cross-referenced against each provider's `GetCapabilities` gRPC response (`internal/providers/{vsphere,libvirt,proxmox}/server.go`) and the capability builder registrations in `internal/providers/{proxmox}/capabilities.go` / `sdk/provider/capabilities/`. Where a feature is implemented in code but not yet exposed through the capability flag (or vice versa), the cell carries a footnote rather than being silently changed.
 
@@ -53,7 +53,7 @@ A libvirt `Provider` with `spec.topology: cluster` fronts several libvirt hosts 
 | Host-to-host (live or offline) migration | **Not implemented** |
 | Replicas | One, with the `Recreate` strategy: a rollout is a short outage |
 
-Setup, placement and operations: [Clustered libvirt guide](../guides/clustered/index.md). Details: [Libvirt provider](libvirt.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md).
+Setup, placement and operations: [Clustered libvirt guide](../guides/clustered/index.md). Details: [Libvirt provider](libvirt.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/clustered-provider-inventory.md).
 
 ## Comprehensive Capability Matrix
 
@@ -147,7 +147,7 @@ Legend: ✅ supported through VirtRigaud CRs; ⚠️ partial (see the note in th
 | Revert (`VirtualMachine.spec.snapshot.revertToRef`, VM powered off) | `RevertToSnapshot_Task`; a memory snapshot powers the VM on, then `spec.powerState` is applied | External snapshots need libvirt 9.9+. Refused for a snapshot that stored the cloud-init CD-ROM: take the snapshot **with the VM powered off** to be able to revert it. Refused while a linked clone depends on the VM's disk | Rollback task, polled by the manager |
 | Delete | Refuses a template or prepared-image artifact (`VM_IS_IMAGE_ARTIFACT`) | Deleting a disk-only snapshot is refused while a memory snapshot of the VM is stored in its overlay: delete the memory snapshot first (`Ready=False/DeleteBlocked`) | Refused when the VM's owner stamp cannot be read |
 
-A revert discards what was written to the disks since the snapshot. Walkthrough, rules and troubleshooting: [VM snapshots and revert](../guides/vm-snapshots.md). The revert was accepted but ignored before v0.4.0. Full rules: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md) and the [VM CRD reference](../references/crds.md#snapshot-revert).
+A revert discards what was written to the disks since the snapshot. Walkthrough, rules and troubleshooting: [VM snapshots and revert](../guides/vm-snapshots.md). The revert was accepted but ignored before v0.4.0. Full rules: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/vm-snapshot-revert.md) and the [VM CRD reference](../references/crds.md#snapshot-revert).
 
 ### Image Management
 
@@ -171,16 +171,16 @@ A revert discards what was written to the disks since the snapshot. Walkthrough,
 | **Disk Import** | ✅[^7] | ✅[^8] | ✅ | ❌ | `ImportDisk` |
 | **Export Compression** | ✅ | ✅ | ✅[^proxmoxcomp] | ❌ | vSphere and libvirt honor `req.Compress`; Proxmox (#219) |
 | **Export Formats** | `vmdk`, `qcow2`, `raw` | `qcow2`, `raw` (clustered: `qcow2`) | `qcow2`, `raw`, `vmdk` | n/a | vSphere & Proxmox `GetCapabilities` advertise all three (#178 / #198) |
-| **Cross-Provider Migration — S3 backend** | ✅[^migrate] | ✅[^migrate] | ✅[^migrate] | n/a | `VMMigration` over S3-compatible object storage (`relay`). Validated at v0.3.11 as source **and** target for every pair among the three providers (ADR-0006 Slices 1–3, #236); see [what was validated](../migration/user-guide.md#what-virtrigaud-v041-supports). |
-| **Cross-Provider Migration — NFS backend** | ✅[^migratenfs] | ✅[^migratenfs] | ✅[^migratenfs] | n/a | `VMMigration` over an NFS export via `qemu-img` (ADR-0006 Slice 4, #236). vSphere pod-side libnfs, libvirt host-side libnfs, **Proxmox kernel-mount**. Validated at v0.3.11 for libvirt ⇄ libvirt, libvirt ⇄ vSphere and libvirt ⇄ Proxmox; **vSphere ⇄ Proxmox over NFS has not been run** ([details](../migration/user-guide.md#what-virtrigaud-v041-supports)). |
+| **Cross-Provider Migration — S3 backend** | ✅[^migrate] | ✅[^migrate] | ✅[^migrate] | n/a | `VMMigration` over S3-compatible object storage (`relay`). Validated at v0.3.11 as source **and** target for every pair among the three providers (ADR-0006 Slices 1–3, #236); see [what was validated](../migration/user-guide.md#what-virtrigaud-v042-supports). |
+| **Cross-Provider Migration — NFS backend** | ✅[^migratenfs] | ✅[^migratenfs] | ✅[^migratenfs] | n/a | `VMMigration` over an NFS export via `qemu-img` (ADR-0006 Slice 4, #236). vSphere pod-side libnfs, libvirt host-side libnfs, **Proxmox kernel-mount**. Validated at v0.3.11 for libvirt ⇄ libvirt, libvirt ⇄ vSphere and libvirt ⇄ Proxmox; **vSphere ⇄ Proxmox over NFS has not been run** ([details](../migration/user-guide.md#what-virtrigaud-v042-supports)). |
 
-A clustered libvirt Provider is also accepted as a `VMMigration` **target** over S3 or NFS (experimental, v0.4.1): the target VM is created and placed first on a host whose `default` pool has room for the disk, and the disk is imported onto that host. It was run from single-host libvirt, vSphere and Proxmox (S3) sources. Host-to-host migration is not implemented.
+A clustered libvirt Provider is also accepted as a `VMMigration` **target** over S3 or NFS (experimental, v0.4.2): the target VM is created and placed first on a host whose `default` pool has room for the disk, and the disk is imported onto that host. It was run from single-host libvirt, vSphere and Proxmox (S3) sources. Host-to-host migration is not implemented.
 
 This is VirtRigaud's **storage-backend-agnostic, any-direction** cross-hypervisor
 migration (ADR-0006): the disk is staged on a pluggable backend (S3 or NFS) and
 moved with `qemu-img` — it **never traverses a CSI PVC**. Over S3 every pair among
 vSphere, Libvirt/KVM and Proxmox VE was lab-validated in both directions (v0.3.11); over NFS
-five pairs were, and vSphere ⇄ Proxmox VE was not ([what was validated](../migration/user-guide.md#what-virtrigaud-v041-supports)). A legacy `pvc` staging mode remains for the vSphere/libvirt
+five pairs were, and vSphere ⇄ Proxmox VE was not ([what was validated](../migration/user-guide.md#what-virtrigaud-v042-supports)). A legacy `pvc` staging mode remains for the vSphere/libvirt
 directions but is **compat-only** — it cannot reach host-resident libvirt disks or
 Proxmox node storage. Do not confuse this with the **vMotion/Migration** row in
 [Advanced Features](#advanced-features) below, which is *intra-hypervisor live*
@@ -209,7 +209,7 @@ Settings of the `VMClass` that choose the VM's firmware and virtual hardware. Th
 | **Nested virtualization** (`performanceProfile.nestedVirtualization`) | ✅ | ✅ | ❌ | ❌ | libvirt: works since v0.4.1 (`host-passthrough`); nesting must be enabled in the host's KVM module |
 | **TPM** (`securityProfile.tpmEnabled`) | ✅ | ✅ | ❌ | ❌ | libvirt: an emulated TPM 2.0 (`swtpm` on the host) |
 
-libvirt details, host prerequisites and the secure boot trust model: [libvirt firmware](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-firmware.md) and the [libvirt provider page](libvirt.md#firmware-secure-boot-and-platform-features). On a clustered libvirt Provider every host that can receive a UEFI or secure boot VM needs the OVMF package: the scheduler does not consider firmware.
+libvirt details, host prerequisites and the secure boot trust model: [libvirt firmware](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-firmware.md) and the [libvirt provider page](libvirt.md#firmware-secure-boot-and-platform-features). On a clustered libvirt Provider every host that can receive a UEFI or secure boot VM needs the OVMF package: the scheduler does not consider firmware.
 
 ### Guest Operating System
 
@@ -296,7 +296,7 @@ Enable enforcement once you have confirmed (via `status.reportedCapabilities`) t
 
 ### Provider capability flags for clustered and security contracts
 
-Beyond the flags shown on `Provider.status.reportedCapabilities`, `GetCapabilities` carries flags the manager reads at runtime to decide whether it may send a call or must hold an operation. The table shows what each provider reports in v0.4.1 (source: each provider's `GetCapabilities`). A manager holds the matching operation when the flag is missing, rather than sending a call the provider would not honour.
+Beyond the flags shown on `Provider.status.reportedCapabilities`, `GetCapabilities` carries flags the manager reads at runtime to decide whether it may send a call or must hold an operation. The table shows what each provider reports in v0.4.2 (source: each provider's `GetCapabilities`). A manager holds the matching operation when the flag is missing, rather than sending a call the provider would not honour.
 
 | Flag | vSphere | Libvirt (single) | Libvirt (clustered) | Proxmox | Mock |
 |------|:---:|:---:|:---:|:---:|:---:|
@@ -398,9 +398,9 @@ Reflects each provider's `GetCapabilities.SupportedNetworkTypes` response.
 
 All provider images are available from the GitHub Container Registry:
 
-- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1`
-- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1`
-- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1`
+- **vSphere**: `ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.2`
+- **Libvirt**: `ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.2`
+- **Proxmox**: `ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.2`
 
 The mock provider (`provider-mock`) is a development/conformance-testing image only.
 It is **not** published under release tags and is **not** part of the multi-arch
@@ -477,6 +477,7 @@ Support is best-effort and there is no long-term-support line; see [Versioning](
 
 ## Version History
 
+- **v0.4.2**: **No capability change** and no gRPC contract change. The manager no longer counts a provider's answered VM-level failures (`Internal`, `Unknown` with a message) toward the Provider's circuit breaker ([#472](https://github.com/projectbeskar/virtrigaud/issues/472)); the **vSphere** provider's session keepalive keeps retrying after a failed login; the **Proxmox** provider marks its "exists elsewhere in the cluster" answer `VM_OPERATION_FAILED`. Clustered Providers get durable resize reservations and a re-check of inherited admissions. See the [upgrade notes](../operations/upgrade.md#upgrading-from-v041-to-v042).
 - **v0.4.1**: **Proxmox** builds a NoCloud seed over SSH so the whole `spec.userData` reaches the guest (breaking for VMs that carry user-data: SSH credentials in the Provider's Secret), keeps the seed out of the boot order, answers a VMID race "not performed", gives a clone the class's memory, and **no longer advertises linked clones**. **libvirt** secure boot, `firmware: UEFI` (now honoured: a behaviour change), VT-d, nested virtualization and multi-NIC VMs work; a snapshot whose overlay file already exists is refused for good and "not performed" snapshot and revert answers are retried. The manager retries a refused create on a backoff, keeps a provider's answer across a status-write conflict, re-reads `status.reportedCapabilities` after a provider roll and follows the ready replicas in `status.healthy` and `ProviderAvailable`. `vcts run`, `virtrigaud-loadgen` and `vrtg-provider init --type proxmox` work. See the [upgrade notes](../operations/upgrade.md#upgrading-from-v040-to-v041).
 - **v0.4.0**: **Clustered libvirt providers (experimental)** — `topology: cluster` with `Host`/`HostPool`, a placement scheduler and routed per-host calls; libvirt reports `SupportsHonestReconfigure` (a change that only reaches the persistent definition is reported `RestartRequired`); **libvirt linked clones are disabled** (`SupportsLinkedClones=false`, `LinkedCloneUnsupported`); **snapshot revert** (`spec.snapshot.revertToRef`) on all providers; `spec.disks` is reported as not attached on libvirt and Proxmox (`DisksApplied=False`); Proxmox applies bridge, VLAN, NIC model and static IP and places the cloud-init drive on the VM's storage; identity-safe image preparation (`SupportsImageArtifactIdentity`) on vSphere, libvirt and Proxmox; the owner-stamp, staged/landed disk delete, resend-safe backend and import size-limit flags (see [Provider capability flags](#provider-capability-flags-for-clustered-and-security-contracts)).
 - **v0.3.11**: **NFS cross-hypervisor migration staging backend (ADR-0006 Slice 4, #236)** — a second storage-agnostic `VMMigration` backend alongside S3, lab-validated against a real NFS server for libvirt ⇄ libvirt, libvirt ⇄ vSphere and libvirt ⇄ Proxmox VE (vSphere ⇄ Proxmox VE over NFS was not run). The disk is staged on an NFS export and moved with `qemu-img`'s native transport (no PVC, no relay, no S3 credentials): libvirt (host-side) and vSphere (pod-side) use the `nfs://` libnfs driver; **Proxmox kernel-mounts** the export (`pve-qemu-kvm` ships no libnfs). `nfs.uid`/`nfs.gid` are effectively mandatory for cross-provider migrations (AUTH_SYS identity). With the S3 matrix (Slices 1–3) this delivered #236's backend-agnostic design. Proxmox now advertises **s3 and nfs** (not PVC).
@@ -494,4 +495,4 @@ Support is best-effort and there is no long-term-support line; see [Versioning](
 
 ---
 
-*This document reflects VirtRigaud v0.4.1 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*
+*This document reflects VirtRigaud v0.4.2 capabilities. For the latest updates, see the [VirtRigaud documentation](https://projectbeskar.github.io/virtrigaud/).*

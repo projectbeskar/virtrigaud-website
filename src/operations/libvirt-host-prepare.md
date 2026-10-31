@@ -5,14 +5,14 @@ SPDX-License-Identifier: Apache-2.0
 
 # Libvirt Host Preparation
 
-This page is aligned to **VirtRigaud v0.4.1**. It describes what an operator
+This page is aligned to **VirtRigaud v0.4.2**. It describes what an operator
 must set up on a Libvirt/KVM host so the in-tree libvirt provider
 (`internal/providers/libvirt/`) can drive it over SSH, for a single-host
 `Provider` and for every `Host` of a clustered (`topology: cluster`,
 experimental) one.
 
 !!! warning "Upgrading from v0.3.11: three host changes are required before the provider rolls"
-    A v0.4.1 libvirt provider **fails every VM create on a host** that lacks the
+    A v0.4.2 libvirt provider **fails every VM create on a host** that lacks the
     [cloud-init seed directory](#cloud-init-seed-directory), and cannot read
     libvirt's snapshot overlays without the
     [`VR_DISK_READ` sudo rule](#sudo-rules-for-disk-reads-and-copies) (unless the SSH
@@ -44,7 +44,7 @@ a password or a private key, both read from the Kubernetes Secret mounted at
     mode (`VIRTRIGAUD_LIBVIRT_NATIVE`, off by default) to compare its answers
     with `virsh`'s. The answers served are still `virsh`'s, so host
     requirements do not change. See
-    [ADR-0008](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0008-libvirt-pure-go-driver-and-ssh-transport.md).
+    [ADR-0008](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0008-libvirt-pure-go-driver-and-ssh-transport.md).
 
 ## Host prerequisites at a glance
 
@@ -93,7 +93,7 @@ What the provider uses each package for, as implemented:
 - `genisoimage` builds the cloud-init NoCloud seed ISO (`cloudinit.go`); its
   `isoinfo` reads a clone source's seed (`clone_seed.go`).
 - `curl` downloads `url` images, for `ImagePrepare` (`image.go`) and, since
-  v0.4.1, for a VM create that carries an image URL too (the URL goes to `curl`
+  v0.4.2, for a VM create that carries an image URL too (the URL goes to `curl`
   on standard input, not on the command line). **`wget` is no longer used.** If
   `curl` is missing the provider log says so.
 - `ovmf` (Debian, Ubuntu), `edk2-ovmf` (Fedora, RHEL) or `qemu-ovmf-x86_64`
@@ -199,7 +199,7 @@ the host key on every connection against the `known_hosts` file mounted at
 `/etc/virtrigaud/credentials/known_hosts`. A missing or empty file, or an entry
 for another host, is a hard failure: there is no trust-on-first-use. The error
 names the problem in the provider pod log and in `Ready=False` / `ProviderError` on the VMs that use the Provider. `ProviderAvailable` does not show it: it only reflects whether the provider Deployment has a ready replica. See
-[ADR-0004](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0004-libvirt-ssh-host-key-verification.md).
+[ADR-0004](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0004-libvirt-ssh-host-key-verification.md).
 
 Collect the key from a trusted network path and add it as the `known_hosts` key
 of the credentials Secret. Use a placeholder in files you commit:
@@ -396,7 +396,7 @@ pool, keep the image catalog apart from the pool.
 `default` pool. If you add a directory here, add it to the
 [`VR_DISK_READ` sudo rule](#sudo-rules-for-disk-reads-and-copies) too.
 
-Full rules: [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/image-preparation.md#libvirt-image-paths-sourcelibvirtpath).
+Full rules: [Image preparation](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/image-preparation.md#libvirt-image-paths-sourcelibvirtpath).
 
 ### Prepared images (`ImagePrepare`)
 
@@ -448,7 +448,7 @@ Since v0.4.0 the provider builds every seed in a dedicated directory that only
 the SSH user can list, and makes each seed file private. The directory **must
 exist on every host that creates VMs** (every host of a clustered Provider and
 the target host of a migration into libvirt), owned by the SSH user, before the
-v0.4.1 libvirt provider runs:
+v0.4.2 libvirt provider runs:
 
 ```bash
 install -d -m 0711 -o <ssh user> -g <ssh user> /var/lib/libvirt/virtrigaud-seeds
@@ -488,7 +488,7 @@ install -d -m 0711 -o <ssh user> -g <ssh user> /var/lib/libvirt/virtrigaud-seeds
   lists the commands to make old seeds private and to move them.
 
 Full reference:
-[libvirt domain ownership: cloud-init seed directory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-domain-ownership.md#cloud-init-seed-directory).
+[libvirt domain ownership: cloud-init seed directory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-domain-ownership.md#cloud-init-seed-directory).
 
 ## Sudo rules for disk reads and copies
 
@@ -521,7 +521,7 @@ as before except cloning or exporting a VM whose active disk is such an overlay.
 For the default pool directory `/var/lib/libvirt/images`, an SSH user
 `virtrigaud`, and an NFS migration export `nfs.example.com:/exports/virtrigaud`
 (adjust all three, and the paths of `qemu-img` and `timeout`), exactly as in the
-[libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#what-the-copies-run-as-root)
+[libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-clones.md#what-the-copies-run-as-root)
 reference:
 
 ```
@@ -569,7 +569,7 @@ virtrigaud ALL=(root) NOPASSWD: VR_DISK_READ, VR_CLONE_COPY, VR_EXPORT_COPY
 Without any rule, a `VR_DISK_READ`-less setup can instead repair each overlay by
 hand (`sudo chown -h libvirt-qemu:kvm -- <file>` and `sudo chmod 0640 -- <file>`
 with the VM off), which every new snapshot or revert needs again. See
-[Unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#unreadable-disk-images).
+[Unreadable disk images](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-clones.md#unreadable-disk-images).
 
 ### QEMU version (CVE-2024-4467)
 
@@ -584,11 +584,11 @@ raw, never probed); those checks are defence in depth, not a substitute.
 
 ### Linked clones (qcow2 backing files)
 
-Libvirt `VMClone` of type `LinkedClone` is **refused** in v0.4.1 (the clone would
+Libvirt `VMClone` of type `LinkedClone` is **refused** in v0.4.2 (the clone would
 read its source's live disk, and powering the source on corrupts it): use
 `FullClone`. A full clone needs a powered-off source. Existing linked clones keep
 working, but their source VM cannot be deleted, reverted or snapshotted while
-they exist. See [libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md).
+they exist. See [libvirt clones](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-clones.md).
 
 ## Network configuration
 
@@ -604,7 +604,7 @@ agent in the guest (otherwise it stays empty unless the host happens to have an
 ARP entry for the guest's MAC). The provider adds the agent channel to every
 domain; make sure the image or your `spec.userData` installs and starts
 `qemu-guest-agent`. See
-[VM status IPs](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-status-ips.md).
+[VM status IPs](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/vm-status-ips.md).
 
 The example below uses netplan on Ubuntu; consult your distribution for
 alternatives.
@@ -741,7 +741,7 @@ sudo aa-status | grep libvirt
   takes snapshots of a powered-off VM with the CD-ROM ejected, and refuses to
   revert to a snapshot that stored it. Take snapshots of VMs you want to be able
   to revert with the VM powered off. See
-  [VM snapshot revert](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md).
+  [VM snapshot revert](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/vm-snapshot-revert.md).
 - If you see other denials in `journalctl -u apparmor` or the audit log, work
   out which path is blocked and add it to `/etc/apparmor.d/local/usr.sbin.libvirtd`
   rather than disabling the profile.
@@ -749,7 +749,7 @@ sudo aa-status | grep libvirt
 ### SELinux (RHEL/CentOS/Fedora)
 
 !!! warning "Not tested"
-    The v0.4.1 seed directory and snapshot paths were validated on Ubuntu 24.04
+    The v0.4.2 seed directory and snapshot paths were validated on Ubuntu 24.04
     with AppArmor (libvirt 10.0). VirtRigaud has not been run with SELinux
     enforcing against them. On an SELinux host libvirt relabels a domain's disk
     sources at start; if a seeded VM does not start, look for AVC denials on the
@@ -918,7 +918,7 @@ ssh <user>@<vm-ip> "cloud-init status"     # should print: status: done
 ```
 
 Without `spec.userData` the default cloud-init provisions **no login user, SSH
-key, password or sudo grant** (v0.4.1); supply your own. For the
+key, password or sudo grant** (v0.4.2); supply your own. For the
 network-configuration defaults injected into cloud-init meta-data, see
 [Providers / Libvirt](../providers/libvirt.md).
 

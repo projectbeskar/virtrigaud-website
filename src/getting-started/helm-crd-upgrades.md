@@ -9,11 +9,27 @@ SPDX-License-Identifier: Apache-2.0
 
 The VirtRigaud Helm chart applies its CRDs on `helm install` **and** `helm upgrade` with a hook Job, so you do not manage CRDs by hand. Helm itself never upgrades CRDs from a chart's `crds/` directory; this hook closes that gap.
 
+!!! warning "Upgrading from v0.4.1 to v0.4.2"
+    v0.4.2 adds one optional `VirtualMachine` status field, `status.placement.resizeReservation`, so **the CRDs must be applied before the new manager starts**: the new manager fails readiness against the v0.4.1 CRD. The chart's pre-upgrade hook does this. Upgrade with `--reset-then-reuse-values` and override any image tag you pinned, or the manager and the hook can stay on older images. See [What changes on upgrade from v0.4.1 to v0.4.2](#what-changes-on-upgrade-from-v041-to-v042) and the [Upgrade Guide](../operations/upgrade.md#upgrading-from-v041-to-v042).
+
 !!! info "Upgrading from v0.4.0 to v0.4.1"
     v0.4.1 has **no CRD schema change** (only the `description` texts of the CRDs differ, so `kubectl explain` shows corrected text) and no RBAC or `values.yaml` change beyond comments. The roll order is the same (CRDs, manager, providers), and `helm upgrade --version 0.4.1` re-tags the images. See [What changes on upgrade from v0.4.0 to v0.4.1](#what-changes-on-upgrade-from-v040-to-v041), and the [Upgrade Guide](../operations/upgrade.md#upgrading-from-v040-to-v041) for the actions it needs before you roll the Proxmox and libvirt providers.
 
 !!! warning "Upgrading from v0.3.11"
-    v0.4.0 has a required order (CRDs, then cross-namespace grants, then the manager, then the providers) and several breaking changes. Read the [Upgrade Guide](../operations/upgrade.md) and the [release notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md) before running `helm upgrade`.
+    v0.4.0 has a required order (CRDs, then cross-namespace grants, then the manager, then the providers) and several breaking changes. Read the [Upgrade Guide](../operations/upgrade.md) and the [release notes](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/upgrading.md) before running `helm upgrade`.
+
+## What changes on upgrade from v0.4.1 to v0.4.2
+
+- **CRDs:** one additive, optional status field on `VirtualMachine`, `status.placement.resizeReservation` (a `{cpu, memoryMiB}` footprint used for clustered resizes). No other schema change, and existing objects need no migration. The chart still ships all 12 CRDs.
+- **Chart:** the manager Deployment passes `--client-qps` and `--client-burst` from the new values `manager.clientQPS` (default 20) and `manager.clientBurst` (default 40), the same limits as before; a zero, negative or non-numeric value fails the render. Nothing else in the templates changed.
+- **kubectl image of the CRD hook:** `ghcr.io/projectbeskar/virtrigaud/kubectl:v0.4.2`, the upstream `kubectl` 1.35.10 binary on Alpine 3.24 (was 1.35.9). Its remaining scanner findings are listed in [Security](../operations/security.md#release-v042-dependency-and-image-findings).
+- **Order:** the hook applies the CRDs before the manager rolls. If you apply CRDs yourself, apply the v0.4.2 CRDs first. A rollback does not run the hook, so the newer CRD stays installed; a v0.4.1 manager works with it (see [Rolling back to v0.4.1](../operations/upgrade.md#rolling-back-to-v041)).
+
+```bash
+helm get values virtrigaud -n virtrigaud-system   # look for pinned image tags first
+helm upgrade virtrigaud virtrigaud/virtrigaud --version 0.4.2 \
+  -n virtrigaud-system --reset-then-reuse-values
+```
 
 ## What changes on upgrade from v0.4.0 to v0.4.1
 
@@ -24,7 +40,7 @@ The VirtRigaud Helm chart applies its CRDs on `helm install` **and** `helm upgra
 
 ## What changes on upgrade from v0.3.11 to v0.4.0
 
-The CRD-upgrade hook applies these changes when you upgrade from v0.3.11 with `helm upgrade ... --version 0.4.1` (they are the changes of v0.4.0; v0.4.1 adds no schema change):
+The CRD-upgrade hook applies these changes when you upgrade from v0.3.11 with `helm upgrade ... --version 0.4.2` (they are the changes of v0.4.0; v0.4.1 adds no schema change, and v0.4.2 adds `status.placement.resizeReservation`):
 
 - **New CRDs:** `hosts.infra.virtrigaud.io` and `hostpools.infra.virtrigaud.io` (clustered libvirt providers). The chart now installs 12 CRDs.
 - **`spec.consumerNamespaceSelector`** on `Provider`, `VMClass` and `VMImage`. A reference to one of these in another namespace is refused (`ConsumerNotAllowed`) unless this field selects the referencing namespace.
@@ -45,9 +61,9 @@ No field is removed. The admission rules (`spec.providerRef` and `spec.type` imm
     helm hook applies the CRDs in the same `helm upgrade` that rolls the manager. Apply the CRDs yourself first:
 
     ```bash
-    kubectl apply --server-side --force-conflicts -f config/crd/bases   # from the v0.4.1 release checkout
+    kubectl apply --server-side --force-conflicts -f config/crd/bases   # from the v0.4.2 release checkout
     # set spec.consumerNamespaceSelector on the shared objects, then:
-    helm upgrade virtrigaud virtrigaud/virtrigaud --version 0.4.1 -n virtrigaud-system --reset-then-reuse-values
+    helm upgrade virtrigaud virtrigaud/virtrigaud --version 0.4.2 -n virtrigaud-system --reset-then-reuse-values
     ```
 
     The manager's readiness probe fails while the `VirtualMachine`, `Provider`, `VMClass` or `VMImage`
@@ -79,7 +95,7 @@ VirtRigaud uses **Helm Hooks** with a Kubernetes Job to automatically apply CRDs
 VirtRigaud builds and publishes its own `kubectl` image as part of the release process. This image:
 
 - Based on Alpine Linux for minimal size (~50MB)
-- Includes the kubectl binary from official Kubernetes releases (1.35.9 on Alpine 3.24 since v0.4.1; it was 1.32.0 on Alpine 3.20)
+- Includes the kubectl binary from official Kubernetes releases (1.35.10 on Alpine 3.24 in v0.4.2; 1.35.9 in v0.4.1; 1.32.0 on Alpine 3.20 before)
 - Includes bash and shell for scripting support
 - Runs as non-root user (UID 65532)
 - Verified with SHA256 checksums
@@ -157,7 +173,7 @@ crdUpgrade:
   
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl  # VirtRigaud kubectl image
-    tag: "v0.4.1"  # Set by the release to match the VirtRigaud version
+    tag: "v0.4.2"  # Set by the release to match the VirtRigaud version
   
   backoffLimit: 3
   ttlSecondsAfterFinished: 300
@@ -222,7 +238,7 @@ metadata:
 spec:
   source:
     chart: virtrigaud
-    targetRevision: 0.4.1
+    targetRevision: 0.4.2
     helm:
       values: |
         crdUpgrade:
@@ -246,7 +262,7 @@ spec:
   chart:
     spec:
       chart: virtrigaud
-      version: 0.4.1
+      version: 0.4.2
   values:
     crdUpgrade:
       enabled: true  # Automatic upgrades work!
@@ -286,7 +302,7 @@ kubectl describe job -n virtrigaud-system -l app.kubernetes.io/component=crd-upg
     helm repo add virtrigaud https://projectbeskar.github.io/virtrigaud
     helm repo update
     helm install virtrigaud virtrigaud/virtrigaud \
-      --version 0.4.1 \
+      --version 0.4.2 \
       --namespace virtrigaud-system \
       --create-namespace
     ```
@@ -327,7 +343,7 @@ kubectl describe clusterrole <role-name>
 crdUpgrade:
   image:
     repository: ghcr.io/projectbeskar/virtrigaud/kubectl
-    tag: "v0.4.1"  # Use matching VirtRigaud version
+    tag: "v0.4.2"  # Use matching VirtRigaud version
     pullPolicy: IfNotPresent
 ```
 

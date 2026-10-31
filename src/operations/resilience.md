@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Resilience Guide
 
-This document describes the resilience patterns and error-handling mechanisms in VirtRigaud as of **v0.4.1**: what the manager retries, what it never retries blindly, how the per-Provider circuit breaker decides, and how a host that stops answering is handled.
+This document describes the resilience patterns and error-handling mechanisms in VirtRigaud as of **v0.4.2**: what the manager retries, what it never retries blindly, how the per-Provider circuit breaker decides, and how a host that stops answering is handled.
 
 ## Overview
 
@@ -13,18 +13,21 @@ VirtRigaud's resilience model is layered:
 
 - **Error taxonomy** — provider answers are classified (`internal/providers/contracts`); the class decides whether a controller retries, holds or fails.
 - **Per-RPC deadlines** — every manager-to-provider call has its own timeout ([Timeouts](#timeouts)).
-- **CircuitBreaker on the provider gRPC path** — one breaker per `Provider`, so a wedged provider is not hammered and the operator gets a metric ([below](#circuitbreaker-on-the-provider-grpc-path-v036)).
+- **CircuitBreaker on the provider gRPC path** — one breaker per `Provider`, so a wedged provider is not hammered and the operator gets a metric ([below](#circuit-breaker)). Since v0.4.2 an answered `Internal` or `Unknown` (how the providers report one VM's backend error) no longer counts; some VM-specific failures still do ([What the breaker still counts](#what-the-breaker-still-counts)).
 - **Controller retries and backoff** — transient failures are requeued with fixed or exponential delays ([Retries and backoff](#retries-and-backoff)). There is no global retry setting.
 - **Calls whose outcome is unknown are held, not re-sent blindly** — since v0.4.0 the manager records a durable marker before any call that could be duplicated ([Calls whose outcome is unknown](#calls-whose-outcome-is-unknown)).
 - **Host-unreachable handling for clustered libvirt providers** — one dead host never opens the Provider's breaker or blocks the Provider's other hosts ([A clustered host that stops answering](#a-clustered-host-that-stops-answering)).
-- **Provider-side connection resilience** — the vSphere provider keeps its vCenter session alive; the libvirt provider retries transient SSH connection failures ([below](#provider-side-connection-resilience-v038)).
+- **Provider-side connection resilience** — the vSphere provider keeps its vCenter session alive and logs in again after an outage; the libvirt provider retries transient SSH connection failures ([below](#provider-side-connection-resilience-v038)).
 
-!!! note "Nothing in this page is tunable through the chart in v0.4.1"
+!!! note "Nothing in this page is tunable through the chart in v0.4.2"
     The circuit-breaker thresholds, the per-RPC deadlines and the retry delays are compiled in. The `config.circuitBreaker`, `config.retry` and `config.rateLimit` blocks in the chart's `values.yaml`, and ConfigMap keys such as `CB_FAILURE_THRESHOLD`, `RPC_TIMEOUT_MUTATING` or `RETRY_MAX_ATTEMPTS`, are **not read by the manager**. Values you set there have no effect.
 
-## CircuitBreaker on the Provider gRPC Path (v0.3.6)
+## CircuitBreaker on the Provider gRPC Path (v0.3.6) { #circuit-breaker }
 
-The circuit breaker was wired onto the gRPC path in v0.3.6 (G6) and is unchanged in design in v0.4.0, apart from which failures it ignores (see [What does not count as a failure](#what-does-not-count-as-a-failure)). The gRPC client constructor (`internal/transport/grpc/client.go`) installs a `providerCircuitBreakerInterceptor` on every outbound RPC, fed by one breaker per `Provider`.
+The circuit breaker was wired onto the gRPC path in v0.3.6 (G6). Its design is unchanged since; what changed is which failures it counts: v0.4.0 kept host-, VM- and tenant-scoped reasons out of it, and v0.4.2 keeps out every VM-level failure the provider answered as `Internal` or `Unknown` (see [Failure classification](#failure-classification-what-trips-the-breaker)).
+
+!!! info "Provider, Host and VM failures"
+    One breaker guards **every VM of a Provider**, so it is meant to open only when the **provider** is in trouble: its pod is gone, the connection to it fails, or it stops answering. A failure of **one clustered Host** is reported per host and never opens it ([A clustered host that stops answering](#a-clustered-host-that-stops-answering)). A failure of **one VM** (a locked VM, a per-VM permission fault, a missing disk, a hypervisor API error for that VM) is reported on that VM, which is retried on its own schedule, and since v0.4.2 it does not count toward the breaker when the provider answered it as `Internal` or `Unknown` (an answered `Unavailable` or `DeadlineExceeded` still counts; see [What the breaker still counts](#what-the-breaker-still-counts)). While the breaker is open, every VM of the Provider waits, healthy ones included, which is why the distinction matters. The gRPC client constructor (`internal/transport/grpc/client.go`) installs a `providerCircuitBreakerInterceptor` on every outbound RPC, fed by one breaker per `Provider`.
 
 ### Architecture
 
@@ -76,14 +79,16 @@ The breaker fires when "the provider as a whole is in trouble", not when "one re
 
 `internal/transport/grpc/client.go` (`isInfraFailure`, `countsTowardBreaker`) classifies as follows.
 
-**Counts toward the threshold:**
+**Counts toward the threshold** (the infrastructure codes):
 
-| gRPC code | Meaning |
-|---|---|
-| `Unavailable` | Provider pod down, network partition, mTLS handshake failed |
-| `DeadlineExceeded` | Provider hung past the call timeout, or no connection within it |
-| `Internal` | Provider crashed mid-call |
-| `Unknown` | Non-gRPC error from the transport layer, or an untyped provider failure |
+| gRPC code | Meaning | Counted |
+|---|---|---|
+| `Unavailable` | Provider pod down, network partition, mTLS handshake failed, or the provider's own `Unavailable` answer | Yes, unless it carries an excluded reason ([below](#what-does-not-count-as-a-failure)) |
+| `DeadlineExceeded` | Provider hung past the call timeout, or no connection within it | Yes (except the `ImagePrepare` cases below) |
+| `Internal` | A failure inside the call | **Only if the provider did not answer it** (since v0.4.2) |
+| `Unknown` | Non-gRPC error from the transport layer, or a provider handler's error | **Only if the provider did not answer it, or the answer has no message** (since v0.4.2) |
+
+**Answered or not (v0.4.2).** The manager records whether the provider's gRPC server answered a call: the client saw a gRPC response trailer, which grpc-go reports only for a valid gRPC response. The libvirt, vSphere and Proxmox providers report one VM's backend error (a `virsh` or vCenter error message, a Proxmox API error for one VM) as an answered `Internal` or `Unknown` with a message. Such an answer proves the provider and the connection to it work, so it is **not counted**. Failures the provider did not answer still count: the connection was refused or dropped, the provider pod is gone, no answer arrived before the call's deadline, or a proxy returned a non-gRPC error page (an `Unknown` with no gRPC status). Answered `Unavailable` and `DeadlineExceeded` still count. This is how [issue #472](https://github.com/projectbeskar/virtrigaud/issues/472) was fixed in v0.4.2-rc2 ([below](#vm-failures-and-the-provider-breaker-472)).
 
 **Does not count (passes through to the caller):**
 
@@ -102,8 +107,25 @@ Since v0.4.0 some `Unavailable`, `Unknown` and `DeadlineExceeded` answers are **
 - A clustered libvirt provider's host-scoped answers: `HOST_UNAVAILABLE` (a host is unknown, draining, cannot be dialled or did not answer in time), `VM_OPERATION_FAILED` (a per-VM operation reached its host and failed there, or was not performed), `VM_DISK_CHECK_FAILED` (a disk-dependency check could not run), and `VM_OUTCOME_UNKNOWN_RETRY` (the outcome could not be told after the host stopped answering). `VM_OPERATION_FAILED` also covers a single-host libvirt provider's `SnapshotCreate`, `ExportDisk` and `ImportDisk` failures that prove nothing was done (a step that only reads, validates or writes in a private area that is removed).
 - On `ImagePrepare` only: `IMAGE_ARTIFACT_IN_PROGRESS` (another import is still running), `IMAGE_SOURCE_UNAVAILABLE` (one tenant's image source failed), and a `DeadlineExceeded` or `Canceled` caused by the manager's own prepare timeout. A long legitimate import must not open the breaker of every Provider that shares its image location. On every other RPC a `DeadlineExceeded` still counts.
 - The breaker's own fast-fail: a call it refused never reaches the recording step, so it cannot extend an open breaker.
+- Since v0.4.2, the Proxmox provider's answer that a VM is not on the node asked but exists on another node of the cluster ("exists elsewhere in the cluster") also carries `VM_OPERATION_FAILED`; its code (`Unavailable`) and message are unchanged.
 
 The plain `Unavailable` that `DeleteStagedDisk` returns when a host's `qemu-img` fails still counts.
+
+#### VM failures and the Provider breaker (#472)
+
+v0.4.2 removed the `Validate` RPC that, in v0.4.1, preceded every provider call: a cached provider client is now reused while its Provider's configuration, its connection and its breaker are unchanged ([connection caching](upgrade.md#behaviour-changes-that-are-visible-but-not-breaking)). That `Validate` also reset the breaker's failure count between calls. Without it, in v0.4.2-rc1, a few VMs whose `Describe`, `Power` or `Delete` kept failing in the hypervisor opened the breaker after 10 failures, and every VM of that Provider was then refused: healthy VMs went `Ready=False` ("cannot reach this VirtualMachine's Provider") and their lifecycle calls waited ([#472](https://github.com/projectbeskar/virtrigaud/issues/472)). v0.4.1 did not behave this way, and no release before v0.4.2-rc1 had the defect.
+
+**Resolved in v0.4.2** (since v0.4.2-rc2): answered VM-level failures are not counted, as described above, and connection caching stays enabled; a provider connection is still validated once and reused. In the release qualification, a single-host libvirt Provider answered 159 failing power-ons of one VM over 16.5 minutes without opening its breaker, while the Provider's healthy VMs stayed `Ready` and manageable and the manager did not re-validate or redial the connection. The fix is in the manager, so it also applies to providers on older images.
+
+**A Provider that is really down is still protected.** When its gRPC server does not answer, the breaker opens after 10 counted failures, refuses calls at once without connecting while it is open, lets 3 trial calls through after 60 seconds, and closes when they succeed; the VMs are then managed again on one new connection. This path is covered by automated tests; it was not exercised against a real Provider in the release qualification.
+
+#### What the breaker still counts
+
+The classification goes by the error's gRPC code, not by the VM a failure concerns, so it is not complete fault isolation:
+
+- **VM-specific `Unavailable` or `DeadlineExceeded` answers still count.** For example the Proxmox provider's answer that it cannot read one VM's configuration to check its owner, the vSphere provider's answers about a migration disk or a snapshot it cannot confirm, a Proxmox provider older than v0.4.2 answering "exists elsewhere in the cluster", and a call for one VM that takes longer than the manager's deadline. Enough of these in a row, with no successful call in between, still open the breaker for the whole Provider.
+- **Some Provider-wide failures that the provider answers do not open it.** A Provider whose gRPC server answers but whose hypervisor is unreachable for every VM, or that answers `Internal` or `Unknown` for another reason affecting every VM (lost hypervisor credentials, a shared backend subsystem failing, the provider process running out of resources), does not open the breaker, as in v0.4.1: each VM reports the provider's error and is retried on its own schedule, and the provider answers those calls at once rather than being failed fast. The libvirt and Proxmox providers recover from these on their own (libvirt dials its SSH connection again when a command finds it dead; Proxmox authenticates every request with its API token), and the vSphere provider renews its session itself ([below](#vsphere-vcenter-session-keepalive-real-probe-reconnect-190)).
+- **Transport-level failures keep the established behaviour**: they count, and the breaker opens, fails fast and recovers as described in [State machine](#state-machine).
 
 ### What happens when the breaker is open
 
@@ -165,7 +187,7 @@ A `Create` that the provider refuses as an invalid specification (`Ready=False` 
 - **Manager restarts.** The wait is kept in the manager's memory and recovered after a restart from that message, so a restart does not send the create again early.
 - **Unchanged.** A VM refused before any provider call (a `VMClass` value or a `spec.resources` override out of range) is still re-checked every 30 seconds, and now also at once when its `VMClass` changes. A refused `Reconfigure` keeps its backoff (5 seconds doubling to 5 minutes).
 
-A `CreateBackoff` hold has new condition messages in v0.4.1 (see [VM status reference](../guides/vm-status.md#ready)).
+A `CreateBackoff` hold has had new condition messages since v0.4.1 (see [VM status reference](../guides/vm-status.md#ready)).
 
 ## Provider-side connection resilience (v0.3.8)
 
@@ -175,9 +197,11 @@ The circuit breaker protects the manager from a *wedged* provider. These are the
 
 A vSphere provider that sat idle for a long time could have its vCenter session silently expire; the next RPC then failed as an infra-class failure and, after enough of them, tripped the breaker. The provider now:
 
-- runs a **session keepalive** (every 5 minutes) so an otherwise-idle vCenter session does not lapse;
+- runs a **session keepalive** (every 5 minutes) so an otherwise-idle vCenter session does not lapse: it probes the session and logs in again when the probe fails;
 - performs a **real probe** against vCenter in `Validate` rather than trusting a cached session handle;
 - **reconnects transparently** and retries when the probe detects a dead session.
+
+**Since v0.4.2 the keepalive keeps trying after a failed login.** Before, if the keepalive's login also failed (vCenter was unreachable at that tick, as in a vCenter restart or maintenance longer than 5 minutes), the keepalive stopped for good and only `Validate` logged in again. Since v0.4.2 the manager calls `Validate` only when it connects to a provider or the Provider's connection or breaker reports trouble, so such a provider would have answered every call with the authentication error until its pod restarted. The keepalive now logs the failed login and tries again at the next tick, so the provider recovers within about one keepalive interval of vCenter accepting logins again. Until then, calls fail with the authentication error and each VM is retried on its own schedule. This is part of the vSphere provider image: roll the vSphere providers to v0.4.2 together with the manager. See [vSphere: session keepalive and recovery](../providers/vsphere.md#session-keepalive-and-recovery).
 
 ### Libvirt: retry transient SSH connection failures (#191)
 
@@ -276,13 +300,13 @@ The manager has no generic retry loop around provider calls. A failed call is re
 controller-runtime applies its own exponential backoff on top when a reconcile returns an error.
 
 !!! note "The `resilience.Retry` helper is not used on the production path"
-    `internal/resilience` also contains a generic exponential-backoff helper (`Retry`, with `DefaultRetryConfig`: 5 attempts, 500 ms base, 30 s cap, ×2, up to 10% jitter, plus `AggressiveRetryConfig`, `ConservativeRetryConfig` and `NoRetryConfig` presets). No manager code calls it in v0.4.1; it exists for provider and controller authors. The delays in the table above are what actually happens.
+    `internal/resilience` also contains a generic exponential-backoff helper (`Retry`, with `DefaultRetryConfig`: 5 attempts, 500 ms base, 30 s cap, ×2, up to 10% jitter, plus `AggressiveRetryConfig`, `ConservativeRetryConfig` and `NoRetryConfig` presets). No manager code calls it in v0.4.2; it exists for provider and controller authors. The delays in the table above are what actually happens.
 
 ## Calls whose outcome is unknown
 
 A few provider calls make something that a second call could duplicate: the source snapshot, the disk export and the disk import of a `VMMigration`, the snapshot of a `VMSnapshot`, a single-host `Create`, a `Clone`, and a `SnapshotRevert`. If the manager restarts or leadership moves after such a call was sent but before its result was written to status, the result is lost. The same holds for a call that **fails without a definite answer**: it ran past its deadline, or the connection dropped after the request was written. The provider may still be completing it.
 
-In v0.4.1 the manager never re-sends such a call blindly:
+In v0.4.2 the manager never re-sends such a call blindly:
 
 1. **A durable marker is written first.** Before the call, the object's status records a condition of its own (`SnapshotRequested`, `ExportRequested`, `ImportRequested` on a `VMMigration`; `SnapshotRequested` on a `VMSnapshot`), written with the `resourceVersion` the reconcile read. If that write fails, **nothing is sent**. A VM's `Create` and a `spec.snapshot.revertToRef` revert are recorded the same way (reason `CreateRequested` on `Provisioning`; `status.snapshotRevert` with `phase: Reverting`).
 2. **A definite answer removes the marker.** The result, or a failure that proves what happened (the request never reached the provider, a clustered host was unreachable, the provider refused the call before doing anything), is written with the marker removed.
@@ -299,7 +323,7 @@ What happens next depends on the call:
 
 A provider image older than v0.4.0 does not report the re-send capabilities, so a lost export or import is held. Roll the providers promptly after the manager.
 
-**Releasing a held object.** The hold's message names the action; the `Warning` event gives the attempt id. After checking the hypervisor for what the call may have made (a snapshot of that name, a disk landed for the target VM, a still-running export) and removing it, confirm the attempt by annotating the object with `virtrigaud.io/operation-outcome=not-performed@<attempt>`, where `<attempt>` is the marker condition's `lastTransitionTime`. For a VM `Create`, annotate with `virtrigaud.io/create-outcome`. Deleting the object also releases it, but anything the lost call made is yours to remove. The full runbook, the per-provider table of which failures are definite, and the limits are in [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
+**Releasing a held object.** The hold's message names the action; the `Warning` event gives the attempt id. After checking the hypervisor for what the call may have made (a snapshot of that name, a disk landed for the target VM, a still-running export) and removing it, confirm the attempt by annotating the object with `virtrigaud.io/operation-outcome=not-performed@<attempt>`, where `<attempt>` is the marker condition's `lastTransitionTime`. For a VM `Create`, annotate with `virtrigaud.io/create-outcome`. Deleting the object also releases it, but anything the lost call made is yours to remove. The full runbook, the per-provider table of which failures are definite, and the limits are in [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/provider-call-outcomes.md).
 
 ## A clustered host that stops answering
 
@@ -313,7 +337,7 @@ A clustered libvirt Provider (`spec.topology: cluster`, see the [clustered libvi
 - **A disk check that cannot run fails closed.** Before a clustered create, clone or delete touches a disk, the provider checks that no other domain on **any** host of the Provider uses it. A host that cannot be checked fails the operation (`VM_DISK_CHECK_FAILED` or `HOST_UNAVAILABLE`): nothing is written or removed on a partial answer, so a delete may wait until every host of the Provider answers.
 - **Migration into a clustered Provider** never moves the target off its landing host automatically: a landing host that cannot be reached shows `Importing=False/TargetHostUnavailable` and is retried at 15 s doubling to 5 min.
 
-The per-RPC behaviour, the restore guard (`RestorePending`) and the re-attach runbook are in the [clustered libvirt guide](../guides/clustered/index.md) and in the main repository's [`docs/clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md) and [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
+The per-RPC behaviour, the restore guard (`RestorePending`) and the re-attach runbook are in the [clustered libvirt guide](../guides/clustered/index.md) and in the main repository's [`docs/clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/clustered-provider-inventory.md) and [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/provider-call-outcomes.md).
 
 ## CircuitBreaker — programmatic API
 

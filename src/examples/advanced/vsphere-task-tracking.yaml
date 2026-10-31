@@ -4,7 +4,7 @@
 # vSphere Long-Running Operations Example
 # Shows how to follow slow vSphere operations (a large create, a reconfigure).
 #
-# How it works in v0.4.1:
+# How it works in v0.4.2:
 # - The vSphere provider waits for each vCenter task inside the gRPC call and
 #   answers without a task reference, so there is no per-task progress
 #   percentage. (Providers whose operations return a task, such as Proxmox for
@@ -31,7 +31,7 @@ spec:
     name: vsphere-credentials
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.2"
     service:
       port: 9090
       # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).

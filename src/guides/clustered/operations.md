@@ -11,7 +11,7 @@ answering, how to cordon a host, the guard that protects disks on shared
 storage, how to let go of a VM, which metrics to watch, and a troubleshooting
 table.
 
-!!! warning "Experimental in v0.4.1"
+!!! warning "Experimental in v0.4.2"
     Clustered Providers are experimental; see
     [Clustered libvirt: overview and setup](index.md). VirtRigaud detects and
     reports a failed host. It does **not** restart VMs on another host.
@@ -28,7 +28,7 @@ stamp is missing, unreadable or belongs to another UID is answered
 [Security model and multi-tenancy](../security-model.md) for the ownership
 model.
 
-What a clustered libvirt Provider routes in v0.4.1:
+What a clustered libvirt Provider routes in v0.4.2:
 
 | Operation | Behaviour on a clustered Provider |
 |-----------|-----------------------------------|
@@ -104,7 +104,7 @@ got**. The manager reads these answers; you see them as conditions.
 session end 5 seconds before the call's deadline and count as a host that
 stopped answering. The full model, including which commands count as "may
 change the host", is in
-[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md#clustered-libvirt-a-host-that-stops-answering).
+[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/provider-call-outcomes.md#clustered-libvirt-a-host-that-stops-answering).
 
 ### What each VM shows
 
@@ -350,7 +350,7 @@ full a host is. They show how full each host is **across tenants**: expose
 `networkPolicy.monitoringNamespaceSelector`) or by running the manager with
 `--metrics-secure=true`.
 
-There is no metric for `Host` health or `HostPool` counts in v0.4.1. Read the
+There is no metric for `Host` health or `HostPool` counts in v0.4.2. Read the
 `Host` and `HostPool` status, or export them with a custom-resource state
 exporter.
 
@@ -404,7 +404,7 @@ kubectl logs deploy/<provider deployment> -n <provider namespace>
 | `Host` `HEALTH` is `NotReady`, `Ready=False/HostNotReady` | The provider reached its connection registry but `virsh nodeinfo` over SSH to the host failed | Check SSH reachability, the SSH user from the endpoint, `known_hosts`, and libvirtd on the host. See [Libvirt host preparation](../../operations/libvirt-host-prepare.md#troubleshooting) |
 | `Host` `Ready=False/HostNotFound` | The provider's inventory has no host of that name: it was skipped when rendering | Check `HostCredentialsReady` on the Provider and the events `HostCredentialsUnresolved` / `HostInventoryEntrySkipped` |
 | `Host` `Ready=False/ProviderNotClustered` | `Host.spec.providerRef` names a Provider that is not `topology: cluster` | Point it at the clustered Provider; topology cannot be changed on an existing Provider |
-| Provider `HostCredentialsReady=False` | A host's credential Secret is missing, unreadable or has no `ssh-privatekey` (`CredentialsUnresolved`), or the Provider's own `credentialSecretRef` names another namespace (`CredentialRefNamespaceRejected`) | Fix the Secret, in the Provider's namespace. The host is left out of the inventory until then; other hosts keep working |
+| Provider `HostCredentialsReady=False` | A host's credential Secret is missing, unreadable or has no `ssh-privatekey` (`CredentialsUnresolved`), or the Provider's own `credentialSecretRef` names another namespace (`CredentialRefNamespaceRejected`) | Fix the Secret, in the Provider's namespace. The host is left out of the inventory until the next periodic reconcile after the fix (about 60 s; see [When the Secret is re-rendered](index.md#when-the-secret-is-re-rendered)); other hosts keep working |
 | Connection fails with a host-key error | No matching `known_hosts` entry for the host | Add the `ssh-keyscan -H` line for the host to the credentials Secret |
 | Create fails with `refusing to stage cloud-init data` | The host's seed directory is missing, not owned by the SSH user, or group/world accessible | `install -d -m 0711 -o <ssh user> -g <ssh user> /var/lib/libvirt/virtrigaud-seeds` on that host |
 | Create fails `InvalidSpec` (a routed import is refused `HOST_STORAGE_MISCONFIGURED` and re-placed): the `default` pool "is not at /var/lib/libvirt/images" | The host's `default` storage pool is at another directory | An administrator fixes the pool on the host; VirtRigaud never changes an existing pool. Check with `virsh pool-dumpxml default` |
@@ -422,15 +422,69 @@ kubectl logs deploy/<provider deployment> -n <provider namespace>
 | `DeleteBlocked=True/OwnDomainOnAnotherHost` | The VM's own domain is on a host other than its pending host | See [Backup, restore and re-attach](backup-restore.md) |
 | `Ready=False/OrphanOnDeleteNotAllowed` or `ForceDeleteRefused=True` | A consumer-namespace VM, and the Provider lacks `allow-consumer-orphan-on-delete` | The Provider's administrator sets the annotation, or you remove yours |
 | `Host` deletion stuck, `Ready=False/HostInUse` | A VM of the Provider still names the host | Delete or detach the listed VMs (up to 10 are named) |
-| `Reconfiguring=False/InsufficientHostCapacity` | A resize does not fit in the VM's host | Free capacity on the host, or use a smaller class. Retried at 30 s, 1 min, then every 2 min |
+| `Reconfiguring=False/InsufficientHostCapacity` | A resize does not fit in the VM's host | Free capacity on the host, or use a smaller class. Retried at 30 s, 1 min, then every 2 min. If the resize was withdrawn (spec back at the current size), the condition is stale and stays until the next resize: nothing is reserved or retried ([#473](https://github.com/projectbeskar/virtrigaud/issues/473)) |
 | `Reconfiguring=False/ShrinkPendingPowerOff` | A shrink of a running clustered VM is applied only while it is off | Power the VM off (`spec.powerState: Off`); set `On` again afterwards |
 | `Reconfiguring=True/RestartRequired` | The running domain cannot take the change | Power the VM off and on (a guest reboot is not enough) |
+| `Reconfiguring=True/ResizeReserved` | A resize-up was admitted and its size recorded in `status.placement.resizeReservation`; the provider has not confirmed the `Reconfigure` yet, or the manager stopped before it recorded the outcome | Wait. If it stays, see [Durable resize reservation](placement.md#durable-resize-reservation) |
+| `Placed=False` or `Reconfiguring=False`, reason `InheritedAdmissionOverCapacity` | A create, clone or resize admitted by an earlier manager no longer fits its host. Nothing is sent and the record keeps counting | Free room on the host and it proceeds by itself; otherwise follow [the recovery below](#an-admission-held-with-inheritedadmissionovercapacity) |
+| Every capacity admission on a Provider is refused; the manager log says `placed VirtualMachine has no recorded size and its VMClass cannot be resolved` | A placed VM's `VMClass` was deleted or is no longer granted to its namespace, and nothing records the VM's size | Restore the `VMClass`, or the namespace's grant to it ([Committed capacity](placement.md#committed-capacity)) |
 | `Reconfiguring=False/ProviderLacksHonestReconfigure` | The provider image is older than the manager | Upgrade the provider image |
 | Clone stays `Pending` with `SourceHostCordoned`, `SourceHostNotReady`, `SourceHostGone` | A clone can only land on its source's host | Uncordon or restore the host |
 | Clone stays `Pending` with `SourceMustBePoweredOff` | A full clone needs a powered-off source | Power the source off |
 | Everything is briefly down after changing the Provider | `Recreate` strategy: the single provider pod is replaced | Expected; calls are retried when the new pod is ready |
 | Creates from a host-path image wait | The image check scans every host and fails closed while any host is unreachable | Restore the host, or use a URL or template image |
 | Counter `virtrigaud_provider_host_guard_refusals_total` increases | A host path VirtRigaud writes to (the lock directory, a lock file, a clone or export target) is a symlink or was pre-created | Inspect `/tmp/virtrigaud-locks` and the target on the named host. A lock directory another user created can be removed (as root) and is recreated on the next call |
+
+### An admission held with `InheritedAdmissionOverCapacity`
+
+A pending create, a pending clone target or a resize reservation recorded by an
+earlier manager instance is checked once against its host's committed capacity
+before the provider is called (see
+[Admissions inherited from an earlier manager](placement.md#admissions-inherited-from-an-earlier-manager)).
+One that no longer fits is held: the record is kept and counted, and nothing is
+sent. Most holds clear by themselves once the host has room: delete, move or
+shrink another VM, or raise the pool's overcommit ratio. Recovery by hand is
+needed only when they do not (for example two held admissions that each need
+the room the other holds). The record must stay until you have **positive
+proof** that no earlier operation can still execute against it: a domain
+missing from the host right now does not prove that a `Create` or `Clone` sent
+by an earlier manager cannot still complete.
+
+1. Check whether the VM's domain already exists on the recorded host
+   (`virsh list --all` there, domain `<namespace>.<name>`). If it exists, the
+   capacity is really in use: free room on that host so the VM can be bound.
+   **Do not** clear its `pendingHost`, which would place it on another host and
+   leave the existing domain unmanaged.
+2. If it does not exist, establish that nothing can still create it before
+   releasing anything:
+    - every manager instance that might have sent the operation has exited (its
+      pods are gone, not merely not leading);
+    - every provider process that might have received it has exited, including
+      one still terminating. **Restarting the provider pod does not cancel an
+      operation**: a stopping provider finishes the calls it already accepted,
+      and work it already handed to the host (a volume being created or copied,
+      a domain definition libvirtd received) carries on without it;
+    - the host itself shows nothing still running for the VM (check its libvirt
+      jobs and the VM's volume), and the domain is still missing when you look
+      again after that.
+
+    A provider restart, or a quiet provider log, proves none of this on its own.
+3. Only then, release a pending create or clone by clearing
+   `status.placement.pendingHost` (the VM is scheduled again), and check the old
+   host once more afterwards:
+
+    ```bash
+    kubectl patch virtualmachines.infra.virtrigaud.io <name> -n <ns> \
+      --subresource=status --type=json \
+      -p '[{"op":"remove","path":"/status/placement/pendingHost"}]'
+    ```
+
+    A held resize is withdrawn by setting the VM's size back in its spec, which
+    sends nothing. That does **not** release the reservation, which keeps
+    counting ([A withdrawn resize can keep its reservation indefinitely](placement.md#a-withdrawn-resize-can-keep-its-reservation-indefinitely)).
+4. If the outcome stays uncertain, keep the record: it only over-reserves.
+   Investigate, or isolate the execution path (cordon the host, stop the
+   provider for it) until the outcome is known.
 
 For anything not covered, the manager log has the cause behind a categorized
 condition message (search for the VM name), and the provider log has the SSH
@@ -442,6 +496,6 @@ endpoints or other tenants' data.
 - [Placement](placement.md) and [Clustered libvirt: overview and setup](index.md)
 - [Backup, restore and re-attach](backup-restore.md)
 - [Migrating into a clustered Provider](../../migration/clustered-target.md)
-- [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md)
-- [VM provider binding and `orphan-on-delete`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-provider-binding.md)
-- Full reference: [clustered inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md) and [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0007-clustered-orchestrator-provider.md)
+- [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/provider-call-outcomes.md)
+- [VM provider binding and `orphan-on-delete`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/vm-provider-binding.md)
+- Full reference: [clustered inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/clustered-provider-inventory.md) and [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0007-clustered-orchestrator-provider.md)

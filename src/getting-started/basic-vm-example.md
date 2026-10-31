@@ -5,11 +5,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # Creating Your First Virtual Machine
 
-This guide walks through creating a complete, working virtual machine from start to finish using VirtRigaud v0.4.1.
+This guide walks through creating a complete, working virtual machine from start to finish using VirtRigaud v0.4.2.
 
 ## Prerequisites
 
-- VirtRigaud v0.4.1 installed in your Kubernetes cluster
+- VirtRigaud v0.4.2 installed in your Kubernetes cluster
 - A configured Provider (vSphere, Libvirt, or Proxmox)
 - `kubectl` access to your cluster
 
@@ -48,7 +48,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         name: vsphere-creds
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.2"
         service:
           port: 9090
           tls:
@@ -89,7 +89,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         name: libvirt-creds
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.2"
         service:
           port: 9090
           tls:
@@ -140,7 +140,7 @@ Create credentials for your hypervisor, then create the Provider CR.
         name: proxmox-creds
       runtime:
         mode: Remote
-        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.1"
+        image: "ghcr.io/projectbeskar/virtrigaud/provider-proxmox:v0.4.2"
         service:
           port: 9090
           tls:
@@ -379,7 +379,7 @@ spec:
     name: vsphere-creds
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.2"
     service:
       port: 9090
       tls:

@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Guides
 
-This section holds the guides for working with VirtRigaud **v0.4.1**: setting up providers, running a clustered libvirt Provider, and the advanced lifecycle topics (snapshots and revert, reconfiguration, cloning, graceful shutdown, nested virtualization, provider internals).
+This section holds the guides for working with VirtRigaud **v0.4.2**: setting up providers, running a clustered libvirt Provider, and the advanced lifecycle topics (snapshots and revert, reconfiguration, cloning, graceful shutdown, nested virtualization, provider internals).
 
 ## What is a Provider?
 
@@ -59,7 +59,7 @@ Each setup guide covers prerequisites, credentials, the Provider configuration, 
 
 | Guide | Covers |
 |-------|--------|
-| [Clustered libvirt](clustered/index.md) | `topology: cluster`: one Provider in front of several libvirt hosts, with `Host` and `HostPool`, a placement scheduler and routed per-host lifecycle (experimental in v0.4.1). Continues with [placement](clustered/placement.md), [operations and troubleshooting](clustered/operations.md) and [backup, restore and re-attach](clustered/backup-restore.md) |
+| [Clustered libvirt](clustered/index.md) | `topology: cluster`: one Provider in front of several libvirt hosts, with `Host` and `HostPool`, a placement scheduler and routed per-host lifecycle (experimental in v0.4.2). Continues with [placement](clustered/placement.md), [operations and troubleshooting](clustered/operations.md) and [backup, restore and re-attach](clustered/backup-restore.md) |
 | [VM snapshots and revert](vm-snapshots.md) | `VMSnapshot`, `spec.snapshot.revertToRef`, `status.snapshotRevert`, the `SnapshotReverted` condition, and the per-provider rules |
 | [VM status reference](vm-status.md) | Phases, conditions and their reasons, `status.ips`, and how to read and release a held (outcome unknown) provider call |
 | [Security model and multi-tenancy](security-model.md) | VM ownership, cross-namespace references, admission policy, the Provider in-use finalizer, identity-safe image preparation, private cloud-init seeds, migration storage, the disk-size limit, and what to check on upgrade |
@@ -114,7 +114,7 @@ See the [Security guide](../operations/security.md) for the full recommendations
 
 - [Provider documentation](../providers/vsphere.md): [vSphere](../providers/vsphere.md), [Libvirt](../providers/libvirt.md), [Proxmox](../providers/proxmox.md)
 - [Troubleshooting](../getting-started/index.md#troubleshooting)
-- [Examples](../examples/index.md): working configurations, validated against the v0.4.1 CRDs
+- [Examples](../examples/index.md): working configurations, validated against the v0.4.2 CRDs
 - [GitHub issues](https://github.com/projectbeskar/virtrigaud/issues)
 
 ## Next steps

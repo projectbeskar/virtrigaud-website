@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Provider gRPC API Guide
 
-This page is the hand-written companion to the generated [Provider gRPC API reference](grpc-api.md). The reference lists every message, field and RPC as defined in `proto/provider/v1/provider.proto`; this page explains how the manager uses the contract and what changed in v0.4.0 and v0.4.1.
+This page is the hand-written companion to the generated [Provider gRPC API reference](grpc-api.md). The reference lists every message, field and RPC as defined in `proto/provider/v1/provider.proto`; this page explains how the manager uses the contract and what changed in v0.4.0, v0.4.1 and v0.4.2.
 
 ## Overview
 
@@ -18,6 +18,16 @@ VirtRigaud providers expose a single gRPC service (`provider.v1.Provider`) over 
 Task-creating RPCs (`Create`, `Delete`, `Power`, `Reconfigure`, `SnapshotCreate`, `SnapshotDelete`, `SnapshotRevert`, `Clone`, `ImagePrepare`, `ExportDisk`, `ImportDisk`) additionally register the returned `TaskRef` with the **inflight-task tracker**. The controller polls `TaskStatus` until `done=true` or the context is cancelled.
 
 ---
+
+## Changes in v0.4.2
+
+**The contract is unchanged:** `provider.proto` has no field, number, RPC, option or comment change from v0.4.1, and the `proto` and `sdk` Go modules (tagged `proto/v0.4.2` and `sdk/v0.4.2`) differ only in their dependency versions (`golang.org/x/net` v0.62.0). The generated [reference](grpc-api.md) is generated from the `v0.4.2` tag.
+
+Behaviour that changed without a contract change:
+
+- **How the manager counts failures toward a Provider's circuit breaker.** A failure the provider's gRPC server answered with `Internal`, or with `Unknown` and a message, is treated as one VM's error and not counted; failures the provider did not answer, and answered `Unavailable` and `DeadlineExceeded`, still count ([Resilience](../operations/resilience.md#circuit-breaker), [#472](https://github.com/projectbeskar/virtrigaud/issues/472)). A provider that reports a backend error affecting only one VM should answer it with `Internal` or `Unknown` with a message, or with a VM-scoped reason such as `VM_OPERATION_FAILED`, not with a bare `Unavailable`.
+- **`Validate` is no longer called before every call.** The manager validates a connection when it connects, or when the Provider's configuration, connection or breaker reports trouble, and otherwise reuses it. A provider must not rely on `Validate` to refresh a session; the vSphere provider's keepalive renews its vCenter session itself ([vSphere](../providers/vsphere.md#session-keepalive-and-recovery)).
+- **The Proxmox provider's "exists elsewhere in the cluster" answer** to `Describe` and `Delete` also carries `VM_OPERATION_FAILED`; its code and message are unchanged.
 
 ## Changes in v0.4.1
 
@@ -33,7 +43,7 @@ Behaviour that changed without a contract change: the manager now reads `GetCapa
 
 ## Changes since v0.3.11
 
-The service has 23 RPCs in v0.4.0 and v0.4.1 (18 in v0.3.11). All changes since v0.3.11 are additive on the wire: new fields use new field numbers, and a provider or manager that does not know a field ignores it. The manager gates each new behaviour on a capability flag the provider reports in `GetCapabilitiesResponse`, so a provider image that predates a flag keeps the old behaviour (or the manager holds the operation; the flag descriptions below say which).
+The service has 23 RPCs in v0.4.0, v0.4.1 and v0.4.2 (18 in v0.3.11). All changes since v0.3.11 are additive on the wire: new fields use new field numbers, and a provider or manager that does not know a field ignores it. The manager gates each new behaviour on a capability flag the provider reports in `GetCapabilitiesResponse`, so a provider image that predates a flag keeps the old behaviour (or the manager holds the operation; the flag descriptions below say which).
 
 ### New RPCs
 
@@ -53,7 +63,7 @@ The service has 23 RPCs in v0.4.0 and v0.4.1 (18 in v0.3.11). All changes since 
 - **`TaskResponse.restart_required` and `honest_result`**: a `Reconfigure` that changed only the persistent definition says so (`Reconfiguring=True/RestartRequired`); `honest_result` is the per-response proof of `supports_honest_reconfigure`.
 - **`DescribeResponse.max_memory_mib` and `vcpus`**: the VM's memory ceiling and vCPU count, used by the clustered scheduler's committed-capacity accounting.
 - **`SnapshotCreateRequest.request_token`**: carries the UID of the `VMSnapshot` the snapshot is made for. A clustered libvirt provider records it with the snapshot, so a re-sent create finds the snapshot an earlier attempt made and a same-named snapshot of another request is `ALREADY_EXISTS`; other providers ignore it.
-- **`ImagePrepareRequest`** adds `image`, `source_digest` and `provider` (identity of the `VMImage` and the Provider), and `ImagePrepareResponse.artifact` (`PreparedArtifact`: name, image identity, source digest, `reused`). `target_name` may now be empty. See [ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0009-prepared-image-artifact-identity.md) (advertised by `supports_image_artifact_identity`).
+- **`ImagePrepareRequest`** adds `image`, `source_digest` and `provider` (identity of the `VMImage` and the Provider), and `ImagePrepareResponse.artifact` (`PreparedArtifact`: name, image identity, source digest, `reused`). `target_name` may now be empty. See [ADR-0009](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0009-prepared-image-artifact-identity.md) (advertised by `supports_image_artifact_identity`).
 - **`ImportDiskRequest.max_virtual_size_bytes`**: the administrator disk-size limit the provider enforces on the disk it lands (`supports_import_size_limit`).
 - **`GetDiskInfoResponse.disks`** (`DiskCapacity`: disk id, path, virtual size): the size of every disk, for the disk-size limit checks.
 
@@ -89,7 +99,7 @@ Providers attach a `google.rpc.ErrorInfo` (domain `provider.virtrigaud.io`) to a
 <a name="provider-call-outcomes"></a>
 ### Calls whose outcome is unknown
 
-The manager records a status marker before `SnapshotCreate`, `ExportDisk`, `ImportDisk` and `SnapshotRevert`. A failure that is not a definite answer (a deadline, or a connection that dropped after the request was written) leaves the marker and holds the object (`SnapshotOutcomeUnknown`, `ExportOutcomeUnknown`, `ImportOutcomeUnknown`) instead of re-sending. A call is re-sent on its own only on a staging backend the provider lists in `resend_safe_export_backends` or `resend_safe_import_backends`. Details: [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
+The manager records a status marker before `SnapshotCreate`, `ExportDisk`, `ImportDisk` and `SnapshotRevert`. A failure that is not a definite answer (a deadline, or a connection that dropped after the request was written) leaves the marker and holds the object (`SnapshotOutcomeUnknown`, `ExportOutcomeUnknown`, `ImportOutcomeUnknown`) instead of re-sending. A call is re-sent on its own only on a staging backend the provider lists in `resend_safe_export_backends` or `resend_safe_import_backends`. Details: [`docs/provider-call-outcomes.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/provider-call-outcomes.md).
 
 !!! note "Field-level reference"
     Messages, fields and services are in the [generated gRPC API reference](grpc-api.md), built from `proto/provider/v1/provider.proto` at the documented release with `buf generate` (see the Makefile). Field comments in the proto file are the authoritative description of each field.

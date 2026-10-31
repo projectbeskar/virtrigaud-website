@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # VirtRigaud Security Guide
 
-This is the canonical operator-facing security reference for VirtRigaud **v0.4.1**. It describes the current security posture honestly: what the code and the Helm chart actually do, what the operator is expected to provide, and what remains out of scope for a regulated (e.g. banking) deployment.
+This is the canonical operator-facing security reference for VirtRigaud **v0.4.2**. It describes the current security posture honestly: what the code and the Helm chart actually do, what the operator is expected to provide, and what remains out of scope for a regulated (e.g. banking) deployment.
 
 !!! info "What changed in v0.4.0"
     v0.4.0 is a large security-hardening release, mostly about **multi-tenancy**: several namespaces (tenants) sharing one hypervisor account. In summary (each item is described below, with the main-repository document that holds the detail):
@@ -18,7 +18,15 @@ This is the canonical operator-facing security reference for VirtRigaud **v0.4.1
     - **Chart:** opt-in `NetworkPolicy` templates, token-less per-Provider ServiceAccounts, a `/tmp` size limit on every pod, TLS 1.2 floor on the webhook and metrics servers ([RBAC](#rbac), [Container hardening](#container-hardening)).
     - The manager↔provider mTLS (v0.3.7), libvirt SSH host-key verification (v0.3.7) and least-privilege manager RBAC (v0.3.7) controls remain in force.
 
-    Several of these are **breaking** for existing installs (a shared `Provider` stops working for other namespaces until it carries a `consumerNamespaceSelector`; a `VirtualMachine`'s `spec.providerRef` becomes immutable once bound; vSphere creates need a new vCenter privilege; libvirt VMs without `spec.userData` no longer get a default login; and more). Read the [breaking changes in the upgrade guide](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/upgrading.md#breaking-changes) before upgrading, and see the [Upgrade Guide](upgrade.md) of this site.
+    Several of these are **breaking** for existing installs (a shared `Provider` stops working for other namespaces until it carries a `consumerNamespaceSelector`; a `VirtualMachine`'s `spec.providerRef` becomes immutable once bound; vSphere creates need a new vCenter privilege; libvirt VMs without `spec.userData` no longer get a default login; and more). Read the [breaking changes in the upgrade guide](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/upgrading.md#breaking-changes) before upgrading, and see the [Upgrade Guide](upgrade.md) of this site.
+
+!!! info "What changed in v0.4.2"
+    v0.4.2 is a patch release. Its security-relevant changes (details in the [upgrade notes](upgrade.md#security-update-golangorgxnet-v0620-and-kubectl-13510)):
+
+    - **`golang.org/x/net` v0.62.0** in every VirtRigaud Go module and binary, fixing CVE-2026-78661 (GO-2026-6860) and CVE-2026-97045 (GO-2026-6866). No vulnerable function was reachable from VirtRigaud code. **Roll the providers as well as the manager** to pick it up.
+    - **The chart's CRD-hook image ships `kubectl` 1.35.10** (was 1.35.9).
+    - **Some findings remain**, in a dependency and in the container images' operating-system packages: see [Release v0.4.2: dependency and image findings](#release-v042-dependency-and-image-findings). The images are not free of known vulnerabilities.
+    - Every v0.4.2 image is signed and carries an SBOM and SLSA provenance attestation, as before ([Verifying release artifacts](#verifying-release-artifacts)).
 
 !!! info "What changed in v0.4.1"
     v0.4.1 is a patch release with these security-relevant changes (details in the [upgrade notes](upgrade.md#upgrading-from-v040-to-v041)):
@@ -59,7 +67,7 @@ This is the canonical operator-facing security reference for VirtRigaud **v0.4.1
 
 ### STRIDE quick-reference
 
-| Threat                  | Where VirtRigaud is exposed                                          | Mitigation status in v0.4.1                                                                         |
+| Threat                  | Where VirtRigaud is exposed                                          | Mitigation status in v0.4.2                                                                         |
 |-------------------------|----------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
 | **Spoofing**            | A rogue Provider CR could point the manager at an attacker endpoint; a spoofed provider service could intercept manager RPCs; a tenant could forge the manager's provenance annotations on a `VirtualMachine`. | RBAC on the Provider CR plus **mTLS**: the manager verifies the provider's server cert (TLS 1.3, SNI anchored to the Service FQDN) and the provider rejects any caller whose client cert is not signed by the configured CA / not on the SAN allow-list. The [reserved-keys admission policy](#reserved-keys-admission-policy) stops tenants forging the manager's annotations. |
 | **Tampering**           | Provider gRPC traffic on the pod network; one tenant's `Create`, `Clone` or image import overwriting another's VM, disk or template. | gRPC is **encrypted with mTLS by default**. Owner stamps, per-tenant domain/landing names and stamped image artifacts make providers refuse to bind to, or reuse, anything they cannot prove is the requester's. |
@@ -167,7 +175,7 @@ For the tenant-facing view (what each check does, which refusals you will see an
 
 ## Who can grant what
 
-Tenant isolation in v0.4.1 is a set of **grants** that two kinds of identities control. The manager itself has cluster-wide rights, so the rule is "refuse unless a grant exists", and the grants are only as strong as the RBAC around them:
+Tenant isolation in v0.4.2 is a set of **grants** that two kinds of identities control. The manager itself has cluster-wide rights, so the rule is "refuse unless a grant exists", and the grants are only as strong as the RBAC around them:
 
 | Grant | Set by | Who can change it |
 |---|---|---|
@@ -196,7 +204,7 @@ A `VirtualMachine` names its `Provider`, `VMClass` and `VMImage` with `spec.prov
 - **`spec.providerRef` is immutable once the VM is bound** (`status.boundProvider`), so a VM cannot be re-pointed at another Provider. To detach a VM from VirtRigaud without deleting it from the hypervisor, annotate it `virtrigaud.io/orphan-on-delete: "true"` and delete the `VirtualMachine`. For VMs of a **clustered** Provider in another namespace, `orphan-on-delete` and `force-delete` are honoured only if the Provider carries `infra.virtrigaud.io/allow-consumer-orphan-on-delete: "true"`, because an orphaned VM would keep running on shared hosts outside the capacity accounting.
 - The manager's readiness probe fails until the installed `Provider`, `VMClass` and `VMImage` CRDs have `spec.consumerNamespaceSelector` (see [`virtrigaud_manager_vm_crd_security_features`](observability.md#12-virtrigaud_manager_vm_crd_security_features)). **Apply the new CRDs and set the selectors on shared objects before rolling the manager**, or VMs that use them fail closed.
 
-Details: [`cross-namespace-references.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md), [`cross-namespace-targets.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-targets.md), [`vm-provider-binding.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-provider-binding.md).
+Details: [`cross-namespace-references.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/cross-namespace-references.md), [`cross-namespace-targets.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/cross-namespace-targets.md), [`vm-provider-binding.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/vm-provider-binding.md).
 
 ## VM ownership and owner stamps
 
@@ -208,10 +216,10 @@ A vSphere VM created by VirtRigaud is named after the `VirtualMachine`, without 
 - Adoption (`virtrigaud.io/adopt-vms` on a Provider) **stamps the adopted VM** before binding it, and skips templates, image artifacts and VMs whose stamp is unreadable or names a live `VirtualMachine` elsewhere. A VM whose stamp names a `VirtualMachine` that no longer exists in this cluster is not adopted unless the single-host Provider carries `virtrigaud.io/adopt-stamped-vms: "true"`.
 - Per-VM operations (`Describe`, `Power`, `Reconfigure`, snapshots, `Delete`) are owner-checked; a template or image artifact is refused (`VM_IS_IMAGE_ARTIFACT`); a VM that is not the requester's is reported as not owned (`VMNotOwned`) rather than gone.
 - New libvirt domains are named `<namespace>.<name>`, and vSphere/Proxmox landing names carry the namespace, closing same-host name squatting.
-- **Owner stamps are scoped to one cluster.** Two VirtRigaud installations managing the same vCenter or host do not see each other's `VirtualMachine`s; do not point two installations at one hypervisor without reading [Owner stamps are scoped to one cluster](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-ownership.md#owner-stamps-are-scoped-to-one-cluster).
+- **Owner stamps are scoped to one cluster.** Two VirtRigaud installations managing the same vCenter or host do not see each other's `VirtualMachine`s; do not point two installations at one hypervisor without reading [Owner stamps are scoped to one cluster](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/vm-ownership.md#owner-stamps-are-scoped-to-one-cluster).
 - **vSphere requires the vCenter privilege `VirtualMachine.Config.AdvancedConfig`** for every `Create`, `Clone` and adoption (the stamp is an ExtraConfig write), and `System.Read` on the root folder (propagated) for the imported-disk checks. Proxmox applying a VM's bridge and VLAN needs `SDN.Use` ACLs on the bridges: those ACLs decide which networks the authors of `VirtualMachine`s in a namespace can reach. See the [bearer-token page](../providers/security/bearer-token.md#proxmox-api-tokens).
 
-Details: [`vm-ownership.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-ownership.md), [`libvirt-domain-ownership.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-domain-ownership.md).
+Details: [`vm-ownership.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/vm-ownership.md), [`libvirt-domain-ownership.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-domain-ownership.md).
 
 ## Reserved-keys admission policy
 
@@ -230,7 +238,7 @@ admissionPolicy:
 - A restore tool that re-creates `VirtualMachine`s with their annotations (Velero) is rejected until added to `exemptUsernames`. A second VirtRigaud installation in the same cluster must have its manager ServiceAccount listed too.
 - A `VMMigration` does not rely on the policy: it binds its target by the UID its own `Create` returned. It also drops every `virtrigaud.io` key from `spec.target.annotations` and the reserved label from `spec.target.labels` (event `TargetLabelsDropped`).
 
-Details: [`admission-policy.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/admission-policy.md).
+Details: [`admission-policy.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/admission-policy.md).
 
 ## Provider in-use finalizer
 
@@ -240,15 +248,15 @@ A `Provider` now carries the finalizer `provider.infra.virtrigaud.io/in-use` (AD
 - It is released when nothing holds it any more, or when an administrator annotates the `Provider` `virtrigaud.io/force-delete: "true"` (event `ProviderForceDeleted`). That is a deliberate, audited choice to leave hypervisor VMs running unmanaged.
 - A cluster administrator deleting a **namespace** that holds both a `Provider` and its VMs is a Kubernetes limit the finalizer cannot fully close: the namespace controller also deletes the provider's pods. See the ADR for the details and the mitigations.
 
-Details: [ADR-0010](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0010-provider-in-use-finalizer.md).
+Details: [ADR-0010](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0010-provider-in-use-finalizer.md).
 
 ## Hypervisor-side isolation
 
 These v0.4.0 controls apply inside the providers and are on by default unless noted. Each links to the main-repository document with the exact behaviour and the upgrade notes.
 
-- **Identity-safe image preparation (ADR-0009).** A prepared image (a vSphere template, a libvirt pool file, a Proxmox template) used to be named after the `VMImage` alone, and any existing artifact of that name was reused, so a tenant could pre-create the artifact another tenant's VMs are cloned from. The manager now sends the `VMImage`'s UID and a digest of its `spec.source`; the provider derives a unique artifact name, stamps the artifact, and reuses an existing one only when its stamp carries the same UID and digest. An artifact at the derived name with a different stamp is a **conflict**: VirtRigaud never adopts, overwrites or deletes it (`ArtifactConflict`, event `ImageArtifactConflict`, metric [`virtrigaud_image_prepare_artifact_total`](observability.md#13-virtrigaud_image_prepare_artifact_total)). An import-capable provider that does not report `supportsImageArtifactIdentity` is held, so roll the providers with the manager. Prepare state is recorded **per Provider identity** in `VMImage.status.providerStatus`. [`image-preparation.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/image-preparation.md#prepared-image-artifact-identity).
+- **Identity-safe image preparation (ADR-0009).** A prepared image (a vSphere template, a libvirt pool file, a Proxmox template) used to be named after the `VMImage` alone, and any existing artifact of that name was reused, so a tenant could pre-create the artifact another tenant's VMs are cloned from. The manager now sends the `VMImage`'s UID and a digest of its `spec.source`; the provider derives a unique artifact name, stamps the artifact, and reuses an existing one only when its stamp carries the same UID and digest. An artifact at the derived name with a different stamp is a **conflict**: VirtRigaud never adopts, overwrites or deletes it (`ArtifactConflict`, event `ImageArtifactConflict`, metric [`virtrigaud_image_prepare_artifact_total`](observability.md#13-virtrigaud_image_prepare_artifact_total)). An import-capable provider that does not report `supportsImageArtifactIdentity` is held, so roll the providers with the manager. Prepare state is recorded **per Provider identity** in `VMImage.status.providerStatus`. [`image-preparation.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/image-preparation.md#prepared-image-artifact-identity).
 - **libvirt image paths are confined.** Base images must lie in allowed directories (default `/var/lib/libvirt/images`; `VIRTRIGAUD_LIBVIRT_IMAGE_DIRS`) and are always copied, never attached in place. With a shared pool, set the variable to a catalog directory **apart from the pool**: any unused file in the pool directory is otherwise copyable by any tenant of the Provider.
-- **Private cloud-init seeds (libvirt).** A VM's cloud-init seed carries its user-data (passwords, keys, tokens). It is built `0600` in a dedicated directory (`VIRTRIGAUD_LIBVIRT_SEED_DIR`, default `/var/lib/libvirt/virtrigaud-seeds`) that the provider checks and refuses to use if it is not private; it must exist on every host, including migration target hosts. The directory holds every VM's user-data in plaintext: exclude it from host backups or encrypt them. A clone gets its own seed, a new cloud-init instance-id and its own SSH host keys, and `create` on `VMClone` is read access to the source's data. libvirt VMs created without `spec.userData` no longer get a default login. See [libvirt host preparation](libvirt-host-prepare.md) and [`libvirt-clones.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md).
+- **Private cloud-init seeds (libvirt).** A VM's cloud-init seed carries its user-data (passwords, keys, tokens). It is built `0600` in a dedicated directory (`VIRTRIGAUD_LIBVIRT_SEED_DIR`, default `/var/lib/libvirt/virtrigaud-seeds`) that the provider checks and refuses to use if it is not private; it must exist on every host, including migration target hosts. The directory holds every VM's user-data in plaintext: exclude it from host backups or encrypt them. A clone gets its own seed, a new cloud-init instance-id and its own SSH host keys, and `create` on `VMClone` is read access to the source's data. libvirt VMs created without `spec.userData` no longer get a default login. See [libvirt host preparation](libvirt-host-prepare.md) and [`libvirt-clones.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-clones.md).
 - **Disk handling.** libvirt disks are written in a private directory and renamed into place, are created `0640 libvirt-qemu:kvm`, and a symbolic link at a disk's name is refused. A VM delete removes only the VM's own files inside the storage pool; a source VM whose disk a linked clone still uses cannot be deleted, reverted or snapshotted (`DeleteBlocked`). libvirt linked clones are disabled. vSphere attaches an imported disk in place only when it is the VM's own verified landing disk, and migrations land per namespace; Proxmox imports a migrated disk only from the VM's own verified stage.
 - **Migration PVC mounts.** A provider pod mounts only the migration PVCs that a live `VMMigration` references (the target's read-only), and staged migration files on the `pvc` backend are opened without following symbolic links. Migration storage endpoints are user-supplied; the manager's SSRF gate always refuses loopback, link-local, metadata and multicast targets, and `--migration-storage-allowed-hosts` (a comma-separated IP/CIDR allow-list, ADR-0006) locks it to your storage networks. The chart has no value for that flag; use `networkPolicy.hypervisorEgressCIDRs` as a second layer.
 - **Administrator disk-size limit (opt-in).** By default a tenant can ask for disks up to the CRD bound of 64 Ti each and fill a shared datastore. Set `manager.maxDiskSize` (the manager's `--max-disk-size`, binary units such as `500Gi`) to cap every disk VirtRigaud creates or grows: VMs that would create a larger disk are held (`DiskSizeExceedsLimit`), a Reconfigure never grows a disk beyond it, and clones and migrations are checked by the real sizes of the source's disks (an unknown size refuses them). Existing larger disks are kept and never shrunk. A Provider's owner can **lower** it with the annotation `infra.virtrigaud.io/max-disk-size` (never raise it); with webhooks enabled, `VirtualMachine` and `VMClass` writes above the limit are also refused at admission. An image or template larger than the class size is not covered.
@@ -293,7 +301,7 @@ With `crdUpgrade.enabled` (the default) the chart runs a `pre-install,pre-upgrad
 
 ### Values that look like security settings but are not wired
 
-The chart's `security.podSecurityProfile`, `security.tls.*` and `config.*` (circuit breaker, retry, rate limit, workers) blocks are not consumed by any template or by the manager in v0.4.1. Setting them changes nothing. Use `manager.securityContext` / `manager.podSecurityContext`, the Provider's `spec.runtime.service.tls` and `providerTLS`, and the settings documented on this page instead.
+The chart's `security.podSecurityProfile`, `security.tls.*` and `config.*` (circuit breaker, retry, rate limit, workers) blocks are not consumed by any template or by the manager in v0.4.2. Setting them changes nothing. Use `manager.securityContext` / `manager.podSecurityContext`, the Provider's `spec.runtime.service.tls` and `providerTLS`, and the settings documented on this page instead.
 
 ## Container hardening
 
@@ -362,7 +370,7 @@ roleRef:
   name: prometheus-metrics-scraper
 ```
 
-!!! note "The default is still plain HTTP in v0.4.1"
+!!! note "The default is still plain HTTP in v0.4.2"
     `--metrics-secure=false` remains the default. Operators in regulated environments should secure the manager endpoint with this flag **and** restrict who can reach port 8080 with a NetworkPolicy.
 
 The webhook and metrics servers pin an explicit **TLS 1.2 minimum** (the floor is active on the always-TLS webhook server, and on the metrics server when it is served over HTTPS). HTTP/2 is disabled unless `--enable-http2` is set.
@@ -386,7 +394,7 @@ This is an operational hardening toggle, not a transport or credential control; 
 
 ### CVE management
 
-- **Container images are scanned with Trivy** on every release (`.github/workflows/release.yml`). The release workflow **fails** if Trivy finds a HIGH or CRITICAL vulnerability in the manager or a provider image (the kubectl helper image is scanned but does not gate).
+- **Container images are scanned with Trivy** on every release (`.github/workflows/release.yml`). The release workflow **fails** if Trivy finds a HIGH or CRITICAL vulnerability **that has a fixed version** in the manager or a provider image; findings with no fix available are ignored by the gate (they are still reported in the scan uploaded to the Security tab). The kubectl helper image is scanned but does not gate. Passing the gate therefore does not mean an image has no known HIGH or CRITICAL vulnerability.
 - **Code is scanned with Trivy in repo mode and with `govulncheck`** on every CI run (`.github/workflows/ci.yml`). `govulncheck` is a **blocking** gate for the root and SDK modules. Trivy results are uploaded to the GitHub Security tab as SARIF.
 - **Release artifacts are signed and attested with cosign.** Every published multi-arch image — and its per-arch children, via `cosign sign --recursive` — carries a keyless **signature** (Fulcio + Rekor), an **SBOM** attestation (`spdxjson`), and **SLSA L3 provenance** (`slsa-github-generator`, `generator_container_slsa3.yml@v2.1.0`).
 
@@ -395,7 +403,7 @@ This is an operational hardening toggle, not a transport or credential control; 
 The signature, SBOM and SLSA provenance are all stored in the legacy `.sig`/`.att` tag format (the release pins cosign to `v2.6.3`), so a **single cosign version (any ≥ 2.2)** verifies all three with default flags. Prefer an immutable `@sha256:…` digest over a tag:
 
 ```bash
-IMAGE=ghcr.io/projectbeskar/virtrigaud/manager:v0.4.1
+IMAGE=ghcr.io/projectbeskar/virtrigaud/manager:v0.4.2
 ISSUER=https://token.actions.githubusercontent.com
 # Accepts both the release workflow (signature/SBOM) and the SLSA generator
 # (provenance) identities; tighten per-artifact if you need a stricter policy.
@@ -417,8 +425,26 @@ cosign verify-attestation "$IMAGE" --type slsaprovenance \
   --certificate-oidc-issuer="$ISSUER"
 ```
 
+The release also attaches SPDX SBOMs for the five images as release assets (`sbom-<component>.spdx.json` and `projectbeskar-virtrigaud-<component>_<tag>.spdx.json`, with the tag's dots as underscores, for example `projectbeskar-virtrigaud-manager_v0_4_2.spdx.json`), and a `checksums.txt` covering the CLI binaries, the chart package and the SBOMs. For v0.4.2 the components are `manager`, `provider-libvirt`, `provider-vsphere`, `provider-proxmox` and `kubectl`, each published for `linux/amd64` and `linux/arm64`. To check a downloaded asset:
+
+```bash
+gh release download v0.4.2 -R projectbeskar/virtrigaud -p checksums.txt -p 'vrtg-linux-amd64'
+# checksums.txt lists build paths (./cli-tools-linux-amd64/vrtg-linux-amd64); match by file name
+grep ' ./[^ ]*/vrtg-linux-amd64$' checksums.txt | sed 's#  .*/#  #' | sha256sum --check
+```
+
 !!! note "v0.3.6–v0.3.8: split storage format"
     Releases v0.3.6 through v0.3.8 were signed with cosign v3.0.x, which stored the signature and SBOM in the new Sigstore-bundle (OCI 1.1 referrer) format while SLSA provenance stayed on the legacy `.att` tag: use cosign ≥ 2.6 for the signature and SBOM, and cosign 2.2.x for the provenance of those releases. Every artifact is valid; this was a discovery-format split, resolved from v0.3.9.
+
+### Release v0.4.2: dependency and image findings { #release-v042-dependency-and-image-findings }
+
+This is what the v0.4.2 release notes and the release's image scan report. Use them, not this summary, as the reference for an assessment.
+
+- **Go dependencies.** `golang.org/x/net` v0.62.0 in the root, `sdk`, `proto` and `test/proxmox-grpc-test` modules (it was v0.60.0) fixes CVE-2026-78661 and CVE-2026-97045. The update also moves `golang.org/x/crypto` to v0.58.0, `x/sys` v0.49.0, `x/term` v0.47.0, `x/text` v0.43.0, `x/sync` v0.24.0 and `x/tools` v0.51.0.
+- **Two known Go advisories remain**, neither reachable from VirtRigaud code according to `govulncheck`: GO-2026-6094 (GHSA-gcjh-h69q-9w9g) in `github.com/google/cel-go` v0.22.0, imported through `k8s.io/apiserver` with the affected functions not called (the fixed version is newer than the Kubernetes libraries in use require); and GO-2026-5932, the deprecated `golang.org/x/crypto/openpgp` package, which no VirtRigaud build imports and which has no fixed version.
+- **Manager image:** no HIGH or CRITICAL finding.
+- **Provider images** (Debian 12.15 based) carry HIGH and CRITICAL operating-system package advisories for which Debian 12 has no fixed package (83 distinct CVEs across the three images, 4 of them CRITICAL: in GLib, libxml2, zlib's MiniZip and the Proxmox image's OpenSSH client). The release gate ignores unfixed findings, so they do not fail it; that is not a statement that they are harmless. Most are in packages the providers do not use at run time (for example QEMU device emulation in the vSphere image, which uses only `qemu-img`). The release's image scan reports the same HIGH and CRITICAL findings for each image as the v0.4.2-rc2 scan.
+- **CRD-hook image (`kubectl`):** ships the upstream `kubectl` 1.35.10 binary (was 1.35.9), built with Go 1.26.10, which fixes four HIGH Go standard-library advisories. Upstream still builds it with `golang.org/x/net` v0.56.0 and `x/text` v0.39.0, so Trivy reports two HIGH advisories (CVE-2026-78669 in `x/net`, CVE-2026-56851 in `x/text`) and also CVE-2026-78661 and CVE-2026-97045 against that `x/net`. The image runs only during `helm install` and `helm upgrade` and talks only to the cluster's API server.
 
 ### GitHub Actions pinning
 
