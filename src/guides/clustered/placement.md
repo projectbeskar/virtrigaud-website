@@ -10,7 +10,7 @@ manager chooses a host for it. This page describes how that choice is made,
 what a `VMPlacementPolicy` can and cannot do, how the choice is recorded on the
 VM, and what to do when no host fits.
 
-!!! warning "Experimental in v0.4.1"
+!!! warning "Experimental in v0.4.2"
     Clustered Providers are experimental. See
     [Clustered libvirt: overview and setup](index.md). The scheduler is
     deliberately simple: it filters hosts, then ranks the survivors. It runs
@@ -20,8 +20,8 @@ VM, and what to do when no host fits.
 ## What the scheduler decides
 
 The scheduler is a pure function in
-[`internal/scheduler`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/internal/scheduler).
-The [VirtualMachine controller](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/internal/controller/virtualmachine_controller.go)
+[`internal/scheduler`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.2/internal/scheduler).
+The [VirtualMachine controller](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/internal/controller/virtualmachine_controller.go)
 gathers its inputs on the create path:
 
 | Input | Where it comes from |
@@ -59,7 +59,7 @@ first one that fails is the reason reported for that host:
 | 11 | VM (anti-)affinity | Required VM affinity and anti-affinity terms (below) |
 
 Two checks exist in the scheduler but are **never active for an ordinary VM
-in v0.4.1**: a required storage pool (`storage.virtrigaud.io/pool-<name>`) and
+in v0.4.2**: a required storage pool (`storage.virtrigaud.io/pool-<name>`) and
 a required machine type. The controller does not derive either from a VM, so
 those labels and `Host.status.machineTypes` do not influence placement.
 
@@ -157,7 +157,12 @@ admitted size is first written to `status.placement.resizeReservation` (see
 [Durable resize reservation](#durable-resize-reservation)) and only then is the
 resize sent. If not, nothing is sent, the VM keeps running at its current size, and it gets
 `Reconfiguring=False` with reason `InsufficientHostCapacity`; the resize is
-retried after 30 seconds, 1 minute, then every 2 minutes. A **shrink** of a
+retried after 30 seconds, 1 minute, then every 2 minutes. If you withdraw such a
+refused resize (set the spec back to the current size), the
+`Reconfiguring=False/InsufficientHostCapacity` condition stays until the next
+resize ([issue #473](https://github.com/projectbeskar/virtrigaud/issues/473)). It
+is stale: nothing is reserved or retried for it, and the phase, `Ready` and the
+capacity accounting are not affected. A **shrink** of a
 running VM is applied only while it is powered off
 (`Reconfiguring=False/ShrinkPendingPowerOff`); VirtRigaud never powers a VM off
 by itself to apply one. A change the running domain cannot take is kept in the
@@ -345,9 +350,9 @@ already runs one.
 ### What is wired and what is not
 
 The scheduler reads a subset of the policy. Everything else in the CRD is
-accepted by the schema and **has no effect** on a clustered Provider in v0.4.1.
+accepted by the schema and **has no effect** on a clustered Provider in v0.4.2.
 
-| Field | Effect in v0.4.1 |
+| Field | Effect in v0.4.2 |
 |-------|------------------|
 | `hard.hosts`, `hard.excludedHosts` | **Hard filter.** Host names; `hosts` is an allow-list when non-empty |
 | `hard.nodeSelector` | **Hard filter.** Each key/value must equal `Host.spec.labels` |
@@ -588,4 +593,14 @@ These are not scheduler rejections but appear on the VM's `Provisioning` or
 - Capacity accounting sees only VirtRigaud-managed VMs. Other domains on a host
   take real memory the scheduler does not know about.
 - There is no per-tenant quota: tenants share the pool first come, first served.
+- There is no provider-side fencing of a previous manager: see
+  [Admissions inherited from an earlier manager](#admissions-inherited-from-an-earlier-manager).
+- A withdrawn resize can keep its reservation indefinitely, and v0.4.2 has no
+  automatic recovery for it
+  ([issue #468](https://github.com/projectbeskar/virtrigaud/issues/468)); see
+  [above](#a-withdrawn-resize-can-keep-its-reservation-indefinitely).
+- A withdrawn refused resize keeps a stale `InsufficientHostCapacity`
+  condition until the next resize; it reserves nothing
+  ([issue #473](https://github.com/projectbeskar/virtrigaud/issues/473)).
+- Placement decisions are serialized per Provider.
 - The scheduler does not consider firmware. A VMClass with `firmware: UEFI` or `securityProfile.secureBoot` needs an OVMF package on the host the VM is placed on; a VM placed on a host without one is refused (`ValidationError`) and is re-checked on that host (it keeps its pending host, and is never moved to another). Install the package on every host that can receive such a VM, or delete the VM. On a pool whose hosts have different OVMF packages, VMs of one VMClass can get different firmware builds. See [libvirt: firmware](../../providers/libvirt.md#firmware-secure-boot-and-platform-features).

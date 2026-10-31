@@ -21,7 +21,7 @@
 # NOTE — this file is a tour of the resource kinds, not a runnable stack:
 #   - VMPlacementPolicy is used by the scheduler of clustered libvirt Providers
 #     only. Attached to a vSphere VM (as here) it is accepted and NOT enforced.
-#   - VMSet has no controller in v0.4.1: it reports Ready=False /
+#   - VMSet has no controller in v0.4.2: it reports Ready=False /
 #     ControllerNotImplemented and creates no VMs.
 #   - Providers, networks and the image are placeholders to adapt.
 

@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # External Secrets for Provider Credentials
 
-This page shows how to wire [External Secrets Operator](https://external-secrets.io) (ESO) into a VirtRigaud **v0.4.1** deployment so provider credentials are sourced from your central secret store (Vault / AWS Secrets Manager / Azure Key Vault / GCP Secret Manager / etc.) rather than committed to Git or hand-applied with `kubectl create secret`.
+This page shows how to wire [External Secrets Operator](https://external-secrets.io) (ESO) into a VirtRigaud **v0.4.2** deployment so provider credentials are sourced from your central secret store (Vault / AWS Secrets Manager / Azure Key Vault / GCP Secret Manager / etc.) rather than committed to Git or hand-applied with `kubectl create secret`.
 
 The key constraint is: **VirtRigaud providers read credentials as named files**, not as env vars. So the `ExternalSecret` you produce must materialise a `Secret` whose **keys match exactly** what each provider reads.
 
@@ -418,12 +418,12 @@ Store as `projects/my-gcp-project/secrets/virtrigaud-vsphere-prod-username` etc.
 
 ## What ESO does NOT solve in v0.3.6
 
-!!! note "Heading retained for stable links; limitations still apply in v0.4.1"
+!!! note "Heading retained for stable links; limitations still apply in v0.4.2"
     This heading and its anchor (`#what-eso-does-not-solve-in-v036`) are retained so existing cross-links keep resolving. The limitations below are **still current in v0.4.0** unless noted otherwise; item 3 (mTLS material distribution) was resolved in v0.3.7.
 
 ESO solves **provisioning** of the K8s Secret. It does **not** solve:
 
-1. **Rotation propagation to the running provider pod.** When ESO refreshes the K8s Secret, the kubelet eventually updates the projected files inside the pod (typically within `syncFrequency`, default 1 minute), but the provider only reads the files at startup. **Rotating a credential requires a provider pod restart** (still the case in v0.4.1). There is no in-process credential reload.
+1. **Rotation propagation to the running provider pod.** When ESO refreshes the K8s Secret, the kubelet eventually updates the projected files inside the pod (typically within `syncFrequency`, default 1 minute), but the provider only reads the files at startup. **Rotating a credential requires a provider pod restart** (still the case in v0.4.2). There is no in-process credential reload.
 
     Workaround: pair the `ExternalSecret` with a deployment-restart hook (e.g. `stakater/Reloader`) keyed on the Secret name. Stakater Reloader's annotation:
 

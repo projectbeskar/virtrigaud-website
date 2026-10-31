@@ -36,7 +36,7 @@ Dockerfile.
 
 - **Go 1.26+** - [Download](https://go.dev/dl/) — the Go toolchain floor
   was raised to **1.26.3** in v0.3.7, to **1.26.4** in v0.3.8, and is
-  **1.26.10** in v0.4.1. Binary consumers via released images are unaffected;
+  **1.26.10** in v0.4.2. Binary consumers via released images are unaffected;
   only source builders need to upgrade. `go.mod` is the source of truth (the
   `sdk/` and `proto/` modules use the same version).
 - **Docker** - [Install](https://docs.docker.com/get-docker/)
@@ -149,7 +149,7 @@ v0.3.6 ([PR #117](https://github.com/projectbeskar/virtrigaud/pull/117), part of
 the H1 build-path consolidation) parametrised `build/Dockerfile.manager` so
 forks in environments that cannot pull from `docker.io` / `gcr.io` can point
 at internal mirrors without patching the Dockerfile. This is still the
-mechanism in v0.4.1.
+mechanism in v0.4.2.
 
 ### Override the builder and base images
 
@@ -160,9 +160,9 @@ registry (Artifactory, Harbor, ECR, etc.):
 docker build -f build/Dockerfile.manager \
   --build-arg BUILDER_IMAGE=corp.io/golang:1.26.10 \
   --build-arg BASE_IMAGE=corp.io/distroless/static:nonroot \
-  --build-arg VERSION=v0.4.1 \
+  --build-arg VERSION=v0.4.2 \
   --build-arg GIT_SHA=$(git rev-parse HEAD) \
-  -t corp.io/virtrigaud/manager:v0.4.1 .
+  -t corp.io/virtrigaud/manager:v0.4.2 .
 ```
 
 Or via `make`:
@@ -171,7 +171,7 @@ Or via `make`:
 make docker-build \
   BUILDER_IMAGE=corp.io/golang:1.26.10 \
   BASE_IMAGE=corp.io/distroless/static:nonroot \
-  VERSION=v0.4.1 GIT_SHA=$(git rev-parse HEAD)
+  VERSION=v0.4.2 GIT_SHA=$(git rev-parse HEAD)
 ```
 
 Defaults match the upstream public images so unpatched builds behave exactly
@@ -251,8 +251,8 @@ sudo apt-get install golang-go
 # Or download from https://go.dev/dl/
 ```
 
-Go 1.26+ is required for generating CRD documentation from the v0.4.1 source
-tree (the toolchain floor is **1.26.10** in v0.4.1).
+Go 1.26+ is required for generating CRD documentation from the v0.4.2 source
+tree (the toolchain floor is **1.26.10** in v0.4.2).
 
 ### Quick Start
 
@@ -346,7 +346,7 @@ VirtRigaud's Custom Resource Definitions (CRDs):
    and refreshed for each release; do not hand-edit it.
 
 This ensures the documentation reflects the CRD structure of the cloned
-source. As of v0.4.1 there are **12 CRDs**: VirtualMachine, Provider,
+source. As of v0.4.2 there are **12 CRDs**: VirtualMachine, Provider,
 VMClass, VMImage, VMNetworkAttachment, VMMigration, VMSnapshot, VMClone,
 VMSet, VMPlacementPolicy, Host and HostPool. (VMAdoption is a controller, not
 a CRD.) VMSet's controller is still a not-yet-active stub that only reports a
@@ -356,7 +356,7 @@ HostPool describe the hosts of a clustered Provider.
 
 ## Project Structure
 
-### VirtRigaud Repository (v0.4.1)
+### VirtRigaud Repository (v0.4.2)
 
 ```
 virtrigaud/

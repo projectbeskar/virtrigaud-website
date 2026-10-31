@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Advanced VirtRigaud Examples
 
-These examples cover the operations beyond creating a VM: snapshots and reverting to them, reconfiguration, cloning, console access and task tracking. They mirror `examples/advanced/` of the repository at **v0.4.1** and are valid against the v0.4.1 CRDs. For the behaviour behind them see [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md) and [VM cloning](../../guides/advanced/vm-cloning.md).
+These examples cover the operations beyond creating a VM: snapshots and reverting to them, reconfiguration, cloning, console access and task tracking. They mirror `examples/advanced/` of the repository at **v0.4.2** and are valid against the v0.4.2 CRDs. For the behaviour behind them see [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md) and [VM cloning](../../guides/advanced/vm-cloning.md).
 
 !!! note "Placeholders"
     Endpoints, Secret names, datastores and templates are placeholders. Each Provider in these files has the `runtime.service.tls` block that v0.4.0 requires (see [the examples index](../index.md#read-this-before-applying-an-example)); create the TLS Secret it names or set `enabled: false` in a lab.
@@ -39,7 +39,7 @@ spec:
       name: web-server-01-pre-update
 ```
 
-The revert is sent at most once per request. Libvirt has additional rules (a revert needs a snapshot taken while the VM was powered off, and deleting snapshots has an order when memory snapshots are involved); they are in [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md#reverting-to-a-snapshot) and in the repository's [snapshot revert reference](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md).
+The revert is sent at most once per request. Libvirt has additional rules (a revert needs a snapshot taken while the VM was powered off, and deleting snapshots has an order when memory snapshots are involved); they are in [Advanced VM lifecycle](../../guides/advanced/advanced-lifecycle.md#reverting-to-a-snapshot) and in the repository's [snapshot revert reference](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/vm-snapshot-revert.md).
 
 ## Cloning
 

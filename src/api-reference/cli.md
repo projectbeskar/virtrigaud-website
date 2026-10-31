@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # CLI Reference
 
-VirtRigaud provides several command-line tools for inspecting resources, validating conformance specs, developing providers, and load testing. This reference covers v0.4.1 and lists the commands and flags the tools define. For longer explanations and caveats see the [CLI Tools Reference](../references/cli-tools.md).
+VirtRigaud provides several command-line tools for inspecting resources, validating conformance specs, developing providers, and load testing. This reference covers v0.4.2 and lists the commands and flags the tools define. For longer explanations and caveats see the [CLI Tools Reference](../references/cli-tools.md).
 
 ## Overview
 
@@ -24,8 +24,8 @@ VirtRigaud provides several command-line tools for inspecting resources, validat
 Each release publishes one binary per tool and platform, named `<tool>-<os>-<arch>` (`.exe` on Windows), plus a `checksums.txt`. Platforms are `linux` and `darwin` (each `amd64` and `arm64`) and `windows` (`amd64`).
 
 ```bash
-# Download v0.4.1
-curl -fsSL "https://github.com/projectbeskar/virtrigaud/releases/download/v0.4.1/vrtg-linux-amd64" -o vrtg
+# Download v0.4.2
+curl -fsSL "https://github.com/projectbeskar/virtrigaud/releases/download/v0.4.2/vrtg-linux-amd64" -o vrtg
 chmod +x vrtg
 sudo mv vrtg /usr/local/bin/
 ```
@@ -39,7 +39,7 @@ There are no `make` targets for the CLI tools; build them with `go build` from a
 ```bash
 git clone https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
-git checkout v0.4.1
+git checkout v0.4.2
 
 mkdir -p bin
 for tool in vrtg vcts vrtg-provider virtrigaud-loadgen; do
@@ -47,11 +47,11 @@ for tool in vrtg vcts vrtg-provider virtrigaud-loadgen; do
 done
 ```
 
-`go install github.com/projectbeskar/virtrigaud/cmd/<tool>@v0.4.1` is not supported: the root `go.mod` has `replace` directives for the local `proto/` and `sdk/` modules, which `go install` with a version suffix rejects.
+`go install github.com/projectbeskar/virtrigaud/cmd/<tool>@v0.4.2` is not supported: the root `go.mod` has `replace` directives for the local `proto/` and `sdk/` modules, which `go install` with a version suffix rejects.
 
 ## vrtg
 
-CLI for looking at VirtRigaud resources. Source: [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg/main.go).
+CLI for looking at VirtRigaud resources. Source: [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg/main.go).
 
 ### Global Flags
 
@@ -97,7 +97,7 @@ Without `--kubeconfig`, `vrtg` uses controller-runtime's default configuration l
 
 ## vcts
 
-VirtRigaud Conformance Test Suite. Source: [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vcts/main.go).
+VirtRigaud Conformance Test Suite. Source: [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vcts/main.go).
 
 ### Global Flags
 
@@ -148,7 +148,7 @@ The repository ships five tests: `vm-create-delete` and `vm-power-cycle` in `bas
 
 ## vrtg-provider
 
-Development toolkit for provider projects outside this repository; it edits local files only. Source: [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/main.go).
+Development toolkit for provider projects outside this repository; it edits local files only. Source: [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg-provider/main.go).
 
 ### Global Flags
 
@@ -162,7 +162,7 @@ Development toolkit for provider projects outside this repository; it edits loca
 
 #### init
 
-Initialize a new provider project. Source: [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/init.go).
+Initialize a new provider project. Source: [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg-provider/init.go).
 
 ```bash
 vrtg-provider init <provider-name> [flags]
@@ -184,7 +184,7 @@ Since v0.4.1 the SDK and proto modules are published under their own tags (`sdk/
 
 #### generate
 
-Regenerate protocol buffer bindings. Source: [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/generate.go). Run from within a provider project directory (a `Makefile` and a `go.mod` that requires a `github.com/projectbeskar/virtrigaud` module, which `init` creates). A scaffolded project imports its bindings from the proto module, so there is nothing to generate and the command says so.
+Regenerate protocol buffer bindings. Source: [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg-provider/generate.go). Run from within a provider project directory (a `Makefile` and a `go.mod` that requires a `github.com/projectbeskar/virtrigaud` module, which `init` creates). A scaffolded project imports its bindings from the proto module, so there is nothing to generate and the command says so.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -193,7 +193,7 @@ Regenerate protocol buffer bindings. Source: [`cmd/vrtg-provider/generate.go`](h
 
 #### verify
 
-Build, check and test a provider project. Source: [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/verify.go). Run from within a provider project directory.
+Build, check and test a provider project. Source: [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg-provider/verify.go). Run from within a provider project directory.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -210,7 +210,7 @@ vrtg-provider verify
 
 #### publish
 
-Write a catalog entry for a provider. Source: [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/publish.go). Run from within a provider project directory.
+Write a catalog entry for a provider. Source: [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg-provider/publish.go). Run from within a provider project directory.
 
 | Flag | Required | Default | Description |
 |------|----------|---------|-------------|
@@ -244,7 +244,7 @@ Prints the version and git SHA: a release binary reports its release tag and `Gi
 
 ## virtrigaud-loadgen
 
-Load generator that creates, powers, resizes, snapshots, clones and deletes `VirtualMachine`s and records how long each operation took; see the [CLI Tools Reference](../references/cli-tools.md#virtrigaud-loadgen) for the details. Source: [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/virtrigaud-loadgen/main.go).
+Load generator that creates, powers, resizes, snapshots, clones and deletes `VirtualMachine`s and records how long each operation took; see the [CLI Tools Reference](../references/cli-tools.md#virtrigaud-loadgen) for the details. Source: [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/virtrigaud-loadgen/main.go).
 
 ### Global Flags
 
@@ -297,7 +297,7 @@ create,test-provider,,2026-01-15T10:00:02Z,0s,false,,Skipped: vmCount reached,tr
 
 ## alpha-to-beta-dryrun
 
-A tombstoned migration helper from the v1alpha1 API era. Source: [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/alpha-to-beta-dryrun/main.go).
+A tombstoned migration helper from the v1alpha1 API era. Source: [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/alpha-to-beta-dryrun/main.go).
 
 !!! warning "No-op"
     The v1alpha1 API was removed before v0.3.0. Running this binary prints an error explaining that v1alpha1 resources should have already been migrated and exits with status 1. There are no flags and no useful operations, and it is not part of the release binaries.
@@ -306,7 +306,7 @@ A tombstoned migration helper from the v1alpha1 API era. Source: [`cmd/alpha-to-
 
 ## virtrigaud-manager flags
 
-The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typically invoked directly. The flags below are the ones it defines; run `manager --help` for the full list, which also includes the standard `--zap-*` logging flags. Source: [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/manager/main.go).
+The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typically invoked directly. The flags below are the ones it defines; run `manager --help` for the full list, which also includes the standard `--zap-*` logging flags. Source: [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/manager/main.go).
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -362,6 +362,6 @@ The manager binary (`cmd/manager`) is deployed via the Helm chart and is not typ
 
 ## Version Information
 
-This reference covers VirtRigaud CLI tools v0.4.1.
+This reference covers VirtRigaud CLI tools v0.4.2.
 
 For older versions, see the [releases page](https://github.com/projectbeskar/virtrigaud/releases).

@@ -10,7 +10,7 @@ Since **v0.4.0** a `VMMigration` can target a libvirt Provider with
 `Validating`.
 
 !!! warning "Experimental"
-    Clustered Providers are experimental in v0.4.1 and may still change. This
+    Clustered Providers are experimental in v0.4.2 and may still change. This
     page covers what is different when the **target** is clustered. Everything
     else about `VMMigration` (staging backends, source options, phases, the
     cleanup policies) is in the [User Guide](user-guide.md), the
@@ -55,7 +55,7 @@ spec:
 ```
 
 The same file is
-[`examples/vmmigration-into-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/examples/vmmigration-into-clustered.yaml).
+[`examples/vmmigration-into-clustered.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/examples/vmmigration-into-clustered.yaml).
 Replace the NFS server with your own.
 
 ## How it differs from a single-host target
@@ -117,7 +117,7 @@ kubectl get vmmigration app-into-cluster -o jsonpath='{.status.storageInfo.impor
 | The target Provider is libvirt with `spec.topology: cluster` and its provider image reports `supports_routed_import` | The migration fails at `Validating` with `ClusteredTargetUnsupported`, before any side effect. The capability is read from the provider at runtime; it is not in `Provider.status.reportedCapabilities`. Upgrade the clustered provider first, then run the migration again |
 | `spec.storage.type` is `s3` or `nfs`, set explicitly | `pvc` is refused at `Validating` (`MigrationFailed`, message "storage backend "pvc" is not supported into a clustered provider ..."). An unset `spec.storage` means `pvc` |
 | The target VM is in the VMMigration's own namespace (`spec.target.namespace` unset or equal to it) | Fails at `Validating` with `ClusteredTargetUnsupported`. The target VM proves its landed disk through a VMMigration in its own namespace |
-| If the Provider is in another namespace, its `spec.consumerNamespaceSelector` selects the migration's namespace | The migration is refused as `ConsumerNotAllowed`. See [cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md) |
+| If the Provider is in another namespace, its `spec.consumerNamespaceSelector` selects the migration's namespace | The migration is refused as `ConsumerNotAllowed`. See [cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/cross-namespace-references.md) |
 | Hosts are `Ready`, schedulable, and report `status.allocatableStorageBytes` at least the source disk's size | The target waits unplaced (`TargetPlaced=False`, usually `Unschedulable`) and the source is not touched |
 | The Provider runs one replica, and no other Provider mounts the same pool | The landing lock is per provider process; two Providers whose hosts mount one pool are not serialised against each other |
 
@@ -156,11 +156,11 @@ host that may be chosen needs:
   a host without it, the create fails (retried) with `refusing to stage
   cloud-init data` **after** the disk has landed, and the VM stays uncreated
   until you fix the host. See
-  [cloud-init seed directory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-domain-ownership.md#cloud-init-seed-directory);
+  [cloud-init seed directory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-domain-ownership.md#cloud-init-seed-directory);
 - the sudo rules a clustered Provider already needs for clones and exports
   (`qemu-img info -U` and the `timeout` lines). The import's own commands run
   as the SSH user, without `sudo`. See
-  [what the copies run as root](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#what-the-copies-run-as-root).
+  [what the copies run as root](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-clones.md#what-the-copies-run-as-root).
 
 ## Watching a migration
 
@@ -204,7 +204,7 @@ kubectl annotate vmmigration <name> virtrigaud.io/operation-outcome=not-performe
 
 The import is then sent again, to the target's **current** pending host. The
 general mechanism is described in
-[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
+[Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/provider-call-outcomes.md).
 
 ### On the target VirtualMachine
 
@@ -229,7 +229,7 @@ migration could not delete its unbound target VM. Delete the target
   (default) when the VMMigration is deleted without a target VM using the disk,
   `Always` also when the migration fails for good, `Never` not at all.
 - **The staged object** on `nfs` or `s3` is deleted through the target Provider
-  as for any other target ([ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0011-migration-staging-cleanup.md));
+  as for any other target ([ADR-0011](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0011-migration-staging-cleanup.md));
   for a clustered target the request goes to the recorded host.
 - **After `Ready`** the landed disk is the target VM's disk. Deleting the
   VMMigration leaves the target VM and its disk in place, and the source VM is
@@ -260,12 +260,12 @@ migration could not delete its unbound target VM. Delete the target
 - **A leader-election overlap during the target's `Create`** can still fail the
   migration with `TargetVMNotOwned`. This fails closed: delete the target VM it
   created and create the migration again.
-- **Guest network.** As for every cross-hypervisor migration in v0.4.1, a guest
+- **Guest network.** As for every cross-hypervisor migration in v0.4.2, a guest
   whose netplan matches its NIC by MAC address can boot without network on a
   vSphere or Proxmox target, and on a libvirt target it gets a new cloud-init
   identity (instance-id, hostname, SSH host keys). The fix is designed in
-  [ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0014-migrated-guest-network.md)
-  and is not in v0.4.1.
+  [ADR-0014](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0014-migrated-guest-network.md)
+  and is not in v0.4.2.
 
 ## What was tested
 
@@ -305,5 +305,5 @@ a host), and a retry after an import.
 - [VM Migration Guide: architecture](vm-migration-guide.md)
 - [Clustered libvirt: overview and setup](../guides/clustered/index.md)
 - [Backup, restore and re-attach of clustered VMs](../guides/clustered/backup-restore.md)
-- [Reference: migration into a clustered provider](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b)
-  and [ADR-0007, Addendum B](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0007-clustered-orchestrator-provider.md)
+- [Reference: migration into a clustered provider](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/clustered-provider-inventory.md#migration-into-a-clustered-provider-addendum-b)
+  and [ADR-0007, Addendum B](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0007-clustered-orchestrator-provider.md)

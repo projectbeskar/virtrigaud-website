@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # VM Status Reference
 
 This page explains what a `VirtualMachine` reports about itself in
-**VirtRigaud v0.4.1**: the `kubectl get vm` columns, how `status.phase` is
+**VirtRigaud v0.4.2**: the `kubectl get vm` columns, how `status.phase` is
 derived, which conditions and reasons you can see and what to do about each,
 what `status.ips` contains, and what the manager does when a provider call
 fails without a definite answer.
@@ -59,7 +59,7 @@ next reconcile overwrites it.
 | `Failed` | A hold that needs an operator, a create the provider refused, or a power state the provider cannot classify. |
 
 The rule, first match wins (`derivePhase` in
-[`virtualmachine_phase.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/internal/controller/virtualmachine_phase.go)):
+[`virtualmachine_phase.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/internal/controller/virtualmachine_phase.go)):
 
 1. Being deleted: `Deleting`.
 2. `Ready=False` with one of these hold reasons: `Failed`. The reasons are
@@ -155,7 +155,7 @@ change it did not apply.
 | `True` / `RestartRequired` | The provider applied at least one change to the persistent definition only; the new size takes effect at the next **power cycle** (power off, then on; a reboot from inside the guest is not enough). `status.currentResources` holds, per resource, the larger of the running and next-boot size. The phase follows the power state. Re-asked every 2 minutes. | Set `spec.powerState: "Off"`, wait for `Stopped`, then `"On"`. |
 | `False` / `ResizePendingPowerOff` | (vSphere) The VM cannot take the change while it runs and cannot stage it for the next boot: CPU or memory hot-add (or hot-remove) is not enabled, memory is above the hot-plug limit, a shared-bus disk is being grown, or the VM is suspended. Nothing was changed, and the VM stays `Ready`. | Set `spec.powerState: "Off"`; the change is applied, then set `"On"`. To resize running VMs in future, enable hot-add on the `VMClass` `performanceProfile`. |
 | `False` / `ShrinkPendingPowerOff` | (clustered) A running VM's CPU or memory shrink is applied only after power-off. The VM counts at its current size until then. | Power the VM off. |
-| `False` / `InsufficientHostCapacity` | (clustered) A resize-up exceeds the free capacity of the VM's host. The VM keeps its size and the resize is retried with a backoff. | Free capacity on the host, or choose a smaller size. |
+| `False` / `InsufficientHostCapacity` | (clustered) A resize-up exceeds the free capacity of the VM's host. The VM keeps its size and the resize is retried with a backoff. If the resize is withdrawn, the condition stays until the next resize; it is stale and reserves nothing ([#473](https://github.com/projectbeskar/virtrigaud/issues/473)). | Free capacity on the host, or choose a smaller size. |
 | `False` / `InheritedAdmissionOverCapacity` | (clustered) A resize reservation recorded by an earlier manager no longer fits its host. Nothing is sent; the reservation is kept and keeps counting. Re-checked with a backoff of up to 2 minutes. | Free room on the host, or see [Admissions inherited from an earlier manager](clustered/placement.md#admissions-inherited-from-an-earlier-manager). |
 | `False` / `ProviderLacksHonestReconfigure` | (clustered) The `Provider` does not report that it tells the truth about a resize (an older provider image), so no resize is sent. Re-checked every 30 seconds. | Upgrade the provider image. |
 | `False` / `ProviderError` | The reconfigure failed, or its outcome was not provable. Part of the change may be applied. Retried on a per-VM backoff (5 seconds doubling to 5 minutes), and at once after a spec change. | Read the message; check the provider. |

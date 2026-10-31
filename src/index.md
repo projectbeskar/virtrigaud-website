@@ -122,7 +122,7 @@ One manager binary, one manager Dockerfile (consolidated in v0.3.6), and one gRP
 
 ## Custom Resources
 
-VirtRigaud v0.4.1 ships **12 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
+VirtRigaud v0.4.2 ships **12 Custom Resource Definitions** in the `infra.virtrigaud.io/v1beta1` API group:
 
 | Kind | Purpose |
 |---|---|
@@ -133,7 +133,7 @@ VirtRigaud v0.4.1 ships **12 Custom Resource Definitions** in the `infra.virtrig
 | `VMNetworkAttachment` | Logical network the VM attaches to (resolved per-provider). |
 | `VMSnapshot` | A point-in-time snapshot of a VirtualMachine. |
 | `VMMigration` | Inter-provider VM migration (export → import) through S3 or NFS staging (a legacy PVC backend also exists). |
-| `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.4.1. |
+| `VMSet` | Replica-set of identical VMs. CRD available; controller stub only — `Ready=False/ControllerNotImplemented` in v0.4.2. |
 | `VMPlacementPolicy` | Placement / anti-affinity rules. Applied via `VirtualMachine.spec.placementRef`; the clustered libvirt scheduler uses it as its constraint language. There is no standalone controller. |
 | `VMClone` | One-shot clone of an existing VM (vSphere, Proxmox and Libvirt). Only vSphere makes linked clones; libvirt and Proxmox serve full clones and refuse a linked one (`LinkedCloneUnsupported`). |
 | `Host` | One hypervisor host behind a clustered libvirt Provider, with its live capacity and health in `status`. |
@@ -143,10 +143,10 @@ The manager also runs a `VMAdoption` reconciler (not a CRD — it reconciles `Pr
 
 ## Version Information
 
-This documentation covers **VirtRigaud v0.4.1**. The generated [CRD](references/generated-crd-docs.md) and [gRPC](references/grpc-api.md) references are generated from the `v0.4.1` tag.
+This documentation covers **VirtRigaud v0.4.2**, the current release. The generated [CRD](references/generated-crd-docs.md) and [gRPC](references/grpc-api.md) references are generated from the `v0.4.2` tag.
 
-!!! info "Preparing v0.4.2"
-    v0.4.2 is not released yet. It scales the manager to large clustered Providers and tightens how a clustered Provider's capacity is reserved; it adds one optional status field (`status.placement.resizeReservation`) and no other schema change. If you plan to move to it, read [Upgrading from v0.4.1 to v0.4.2](operations/upgrade.md#upgrading-from-v041-to-v042), in particular the rollback restrictions.
+!!! warning "Upgrading from v0.4.1 or a v0.4.2 release candidate"
+    v0.4.2 adds one optional status field (`status.placement.resizeReservation`), so the CRDs must be installed before the manager, and two manager flags. Upgrade the chart with `--reset-then-reuse-values` and override any image tag you pinned, roll each `Provider`'s `spec.runtime.image` yourself (Helm does not change it; roll the vSphere providers together with the manager), and **do not roll back to v0.4.1 while a clustered VM holds a resize reservation**. Read [Upgrading from v0.4.1 to v0.4.2](operations/upgrade.md#upgrading-from-v041-to-v042) first.
 
 !!! warning "Upgrading from v0.4.0"
     v0.4.1 has no CRD schema change and the same roll order, but a Proxmox Provider whose VMs carry user-data now needs SSH credentials in its Secret, libvirt VMClasses with `firmware: UEFI` now make UEFI VMs, and secrets set in a `VMClone`'s `spec.customization` on v0.4.0 or earlier should be rotated. Read [Upgrading from v0.4.0 to v0.4.1](operations/upgrade.md#upgrading-from-v040-to-v041) first.
@@ -156,12 +156,13 @@ This documentation covers **VirtRigaud v0.4.1**. The generated [CRD](references/
 
 ### Recent Releases
 
-- **v0.4.2 (in preparation, not released)** — *Control-plane scalability and clustered admission safety.* Changes no API field's meaning, no provider and no gRPC message; adds the optional `VirtualMachine` status field `status.placement.resizeReservation`.
-    - **Less control-plane load.** Running VMs are polled every 2 minutes (5 when powered off) instead of every 10 seconds, unchanged status is not rewritten, a provider connection is validated once instead of on every reconcile, and a clustered Provider's VM counts and Host capacity are read from indexes instead of full scans.
-    - **Admission safety on clustered Providers.** A placement is released only on evidence; an admitted resize-up is reserved durably (`status.placement.resizeReservation`, `Reconfiguring=True/ResizeReserved`) before it is sent and released only on a confirmed `Reconfigure`; an admission inherited from an earlier manager is checked again before it is executed (`InheritedAdmissionOverCapacity`); a VM whose size cannot be established is never counted at a guessed size.
+- **v0.4.2** — *Control-plane scalability, clustered admission safety and Provider fault isolation.* A patch release of v0.4.1; changes no API field's meaning and no gRPC message; adds the optional `VirtualMachine` status field `status.placement.resizeReservation` and two manager flags. It ships the code of v0.4.2-rc2. [Release notes](https://github.com/projectbeskar/virtrigaud/releases/tag/v0.4.2).
+    - **Less control-plane load.** Running VMs are polled every 2 minutes (5 when powered off) instead of every 10 seconds, unchanged status is not rewritten, a provider connection is validated once instead of on every reconcile, a clustered Provider's VM counts and Host capacity are read from indexes instead of full scans, and a new VM is described as soon as its `Create` is recorded. The figures in the release notes come from a test environment with a fake provider and from microbenchmarks, not from production clusters.
+    - **Admission safety on clustered Providers.** A placement is released only on evidence; an admitted resize-up is reserved durably (`status.placement.resizeReservation`, `Reconfiguring=True/ResizeReserved`) before it is sent and released only on a confirmed `Reconfigure`; an admission inherited from an earlier manager is checked again before it is executed (`InheritedAdmissionOverCapacity`); a VM whose size cannot be established is never counted at a guessed size. See [Clustered placement](guides/clustered/placement.md).
+    - **Fault isolation.** One VM's backend failures no longer open its Provider's circuit breaker and block the Provider's healthy VMs ([#472](https://github.com/projectbeskar/virtrigaud/issues/472), found while qualifying rc1 and fixed in rc2); a Provider that does not answer still opens it. The vSphere provider logs in to vCenter again on its own after an outage. See [Resilience](operations/resilience.md#circuit-breaker).
     - **Configurable client rate limits.** `--client-qps` and `--client-burst` (chart `manager.clientQPS`, `manager.clientBurst`), defaults unchanged at 20 and 40.
-    - **Security update.** `golang.org/x/net` v0.62.0 (GO-2026-6860, GO-2026-6866); no reachable vulnerable symbol was found in VirtRigaud code.
-    - **Rollback.** Do not roll back to v0.4.1 while a clustered VM holds a resize reservation. See [Upgrading from v0.4.1 to v0.4.2](operations/upgrade.md#upgrading-from-v041-to-v042).
+    - **Security update.** `golang.org/x/net` v0.62.0 in every Go module and binary (CVE-2026-78661, CVE-2026-97045; no vulnerable function reachable from VirtRigaud code); the CRD-hook image ships `kubectl` 1.35.10. Some findings remain: see [Security](operations/security.md#release-v042-dependency-and-image-findings).
+    - **Rollback.** Do not roll back to v0.4.1 while a clustered VM holds a resize reservation, and roll the manager and the chart back together. See [Rolling back to v0.4.1](operations/upgrade.md#rolling-back-to-v041).
 - **v0.4.1** — *Proxmox cloud-init user-data, libvirt platform features, and CLI tools that perform the operations they document.* A patch release of v0.4.0; the CRDs have no schema change.
     - **Proxmox: the whole user-data reaches the guest.** The provider builds a NoCloud seed on the PVE node over SSH, so `users`, `write_files`, `packages`, `runcmd` and every other cloud-config key apply, as on libvirt and vSphere. **This needs SSH credentials in the Provider's Secret and is breaking for Proxmox users whose VMs carry user-data.** The seed is kept out of the boot order; a clone gets a seed of its own and the class's memory; linked clones are no longer advertised; the loser of a VMID race is answered "not performed" and retried. See [Proxmox](providers/proxmox.md#cloud-init-the-nocloud-seed).
     - **libvirt platform.** Secure boot, VT-d, nested virtualization and VMs with several network interfaces work on libvirt 10. **`firmware: UEFI` is honoured now** (it was ignored), so check your VMClasses before you roll the libvirt provider; the host needs an OVMF package. See [libvirt firmware](providers/libvirt.md#firmware-secure-boot-and-platform-features).

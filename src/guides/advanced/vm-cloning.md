@@ -77,7 +77,7 @@ A libvirt linked clone's backing file is the source VM's **live** disk, and noth
 
 ### Linked clones and the source VM
 
-Linked clones made by an earlier release keep working, and the provider protects them. While another domain on the host uses the source VM's disk as a backing file, the provider **refuses** delete, snapshot create, snapshot delete and snapshot revert of the source (`VM_DISK_IN_USE`), and a `VMMigration` of the source fails at its snapshot step. A refused VM delete keeps the finalizer with `Ready=False` / `DeleteBlocked` and completes by itself once the clones are gone; delete the linked clones first. Powering the source on is never refused, but the `VirtualMachine` then gets the condition `LinkedClonesDependOnDisk=True` and a `Warning` event: powering it on while its linked clones are shut off corrupts them. Keep the source of an existing linked clone powered off. Reference: [libvirt clones and the linked-clone dependency](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md).
+Linked clones made by an earlier release keep working, and the provider protects them. While another domain on the host uses the source VM's disk as a backing file, the provider **refuses** delete, snapshot create, snapshot delete and snapshot revert of the source (`VM_DISK_IN_USE`), and a `VMMigration` of the source fails at its snapshot step. A refused VM delete keeps the finalizer with `Ready=False` / `DeleteBlocked` and completes by itself once the clones are gone; delete the linked clones first. Powering the source on is never refused, but the `VirtualMachine` then gets the condition `LinkedClonesDependOnDisk=True` and a `Warning` event: powering it on while its linked clones are shut off corrupts them. Keep the source of an existing linked clone powered off. Reference: [libvirt clones and the linked-clone dependency](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-clones.md).
 
 ### Other libvirt details
 
@@ -85,7 +85,7 @@ Linked clones made by an earlier release keep working, and the provider protects
 - A UEFI source's clone gets its **own** `<nvram>` varstore; source and clone do not share EFI variables.
 - Hot-add headroom is preserved: if the source's class has `cpuHotAddEnabled` / `memoryHotAddEnabled`, the clone keeps the headroom, recomputed from the override class if the clone sets `target.classRef`.
 - On a **clustered** Provider a clone is a full clone only, of a source with a single writable disk, on the source's host (no cross-host clone).
-- The copy runs `qemu-img convert` through passwordless `sudo` where the host allows it (needed to read the `0600` overlay of a VM that has an external snapshot). The sudoers rule and the pool-directory requirements (a pool directory other accounts can write, and not sticky, makes clones fail with `FailedPrecondition`) are in [libvirt host preparation](../../operations/libvirt-host-prepare.md#sudo-rules-for-disk-reads-and-copies) and in the [repository reference](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-clones.md#what-the-copies-run-as-root).
+- The copy runs `qemu-img convert` through passwordless `sudo` where the host allows it (needed to read the `0600` overlay of a VM that has an external snapshot). The sudoers rule and the pool-directory requirements (a pool directory other accounts can write, and not sticky, makes clones fail with `FailedPrecondition`) are in [libvirt host preparation](../../operations/libvirt-host-prepare.md#sudo-rules-for-disk-reads-and-copies) and in the [repository reference](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-clones.md#what-the-copies-run-as-root).
 
 ## A clone's identity
 
@@ -167,7 +167,7 @@ The VMClone's status:
 
 The provider stamps each clone with its **target** VirtualMachine's identity (namespace, name, UID): vSphere in ExtraConfig, libvirt in the domain metadata, Proxmox in the VM description. A clone never claims the source's owner stamp. So a `Clone` sent again for the same target (the manager restarted, or an answer was lost) **returns the clone an earlier attempt made instead of making a second one**; a VM of the clone's name that is not provably the target's is refused (`AlreadyExists`). The manager only re-sends to a provider that reports `supportsOwnerRebind`; for an older provider image an unknown outcome fails the clone rather than risk a second VM.
 
-While a clone is held, the VMClone is `Pending` with `Ready=False` and one of these reasons: `CloneRetrying` (nothing was done; retried 15 s doubling to 5 min), `CloneOutcomeUnknown` (the answer was lost; the `Clone` is sent again), `SourceMustBePoweredOff` (libvirt). On a clustered Provider a clone also waits (re-checked every 2 minutes) while the source VM's host cannot take it: `SourceHostGone`, `SourceHostNotReady`, `SourceHostCordoned` or `SourceHostExcluded`. Terminal failures are `Failed`: `ProviderConflict` (the provider refused a first attempt with `AlreadyExists`), `TargetConflict`, `LinkedCloneUnsupported`, `UnsupportedSource`, `Unsupported`, `ProviderError`. Details: [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/provider-call-outcomes.md).
+While a clone is held, the VMClone is `Pending` with `Ready=False` and one of these reasons: `CloneRetrying` (nothing was done; retried 15 s doubling to 5 min), `CloneOutcomeUnknown` (the answer was lost; the `Clone` is sent again), `SourceMustBePoweredOff` (libvirt). On a clustered Provider a clone also waits (re-checked every 2 minutes) while the source VM's host cannot take it: `SourceHostGone`, `SourceHostNotReady`, `SourceHostCordoned` or `SourceHostExcluded`. Terminal failures are `Failed`: `ProviderConflict` (the provider refused a first attempt with `AlreadyExists`), `TargetConflict`, `LinkedCloneUnsupported`, `UnsupportedSource`, `Unsupported`, `ProviderError`. Details: [Provider calls whose outcome was lost](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/provider-call-outcomes.md).
 
 ## Customization secrets are not sent
 
@@ -191,7 +191,7 @@ Before v0.4.1 the manager sent all of `spec.customization` in the `Clone` reques
     Whoever can update the target `Namespace` can grant this (normally a cluster administrator). Without it the clone waits `Pending` with `Ready=False`, reason `TargetNamespaceNotAllowed`, and nothing is created, read or bound in the target namespace. The refusal is not a failure: granting the annotation, or changing the field, resumes it. The grant is re-checked before every step that touches the target namespace, so revoking it stops a clone already in flight; what already exists is not touched.
 2. **The Provider and VMClass the target uses must share themselves with the target namespace.** They live in the source namespace, so their `spec.consumerNamespaceSelector` must select the target namespace; otherwise the clone waits with `Ready=False` / `ConsumerNotAllowed`. The controller pins the namespace of `providerRef` and `classRef` on the target when it differs from the source's.
 
-A libvirt **linked** clone into another namespace is refused (it would keep reading the source's disk indefinitely); use a full clone. Reference: [Cross-namespace clone and migration targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-targets.md) and [cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/cross-namespace-references.md).
+A libvirt **linked** clone into another namespace is refused (it would keep reading the source's disk indefinitely); use a full clone. Reference: [Cross-namespace clone and migration targets](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/cross-namespace-targets.md) and [cross-namespace references](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/cross-namespace-references.md).
 
 ## Lifecycle and clean-up
 
@@ -206,7 +206,7 @@ A libvirt **linked** clone into another namespace is refused (it would keep read
 
 ## Related resources
 
-- **VMSet** has no controller in v0.4.1 (it reports `ControllerNotImplemented`); see [Advanced VM lifecycle](advanced-lifecycle.md#placement-and-sets).
+- **VMSet** has no controller in v0.4.2 (it reports `ControllerNotImplemented`); see [Advanced VM lifecycle](advanced-lifecycle.md#placement-and-sets).
 - **VMPlacementPolicy** is used by the scheduler of clustered libvirt Providers; `spec.target.placementRef` is copied onto the target VM.
 
 ## See also
@@ -217,4 +217,4 @@ A libvirt **linked** clone into another namespace is refused (it would keep read
 - [Security model](../security-model.md): who may clone, cross-namespace targets and ownership stamps.
 - [Provider capabilities matrix](../../providers/providers-capabilities.md): which providers support `Clone` and linked clones.
 - [VM migration](../../migration/vm-migration-guide.md): moving a VM between providers.
-- [`examples/vmclone-basic.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/examples/vmclone-basic.yaml): the canonical example in the main repository.
+- [`examples/vmclone-basic.yaml`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/examples/vmclone-basic.yaml): the canonical example in the main repository.

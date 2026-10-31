@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # CLI Tools Reference
 
-VirtRigaud provides a set of command-line tools for inspecting VirtRigaud resources, developing providers, validating conformance specs, and load testing. This guide covers the tools shipped in v0.4.1, with the flags and subcommands each one defines. v0.4.1 makes `vcts run` and `virtrigaud-loadgen` do what their documentation says, and adds `vrtg-provider init --type proxmox`.
+VirtRigaud provides a set of command-line tools for inspecting VirtRigaud resources, developing providers, validating conformance specs, and load testing. This guide covers the tools shipped in v0.4.2, with the flags and subcommands each one defines. The command-line tools are unchanged from v0.4.1 apart from the manager's new `--client-qps` and `--client-burst` flags. v0.4.1 made `vcts run` and `virtrigaud-loadgen` do what their documentation says, and adds `vrtg-provider init --type proxmox`.
 
 The tools are separate from the operator. They talk to the cluster with your kubeconfig (`vrtg-provider` only edits local files), and nothing in the manager or in a provider image depends on them.
 
@@ -21,10 +21,10 @@ The tools are separate from the operator. They talk to the cluster with your kub
 
 `vrtg`, `vcts run` and `virtrigaud-loadgen` need the VirtRigaud CRDs installed in the cluster and permission to read (`vrtg`) or to get, list, create, patch and delete (`vcts run`, `virtrigaud-loadgen`) the resources they touch. `vcts validate` and `vcts list` read local files only and need no cluster.
 
-!!! note "Limits in v0.4.1"
+!!! note "Limits in v0.4.2"
     - `vcts run` and `virtrigaud-loadgen` create **real VMs** on the hypervisor. Run them in a throw-away namespace on a non-production cluster, and size the datastore for `virtrigaud-loadgen` (`vmCount` times the disk size, plus snapshots).
     - Some `vrtg` subcommands exist in the command tree but are not implemented; they exit non-zero and name the alternative.
-    - `go install ...@v0.4.1` does not work for any of the tools (the root `go.mod` has `replace` directives); download the binaries from the release or build from a checkout.
+    - `go install ...@v0.4.2` does not work for any of the tools (the root `go.mod` has `replace` directives); download the binaries from the release or build from a checkout.
 
     Each section below gives the detail.
 
@@ -35,7 +35,7 @@ The tools are separate from the operator. They talk to the cluster with your kub
 Each release publishes one binary per tool and platform, named `<tool>-<os>-<arch>` (plus `.exe` on Windows), together with a `checksums.txt`. Platforms are `linux`, `darwin` (each `amd64` and `arm64`) and `windows` (`amd64` only). The tools are `vrtg`, `vcts`, `vrtg-provider` and `virtrigaud-loadgen`.
 
 ```bash
-export VIRTRIGAUD_VERSION="v0.4.1"
+export VIRTRIGAUD_VERSION="v0.4.2"
 export PLATFORM="linux-amd64"  # or linux-arm64, darwin-amd64, darwin-arm64
 
 for tool in vrtg vcts vrtg-provider virtrigaud-loadgen; do
@@ -50,12 +50,12 @@ sudo mv vrtg vcts vrtg-provider virtrigaud-loadgen /usr/local/bin/
 
 ### From Source
 
-There is no `make` target for the CLI tools (the Makefile builds the manager and the providers). Build them with `go build`; the Go version is the one in `go.mod` (1.26.10 in v0.4.1).
+There is no `make` target for the CLI tools (the Makefile builds the manager and the providers). Build them with `go build`; the Go version is the one in `go.mod` (1.26.10 in v0.4.2).
 
 ```bash
 git clone https://github.com/projectbeskar/virtrigaud.git
 cd virtrigaud
-git checkout v0.4.1
+git checkout v0.4.2
 
 mkdir -p bin
 for tool in vrtg vcts vrtg-provider virtrigaud-loadgen; do
@@ -65,8 +65,8 @@ done
 sudo install -m 0755 bin/vrtg bin/vcts bin/vrtg-provider bin/virtrigaud-loadgen /usr/local/bin/
 ```
 
-!!! note "`go install ...@v0.4.1` does not work"
-    The root `go.mod` carries `replace` directives for the local `proto/` and `sdk/` modules, so `go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.4.1` is refused by the Go toolchain. Build from a checkout as shown above.
+!!! note "`go install ...@v0.4.2` does not work"
+    The root `go.mod` carries `replace` directives for the local `proto/` and `sdk/` modules, so `go install github.com/projectbeskar/virtrigaud/cmd/vrtg@v0.4.2` is refused by the Go toolchain. Build from a checkout as shown above.
 
 ### Completion
 
@@ -91,7 +91,7 @@ vrtg completion powershell | Out-String | Invoke-Expression
 
 ## vrtg
 
-The CLI for looking at VirtRigaud resources from a terminal. Defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg/main.go).
+The CLI for looking at VirtRigaud resources from a terminal. Defined in [`cmd/vrtg/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg/main.go).
 
 ### Global Flags
 
@@ -191,7 +191,7 @@ vrtg provider status vsphere-provider -n virtrigaud-system -o json
 
 #### Subcommands that are not implemented
 
-These commands exist so the command tree is stable. They are **not implemented** in v0.4.1: each exits with a non-zero status and an error that names what to use instead. None defines flags.
+These commands exist so the command tree is stable. They are **not implemented** in v0.4.2: each exits with a non-zero status and an error that names what to use instead. None defines flags.
 
 | Command | Aliases | Arguments | Use instead |
 |---------|---------|-----------|-------------|
@@ -206,7 +206,7 @@ These commands exist so the command tree is stable. They are **not implemented**
 
 ## vcts
 
-VirtRigaud Conformance Test Suite. Defined in [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vcts/main.go) with the runner in [`internal/conformance/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/internal/conformance). `vcts validate` and `vcts list` read local files; `vcts run` runs the tests against a `Provider` that is deployed and healthy in the cluster.
+VirtRigaud Conformance Test Suite. Defined in [`cmd/vcts/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vcts/main.go) with the runner in [`internal/conformance/`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.2/internal/conformance). `vcts validate` and `vcts list` read local files; `vcts run` runs the tests against a `Provider` that is deployed and healthy in the cluster.
 
 !!! warning "`vcts run` creates real objects"
     `vcts run` (new in v0.4.1; in v0.4.0 every step reported "not implemented") creates `VirtualMachine`, `VMSnapshot`, `VMClone` and `VMClass` objects in the namespace you pass with `-n` (`default` if omitted), which make real VMs on the hypervisor. Run it against a non-production cluster, in a throw-away namespace. It touches only what its run created, and never creates, changes or deletes a `Provider`.
@@ -279,7 +279,7 @@ How it behaves:
 - **Results.** `results.json`, `junit.xml` (one test case per test, the step results in `system-out`) and `report.md` (a summary, and each test's steps and cleanup) in `--output-dir`, with passed, failed or skipped per test and per step. `vcts run` exits **non-zero** when a test fails.
 - **Permissions.** `vcts run` needs get, list, create, patch and delete on the kinds a specification creates in the namespace (`VirtualMachine`s, `VMSnapshot`s, `VMClone`s and `VMClass`es for the shipped tests) and get on the `Provider`.
 
-The specification format is described in [`test/conformance/README.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/test/conformance/README.md).
+The specification format is described in [`test/conformance/README.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/test/conformance/README.md).
 
 #### list - List Available Tests
 
@@ -320,7 +320,7 @@ When a run completes, results are written in three formats:
 
 ## vrtg-provider
 
-Provider development toolkit for creating and checking VirtRigaud providers that live outside this repository. Defined in [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/main.go). It edits local files only and does not talk to a cluster.
+Provider development toolkit for creating and checking VirtRigaud providers that live outside this repository. Defined in [`cmd/vrtg-provider/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg-provider/main.go). It edits local files only and does not talk to a cluster.
 
 ### Usage
 
@@ -340,7 +340,7 @@ vrtg-provider [command] [flags]
 
 #### init - Initialize Provider
 
-Bootstrap a new provider project with scaffolded code. Defined in [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/init.go); the templates are in [`internal/scaffold`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.1/internal/scaffold).
+Bootstrap a new provider project with scaffolded code. Defined in [`cmd/vrtg-provider/init.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg-provider/init.go); the templates are in [`internal/scaffold`](https://github.com/projectbeskar/virtrigaud/tree/v0.4.2/internal/scaffold).
 
 ```bash
 vrtg-provider init <provider-name> [flags]
@@ -379,7 +379,7 @@ The scaffold is created under `<output>/providers/<provider-name>/`. The provide
 
 **How the project finds the SDK and proto modules.** The SDK (`github.com/projectbeskar/virtrigaud/sdk`) and the protobuf bindings (`github.com/projectbeskar/virtrigaud/proto`) are separate Go modules. Since v0.4.1 every release publishes them under their own tags (`sdk/vX.Y.Z` and `proto/vX.Y.Z`, see [Go modules](../development/providers.md#go-modules-the-sdk-and-proto)); releases up to v0.4.0 have no such tags. Where the generated `go.mod` gets them from depends on the `vrtg-provider` binary and its flags:
 
-- **A release binary** (downloaded from a GitHub release; `vrtg-provider version` prints a version such as `v0.4.1`) requires the VirtRigaud, SDK and proto modules at its own version, with no `replace` directives, also when the project is created inside a checkout. The `go` directive is the Go version the binary was built with.
+- **A release binary** (downloaded from a GitHub release; `vrtg-provider version` prints a version such as `v0.4.2`) requires the VirtRigaud, SDK and proto modules at its own version, with no `replace` directives, also when the project is created inside a checkout. The `go` directive is the Go version the binary was built with.
 - **`--virtrigaud-path <checkout>`** overrides that, for local development: `go.mod` gets `replace` directives that resolve the three modules from the checkout (an absolute path, or a relative one when the project is inside the checkout), and the checkout's `go` directive.
 - **A development build** (built from a checkout without a release version, for example with `go build ./cmd/vrtg-provider`) finds the checkout the project is created in and writes the `replace` directives with a relative path (for example `=> ../../sdk` for `<checkout>/providers/<name>`). Outside a checkout, `go.mod` requires placeholder versions (`v0.0.0`) and leaves a commented `replace` block: set the three versions to a release, fill in the `replace` block, or pass `--virtrigaud-path`.
 
@@ -399,7 +399,7 @@ vrtg-provider verify
 
 #### generate - Code Generation
 
-Regenerate protocol buffer bindings and other generated code. Defined in [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/generate.go).
+Regenerate protocol buffer bindings and other generated code. Defined in [`cmd/vrtg-provider/generate.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg-provider/generate.go).
 
 Run it from within a provider project directory. It runs the project's `proto` make target, falling back to `buf generate` in `proto/`; unless `--proto-only` is given it then runs `go generate ./...` and the project's `generate` and `deepcopy` make targets when they exist. A scaffolded project imports the generated bindings from the proto module, so there is nothing to generate and the command says so.
 
@@ -424,7 +424,7 @@ vrtg-provider generate --proto-only
 
 #### verify - Verification
 
-Check a provider project. Defined in [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/verify.go).
+Check a provider project. Defined in [`cmd/vrtg-provider/verify.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg-provider/verify.go).
 
 Run it from within a provider project directory. It runs the project's `build` and `test` make targets (or `go build` and `go test`); a failure of either fails the command. It also reports `gofmt`, `go vet` and, when installed, `golangci-lint` findings as warnings without failing.
 
@@ -453,7 +453,7 @@ vrtg-provider verify --skip-tests
 
 #### publish - Publishing
 
-Create a catalog entry for a provider and write it to a catalog YAML file. Defined in [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/vrtg-provider/publish.go).
+Create a catalog entry for a provider and write it to a catalog YAML file. Defined in [`cmd/vrtg-provider/publish.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/vrtg-provider/publish.go).
 
 Run it from within a provider project directory. It builds and tests the project, then adds or updates the provider's entry in the catalog file (default: `providers/catalog.yaml`, found by walking up from the current directory). `--dry-run` prints the entry without writing it; it still runs the build and tests unless `--skip-verify` is also given. If no `providers/catalog.yaml` is found, pass `--catalog`.
 
@@ -532,7 +532,7 @@ providers/my-provider/
 
 ## virtrigaud-loadgen
 
-Load generator that creates, powers, resizes, snapshots, clones and deletes `VirtualMachine` resources in a cluster and records how long each operation took. Defined in [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/virtrigaud-loadgen/main.go), with the operations in [`operations.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/virtrigaud-loadgen/operations.go) and the cleanup in [`cleanup.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/virtrigaud-loadgen/cleanup.go).
+Load generator that creates, powers, resizes, snapshots, clones and deletes `VirtualMachine` resources in a cluster and records how long each operation took. Defined in [`cmd/virtrigaud-loadgen/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/virtrigaud-loadgen/main.go), with the operations in [`operations.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/virtrigaud-loadgen/operations.go) and the cleanup in [`cleanup.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/virtrigaud-loadgen/cleanup.go).
 
 !!! warning "Run it in a dedicated namespace, and size the datastore first"
     Since v0.4.1 `power`, `reconfigure`, `snapshot` and `clone` act on the hypervisor (in v0.4.0 they were recorded as successful without any call), and `create` and `clone` make real VMs. On providers that copy disks (a Proxmox full clone, a libvirt volume copy) each VM can occupy the whole size of its disk, and an earlier release, which accepted `vmCount` but ignored it, filled a small Proxmox thin pool to 100%. A run now keeps at most **`vmCount`** VMs alive at once (default 10), and the worst case is **`vmCount` times the disk size** of the image or source VM, plus snapshots, which `vmCount` does not limit. Pick `vmCount` so that fits with room to spare, point `--namespace` at a throw-away namespace, and run with `--cleanup` so nothing outlives the run. `--dry-run` makes no API call at all.
@@ -655,7 +655,7 @@ The Markdown summary contains the totals, the number of skipped operations, and 
 
 ## manager
 
-The `manager` binary is the VirtRigaud controller manager. It is not invoked by end users directly - it runs as a Deployment inside the cluster, installed by the Helm chart. The flags below are relevant to operators tuning its behaviour. Defined in [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/manager/main.go).
+The `manager` binary is the VirtRigaud controller manager. It is not invoked by end users directly - it runs as a Deployment inside the cluster, installed by the Helm chart. The flags below are relevant to operators tuning its behaviour. Defined in [`cmd/manager/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/manager/main.go).
 
 `manager --version` (as the first argument) prints the version and exits. The other flags use Go's `flag` syntax (`-flag` and `--flag` are equivalent), and the standard controller-runtime `--zap-*` logging flags are also accepted.
 
@@ -750,7 +750,7 @@ jobs:
 
       - name: Install vcts
         run: |
-          curl -fsSL "https://github.com/projectbeskar/virtrigaud/releases/download/v0.4.1/vcts-linux-amd64" -o vcts
+          curl -fsSL "https://github.com/projectbeskar/virtrigaud/releases/download/v0.4.2/vcts-linux-amd64" -o vcts
           chmod +x vcts
 
       - name: Validate specs
@@ -790,7 +790,7 @@ kubectl logs -n <namespace> -l app.kubernetes.io/instance=<provider-name>
 
 ## alpha-to-beta-dryrun
 
-A one-shot migration helper from the v1alpha1 API era. Defined in [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/cmd/alpha-to-beta-dryrun/main.go).
+A one-shot migration helper from the v1alpha1 API era. Defined in [`cmd/alpha-to-beta-dryrun/main.go`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/cmd/alpha-to-beta-dryrun/main.go).
 
 !!! warning "Tombstoned"
     The `v1alpha1` API was removed before v0.3.0. This binary now exits with status 1 and an error message explaining that v1alpha1 resources should have been migrated before reaching this version. It is retained in the repository as a safety net, has no flags or functionality, and is not part of the release binaries.

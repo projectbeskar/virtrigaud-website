@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Testing Locally
 
-This page describes the test suites VirtRigaud ships in **v0.4.1** and how
+This page describes the test suites VirtRigaud ships in **v0.4.2** and how
 to run them. Each layer has a specific scope — they are not interchangeable.
 
 | Layer | Target | What it covers | Cluster required? |
@@ -56,7 +56,7 @@ Internals of the `test` target (`Makefile`, target `test`):
   `setup-envtest` step pulls a matching `etcd` + `kube-apiserver` for
   controller-runtime's in-process test cluster.
 - The K8s version used by `envtest` is derived from `go.mod`'s `k8s.io/api`
-  pin (`ENVTEST_K8S_VERSION` in the Makefile). For v0.4.1 that is
+  pin (`ENVTEST_K8S_VERSION` in the Makefile). For v0.4.2 that is
   `k8s.io/api v0.32.x`, so envtest **1.32**.
 - Sets `KUBEBUILDER_ASSETS` to the local `bin/k8s/<version>-…` directory
   before invoking `go test`.
@@ -114,7 +114,7 @@ The integration suite (`test/integration/`) currently contains:
 - `observability_test.go` — cross-package observability assertions
   (logging, metrics, health, circuit breaker and retry wiring).
 - `vm_lifecycle_test.go.disabled` — disabled placeholder for future
-  controller-integration tests. **Not** active in v0.4.1.
+  controller-integration tests. **Not** active in v0.4.2.
 
 The target runs with `-race -coverprofile=cover-integration.out`. No
 cluster is required.
@@ -161,7 +161,7 @@ The conformance harness lives in two places:
 
 - `internal/conformance/` — the runner + validator implementation (used by
   the `vcts` CLI in `cmd/vcts/`).
-- `test/conformance/specs/` — the spec files. In v0.4.1 they define five tests:
+- `test/conformance/specs/` — the spec files. In v0.4.2 they define five tests:
   `vm-create-delete` and `vm-power-cycle` (in `basic-lifecycle.yaml`), and
   `vm-reconfigure-offline`, `vm-snapshot-create-delete` and `vm-clone-full`.
 
@@ -238,7 +238,7 @@ hack/test-workflows-locally.sh setup     # one-time
 hack/test-lint-locally.sh                # lint workflow only
 hack/test-ci-locally.sh                  # ci workflow (quick or full)
 hack/test-helm-locally.sh                # helm chart in Kind
-hack/test-release-locally.sh v0.4.1-test # release workflow w/ local registry
+hack/test-release-locally.sh v0.4.2-test # release workflow w/ local registry
 ```
 
 `test-ci-locally.sh`, `test-helm-locally.sh` and `test-workflows-locally.sh` accept `help` or `--help`; read the others' header comments for their options. The orchestrator

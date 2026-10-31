@@ -9,9 +9,9 @@ This document describes all Custom Resource Definitions provided by VirtRigaud.
 
 API group: `infra.virtrigaud.io` / Version: `v1beta1`
 
-VirtRigaud ships **12 CRDs** at v0.4.1. For the full auto-generated field reference, see [generated-crd-docs.md](generated-crd-docs.md).
+VirtRigaud ships **12 CRDs** at v0.4.2. For the full auto-generated field reference, see [generated-crd-docs.md](generated-crd-docs.md).
 
-**Controller status at v0.4.1:**
+**Controller status at v0.4.2:**
 
 | CRD | Controller status |
 |-----|-------------------|
@@ -43,6 +43,10 @@ Nothing was removed. Apply the CRDs before the manager (see [Helm CRD Upgrades](
 | `VMMigration` | New `status.targetVMUID`, `targetVMClaim`, `sourceVMUID`, `storagePVCUID`, `storageInfo.importTarget`, `stagingDigest`, `stagingLayout` |
 | `VMClone` | New `status.targetUID` |
 | `VMSnapshot` | New `status.boundProvider`, `status.vmUID` |
+
+## Schema changes in v0.4.2
+
+One additive, optional status field: `VirtualMachine.status.placement.resizeReservation` (`PlacementResources`: `cpu`, `memoryMiB`). For a clustered Provider it records the footprint an admitted resize-up was admitted at, written before `Reconfigure` is sent and cleared only once the provider has confirmed the applied size; unset on single-host Providers and when no resize is outstanding. Existing objects need no migration. Install the CRDs before the v0.4.2 manager, which fails readiness without the field. New condition reasons (Go constants, no schema effect): `ResizeReserved` (`Reconfiguring=True`) and `InheritedAdmissionOverCapacity`. See [Clustered placement](../guides/clustered/placement.md#durable-resize-reservation).
 
 ## Schema changes in v0.4.1
 
@@ -113,7 +117,7 @@ Full schema: [generated-crd-docs.md#virtualmachine](generated-crd-docs.md#virtua
 | `DiskSizeWithinLimit` | `False/DiskSizeExceedsLimit` when a resize withheld a disk growth because of `manager.maxDiskSize` |
 | `LinkedClonesDependOnDisk` | Warning: libvirt linked clones made by an earlier release use this VM's disk as backing file |
 
-Reasons that mean a hold needing an operator (phase `Failed`): `ConsumerNotAllowed`, `VMNotOwned`, `OwnerStampUnreadable`, `ProviderUnavailable`, `VMIsImageArtifact`, `CreateOutcomeUnknown`, `DeleteBlocked`, `ProviderRefMismatch`, `PlacementTopologyMismatch`, `VMMissingOnHost`. See [`vm-status-phase.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-status-phase.md) for the rule.
+Reasons that mean a hold needing an operator (phase `Failed`): `ConsumerNotAllowed`, `VMNotOwned`, `OwnerStampUnreadable`, `ProviderUnavailable`, `VMIsImageArtifact`, `CreateOutcomeUnknown`, `DeleteBlocked`, `ProviderRefMismatch`, `PlacementTopologyMismatch`, `VMMissingOnHost`. See [`vm-status-phase.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/vm-status-phase.md) for the rule.
 
 **Annotations you set on a `VirtualMachine`:**
 
@@ -171,7 +175,7 @@ kubectl patch vm web-server --type merge \
 kubectl get vm web-server -o jsonpath='{.status.snapshotRevert.phase}'
 ```
 
-While `SnapshotReverted` is `False`, `Ready` is `False` with the same reason. Per-provider behaviour is in the [capability matrix](../providers/providers-capabilities.md#snapshots-and-revert). Walkthrough and the full rules: [VM snapshots and revert](../guides/vm-snapshots.md). Details: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/vm-snapshot-revert.md).
+While `SnapshotReverted` is `False`, `Ready` is `False` with the same reason. Per-provider behaviour is in the [capability matrix](../providers/providers-capabilities.md#snapshots-and-revert). Walkthrough and the full rules: [VM snapshots and revert](../guides/vm-snapshots.md). Details: [`vm-snapshot-revert.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/vm-snapshot-revert.md).
 
 ---
 
@@ -437,7 +441,7 @@ spec:
     cluster: Compute-Cluster
     storagePod: DatastoreCluster-SSD   # auto-selects datastore with most free space
   runtime:
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-vsphere:v0.4.2"
     service:
       port: 9443
       tls:
@@ -541,7 +545,7 @@ Used for adopted or migrated VMs instead of `imageRef`.
 ## Host
 
 !!! note "Clustered libvirt only"
-    `Host` and `HostPool` are used only by a libvirt Provider with `spec.topology: cluster` (experimental, opt-in). Single-host Providers do not use them. See [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/adr/0007-clustered-orchestrator-provider.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md).
+    `Host` and `HostPool` are used only by a libvirt Provider with `spec.topology: cluster` (experimental, opt-in). Single-host Providers do not use them. See [ADR-0007](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/adr/0007-clustered-orchestrator-provider.md) and [`clustered-provider-inventory.md`](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/clustered-provider-inventory.md).
 
 A `Host` registers one hypervisor host behind a clustered Provider (setup and operations: [Clustered libvirt guide](../guides/clustered/index.md)). The operator fills `status` from the provider's `GetHostInfo` answer. A `Host` and its `HostPool` and Provider must be in the same namespace. A `Host` cannot be deleted while a VirtualMachine is bound to it; fence the host (power it off or revoke its access to shared storage) before you delete one to release held deletes.
 
@@ -606,7 +610,7 @@ Full schema: [generated-crd-docs.md#hostpool](generated-crd-docs.md#hostpool). S
 | `overcommit` | `OvercommitSpec` | No | `cpu` and `memory` ratios as decimal strings (for example `"4.0"`) |
 | `storagePools` | `[]` | No | Named storage pools available in the pool (`name`) |
 | `networks` | `[]` | No | Named networks available in the pool (`name`) |
-| `migration` | `MigrationPolicy` | No | Default migration policy: `defaultLive`, `defaultStorageMode`, `requireTLS`, `bandwidthMbps`, `maxDowntimeMs`. Host-to-host migration is not implemented in v0.4.1 |
+| `migration` | `MigrationPolicy` | No | Default migration policy: `defaultLive`, `defaultStorageMode`, `requireTLS`, `bandwidthMbps`, `maxDowntimeMs`. Host-to-host migration is not implemented in v0.4.2 |
 
 ### Status
 
@@ -642,7 +646,7 @@ A clustered Provider is an ordinary `Provider` with `spec.topology: cluster`, `t
 
 ## VMMigration
 
-The `VMMigration` CRD migrates a virtual machine's disk from one provider to another (snapshot, export to staging storage, import, create the target VM). Disks are staged through **S3** or **NFS** (`pvc` is kept for compatibility). S3 was validated for every pair among vSphere, libvirt and Proxmox VE, and NFS for five pairs (not vSphere ⇄ Proxmox VE); a clustered libvirt Provider is also a valid target (experimental). Other combinations are unverified, see [what was validated](../migration/user-guide.md#what-virtrigaud-v041-supports). See the [Migration API reference](../migration/api-reference.md) for every field.
+The `VMMigration` CRD migrates a virtual machine's disk from one provider to another (snapshot, export to staging storage, import, create the target VM). Disks are staged through **S3** or **NFS** (`pvc` is kept for compatibility). S3 was validated for every pair among vSphere, libvirt and Proxmox VE, and NFS for five pairs (not vSphere ⇄ Proxmox VE); a clustered libvirt Provider is also a valid target (experimental). Other combinations are unverified, see [what was validated](../migration/user-guide.md#what-virtrigaud-v042-supports). See the [Migration API reference](../migration/api-reference.md) for every field.
 
 Full schema: [generated-crd-docs.md#vmmigration](generated-crd-docs.md#vmmigration)
 
@@ -739,7 +743,7 @@ spec:
 
 ## VMSet
 
-!!! warning "Not functional in v0.4.1"
+!!! warning "Not functional in v0.4.2"
     The `VMSet` CRD is defined and accepted by the API server, but the controller is a stub. Every VMSet resource receives a `Ready=False` condition with reason `ControllerNotImplemented` and message `"VMSet has no active controller in this release (#179)"`. No replica management, scaling, or VM creation occurs. Do not use VMSet in production.
 
 The `VMSet` CRD is intended to manage a fleet of identically-configured VirtualMachines (analogous to a ReplicaSet for VMs). The controller has not yet been implemented.
@@ -878,7 +882,7 @@ spec:
 
 ---
 
-## CRD count at v0.4.1
+## CRD count at v0.4.2
 
 The 12 CRDs in `infra.virtrigaud.io/v1beta1`: `VirtualMachine`, `Provider`, `VMClass`, `VMImage`, `VMNetworkAttachment`, `VMMigration`, `VMSnapshot`, `VMSet`, `VMPlacementPolicy`, `VMClone`, `Host`, `HostPool`.
 

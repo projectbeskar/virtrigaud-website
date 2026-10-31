@@ -55,7 +55,7 @@ spec:
     burst: 10
   runtime:
     mode: Remote
-    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.1"
+    image: "ghcr.io/projectbeskar/virtrigaud/provider-libvirt:v0.4.2"
     service:
       port: 9090
       # A Provider with NO tls block fails to reconcile (TLSConfigured=False, Reason=TLSBlockMissing).

@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Metrics Reference
 
-Pure catalog of all `virtrigaud_*` metric families as of v0.4.1. For operator interpretation, PromQL examples, alerting recipes, and wiring details see the [Observability Guide](../operations/observability.md).
+Pure catalog of all `virtrigaud_*` metric families as of v0.4.2. For operator interpretation, PromQL examples, alerting recipes, and wiring details see the [Observability Guide](../operations/observability.md).
 
 All metrics are registered with controller-runtime's metrics registry. Two kinds of process serve it:
 
@@ -37,7 +37,7 @@ All metrics are registered with controller-runtime's metrics registry. Two kinds
 | `virtrigaud_queue_depth` (deprecated) | manager (no series emitted) | v0.3.0 or earlier |
 
 !!! note "Provider-side `build_info`"
-    `virtrigaud_build_info` is written only by the manager (`component="manager"`). Provider processes do not call `SetupMetrics`, so no `component="provider"` series exists in v0.4.1, and `virtrigaud_errors_total` is likewise only written with `component="manager"`.
+    `virtrigaud_build_info` is written only by the manager (`component="manager"`). Provider processes do not call `SetupMetrics`, so no `component="provider"` series exists in v0.4.2, and `virtrigaud_errors_total` is likewise only written with `component="manager"`.
 
 ---
 
@@ -55,7 +55,7 @@ All metrics are registered with controller-runtime's metrics registry. Two kinds
 
 Label notes:
 
-- `component`: `manager` for the manager process. The label value `provider` is defined by the metrics package but no provider process sets it in v0.4.1.
+- `component`: `manager` for the manager process. The label value `provider` is defined by the metrics package but no provider process sets it in v0.4.2.
 - `go_version`: the Go runtime version string returned by `runtime.Version()` (e.g. `go1.26.0`).
 
 ---
@@ -100,7 +100,7 @@ A series appears only after its first reconcile; the families are not pre-seeded
 
 `component` values: `manager` in practice (see the note above).
 
-`reason` is a small enum defined per-reconciler via `errReason*` constants. Reasons in v0.4.1, by area:
+`reason` is a small enum defined per-reconciler via `errReason*` constants. Reasons in v0.4.2, by area:
 
 | Area | `reason` values |
 |---|---|
@@ -264,7 +264,7 @@ Task-creating RPCs: `Create`, `Delete`, `Power`, `Reconfigure`, `Clone`, `ImageP
 | Exposed by | manager |
 | Added | v0.4.0 |
 
-Same semantics, labels and lifecycle as `virtrigaud_host_committed_cpu`, in MiB. These two gauges are cross-tenant administrator signals (they show how full each host is); restrict who can scrape the manager's `/metrics` (NetworkPolicy, or `--metrics-secure`). See [Clustered provider inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/clustered-provider-inventory.md) in the main repository for how the scheduler uses committed capacity.
+Same semantics, labels and lifecycle as `virtrigaud_host_committed_cpu`, in MiB. These two gauges are cross-tenant administrator signals (they show how full each host is); restrict who can scrape the manager's `/metrics` (NetworkPolicy, or `--metrics-secure`). See [Clustered provider inventory](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/clustered-provider-inventory.md) in the main repository for how the scheduler uses committed capacity.
 
 ---
 
@@ -320,7 +320,7 @@ Incremented once per `ImagePrepare` request that carries no image identity, that
 | Exposed by | provider (libvirt) |
 | Added | v0.4.0 |
 
-`family` values: `describe`, `list`. `field` is the name of the diverging field. Only populated when shadow reads are enabled with `VIRTRIGAUD_LIBVIRT_NATIVE`; see [Libvirt shadow reads](https://github.com/projectbeskar/virtrigaud/blob/v0.4.1/docs/libvirt-shadow-reads.md) in the main repository.
+`family` values: `describe`, `list`. `field` is the name of the diverging field. Only populated when shadow reads are enabled with `VIRTRIGAUD_LIBVIRT_NATIVE`; see [Libvirt shadow reads](https://github.com/projectbeskar/virtrigaud/blob/v0.4.2/docs/libvirt-shadow-reads.md) in the main repository.
 
 ---
 
@@ -348,7 +348,7 @@ Incremented once per `ImagePrepare` request that carries no image identity, that
 | Exposed by | provider (libvirt) |
 | Added | v0.4.0 |
 
-`family` values: `describe`, `list`. `driver` values: `virsh` (authoritative subprocess driver), `shadow` (both drivers run, virsh's answer is returned), `native`. Each family has exactly one series at `1`. In v0.4.1 a family configured `native` runs as `shadow`, and the metric reports what is actually running.
+`family` values: `describe`, `list`. `driver` values: `virsh` (authoritative subprocess driver), `shadow` (both drivers run, virsh's answer is returned), `native`. Each family has exactly one series at `1`. In v0.4.2 a family configured `native` runs as `shadow`, and the metric reports what is actually running.
 
 ---
 
@@ -362,9 +362,9 @@ Incremented once per `ImagePrepare` request that carries no image identity, that
 | Help | `[DEPRECATED v0.3.6 — use controller-runtime's workqueue_depth{name} instead. See CHANGELOG.] Current depth of work queue by kind.` |
 | Labels | `kind` |
 | Deprecated in | v0.3.6 (G7.4 / PR #131) |
-| Status in v0.4.1 | Still registered; not removed |
+| Status in v0.4.2 | Still registered; not removed |
 
-Superseded by controller-runtime's standard `workqueue_depth{name}` metric. The family is still registered in v0.4.1, but the Go variable and `SetQueueDepth` helper remain only for compile compatibility with out-of-tree code: production code never calls `SetQueueDepth`, so no `virtrigaud_queue_depth` series is emitted and the family does not appear in `/metrics` output. It will be removed in a later release.
+Superseded by controller-runtime's standard `workqueue_depth{name}` metric. The family is still registered in v0.4.2, but the Go variable and `SetQueueDepth` helper remain only for compile compatibility with out-of-tree code: production code never calls `SetQueueDepth`, so no `virtrigaud_queue_depth` series is emitted and the family does not appear in `/metrics` output. It will be removed in a later release.
 
 Migration: see the kind → controller-name mapping table in the [Upgrade Guide](../operations/upgrade.md).
 
